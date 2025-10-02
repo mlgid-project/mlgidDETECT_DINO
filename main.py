@@ -7,6 +7,7 @@ import random
 import time
 from pathlib import Path
 import os, sys
+import shutil
 import numpy as np
 
 import torch
@@ -16,17 +17,103 @@ from util.get_param_dicts import get_param_dict
 from util.logger import setup_logger
 from util.slconfig import DictAction, SLConfig
 from util.utils import ModelEma, BestMetricHolder
+from util.configuration import Config
+from util.evaluation import Evaluator, get_full_conf_results, recall_precision_curve_with_intensities
+from util.labeleddataset import H5GIWAXSDataset
 import util.misc as utils
 
 import datasets
 from datasets import build_dataset, get_coco_api_from_dataset
 from engine import evaluate, train_one_epoch, test
+from simulation import FastSimulation
+import pickle
+from torch import Tensor
+from torchvision.utils import save_image
+import torch.multiprocessing as mp
+import torchvision
+from torchvision.utils import save_image
+from torchvision.ops import nms
+
+def filter_non_elong(pred_boxes):
+    y_extent = pred_boxes[:,3] - pred_boxes[:,1]
+    x_extent = pred_boxes[:,2] - pred_boxes[:,0]
+    keep = x_extent*1.15 < y_extent
+    return keep
+
+def box_xyxy_to_cxcywh(x):
+    x0, y0, x1, y1 = x.unbind(-1)
+    b = [(x0 + x1) / 2, (y0 + y1) / 2,
+         (x1 - x0), (y1 - y0)]
+    return torch.stack(b, dim=-1)
+
+class SimulationDataset(torch.utils.data.Dataset):
+
+    def __init__(self, transforms = None, device = 'cuda'):
+
+        self.device = 'cuda'
+        self.transforms = transforms
+        self.simulation = FastSimulation(device=self.device)        
+
+    def __getitem__(self, idx):
+        image = None
+        while image is None:
+            try:
+                image, boxes = self.simulation.simulate_img()
+            except:
+                pass 
+
+        image = image.repeat(1, 1, 1)
+        image = torchvision.utils.draw_bounding_boxes(image,boxes)
+        num_objects = len(boxes[0:])
+
+        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+        h, w = image.shape[-2:]
+        boxes = box_xyxy_to_cxcywh(boxes)
+        boxes = boxes / torch.tensor([w, h, w, h], device=self.device)        
+        target = {"boxes": boxes}
+        target['area'] = area
+
+        target["labels"] = torch.ones((num_objects,), dtype=torch.int64, device=self.device)
+        target["image_id"] = torch.tensor(idx, device=self.device)
+        target["iscrowd"] = torch.zeros((num_objects,), dtype=torch.int64, device=self.device)
+        target["orig_size"] = torch.tensor(image[0].shape, device=self.device)
+        target["size"] = torch.tensor(image[0].shape, device=self.device)
+
+        return image, target
+
+    def __len__(self):
+        #number of images in epoch
+        return 7#500#0
+    
+def collate_fn(batch):
+    # Initialize lists to hold the tensors
+    samples = []
+    targets = []
+
+    # Iterate over the batch
+    for item in batch:
+        # Unpack the item
+        image_tensor, target_dict = item
+
+        # Append the image tensor to the samples list
+        samples.append(image_tensor)
+
+        # Append the target dict to the targets list
+        targets.append(target_dict)
+
+    # Convert the lists to tensors
+    samples = torch.stack(samples)
+    #targets = [{'boxes': torch.stack([t['boxes'] for t in targets])}]
+
+    # Return a dictionary
+    #return {'samples': samples, 'targets': targets}
+    return samples, targets
 
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Set transformer detector', add_help=False)
-    parser.add_argument('--config_file', '-c', type=str, required=True)
+    parser.add_argument('--config_file', '-c', default=os.path.dirname(os.path.realpath(__file__)) + '/config/DINO/DINO_4scale_swin.py', type=str, required=False)
     parser.add_argument('--options',
         nargs='+',
         action=DictAction,
@@ -85,6 +172,7 @@ def build_model_main(args):
 
 def main(args):
     utils.init_distributed_mode(args)
+    dataset = SimulationDataset()
     # load cfg file and update the args
     print("Loading config file from {}".format(args.config_file))
     time.sleep(args.rank * 0.02)
@@ -151,9 +239,6 @@ def main(args):
         ema_m = None
 
     model_without_ddp = model
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=args.find_unused_params)
-        model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info('number of params:'+str(n_parameters))
     logger.info("params:\n"+json.dumps({n: p.numel() for n, p in model.named_parameters() if p.requires_grad}, indent=2))
@@ -164,24 +249,6 @@ def main(args):
                                   weight_decay=args.weight_decay)
     
 
-    dataset_train = build_dataset(image_set='train', args=args)
-    dataset_val = build_dataset(image_set='val', args=args)
-
-    if args.distributed:
-        sampler_train = DistributedSampler(dataset_train)
-        sampler_val = DistributedSampler(dataset_val, shuffle=False)
-    else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-
-    batch_sampler_train = torch.utils.data.BatchSampler(
-        sampler_train, args.batch_size, drop_last=True)
-
-    data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
-                                   collate_fn=utils.collate_fn, num_workers=args.num_workers)
-    data_loader_val = DataLoader(dataset_val, 1, sampler=sampler_val,
-                                 drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers)
-
     if args.onecyclelr:
         lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(data_loader_train), epochs=args.epochs, pct_start=0.2)
     elif args.multi_step_lr:
@@ -189,13 +256,6 @@ def main(args):
     else:
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
-
-    if args.dataset_file == "coco_panoptic":
-        # We also evaluate AP during panoptic training, on original coco DS
-        coco_val = datasets.coco.build("val", args)
-        base_ds = get_coco_api_from_dataset(coco_val)
-    else:
-        base_ds = get_coco_api_from_dataset(dataset_val)
 
     if args.frozen_weights is not None:
         checkpoint = torch.load(args.frozen_weights, map_location='cpu')
@@ -264,15 +324,26 @@ def main(args):
 
         return
 
+    shutil.copy(os.path.dirname(os.path.realpath(__file__)) + '/simulation.py', output_dir / 'simulation.py')
+
+    with open(output_dir / 'settings.txt', 'a+') as f:
+            f.write('\n' + str(model))
+            f.write('\n' + str(args))
+
     print("Start training")
     start_time = time.time()
-    best_map_holder = BestMetricHolder(use_ema=args.use_ema)
     for epoch in range(args.start_epoch, args.epochs):
+        dataset = SimulationDataset()
+        data_loader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=2,
+            shuffle=True,
+            num_workers=0,
+            collate_fn=collate_fn
+        )
         epoch_start_time = time.time()
-        if args.distributed:
-            sampler_train.set_epoch(epoch)
         train_stats = train_one_epoch(
-            model, criterion, data_loader_train, optimizer, device, epoch,
+            model, criterion, data_loader, optimizer, device, epoch,
             args.clip_max_norm, wo_class_error=wo_class_error, lr_scheduler=lr_scheduler, args=args, logger=(logger if args.save_log else None), ema_m=ema_m)
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
@@ -299,74 +370,84 @@ def main(args):
                 utils.save_on_master(weights, checkpoint_path)
                 
         # eval
-        test_stats, coco_evaluator = evaluate(
-            model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir,
+        with open(output_dir / 'training_stats.txt', 'a+') as f:
+            f.write('epoch: ' + str(epoch) + str(train_stats) + "\n")
+        with open(output_dir  / 'bbox_loss.txt', 'a+') as f:
+            f.write('epoch: ' + str(epoch) + ' loss_bbox: ' + str(train_stats['loss_bbox']) + "\n")
+        with open(output_dir  / 'loss_giou.txt', 'a+') as f:
+            f.write('epoch: ' + str(epoch) + ' loss_giou: ' + str(train_stats['loss_giou']) + "\n")
+        
+        evaluate(
+            model, criterion, postprocessors, data_loader, dataset, device, args.output_dir, epoch,
             wo_class_error=wo_class_error, args=args, logger=(logger if args.save_log else None)
         )
-        map_regular = test_stats['coco_eval_bbox'][0]
-        _isbest = best_map_holder.update(map_regular, epoch, is_ema=False)
-        if _isbest:
-            checkpoint_path = output_dir / 'checkpoint_best_regular.pth'
-            utils.save_on_master({
-                'model': model_without_ddp.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'lr_scheduler': lr_scheduler.state_dict(),
-                'epoch': epoch,
-                'args': args,
-            }, checkpoint_path)
-        log_stats = {
-            **{f'train_{k}': v for k, v in train_stats.items()},
-            **{f'test_{k}': v for k, v in test_stats.items()},
-        }
 
-        # eval ema
-        if args.use_ema:
-            ema_test_stats, ema_coco_evaluator = evaluate(
-                ema_m.module, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir,
-                wo_class_error=wo_class_error, args=args, logger=(logger if args.save_log else None)
-            )
-            log_stats.update({f'ema_test_{k}': v for k,v in ema_test_stats.items()})
-            map_ema = ema_test_stats['coco_eval_bbox'][0]
-            _isbest = best_map_holder.update(map_ema, epoch, is_ema=True)
-            if _isbest:
-                checkpoint_path = output_dir / 'checkpoint_best_ema.pth'
-                utils.save_on_master({
-                    'model': ema_m.module.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'lr_scheduler': lr_scheduler.state_dict(),
-                    'epoch': epoch,
-                    'args': args,
-                }, checkpoint_path)
-        log_stats.update(best_map_holder.summary())
 
-        ep_paras = {
-                'epoch': epoch,
-                'n_parameters': n_parameters
-            }
-        log_stats.update(ep_paras)
+        class ImageProcessing():
+
+            def __init__(self, model, postprocessors) -> None:
+                self.model = model
+                self.postprocessors = postprocessors
+
+            def infer(self, img: np.array, k: int = None) -> bool:
+                img = Tensor(img).cuda()
+                raw_results = self.model(img)
+                postprocessed =  self.postprocessors['bbox'](raw_results, torch.Tensor([[512, 512]]).cuda())
+                scores = postprocessed[0]['scores']
+                boxes = postprocessed[0]['boxes']
+                return boxes.cpu(), scores.cpu()
+            
+        img_process = ImageProcessing(model, postprocessors)
+
+        def eval_ap_func(dset_path, epoch, output_dir):
+            config = Config()
+            config.EVAL_EPOCH = str(epoch)
+            config.EVAL_OUTPUT_FOLDER = str(output_dir)
+            config.INPUT_DATASET = dset_path
+            config.PREPROCESSING_POLAR_SHAPE = [512,1024]
+            config.PREPROCESSING_LINEAR_CONTRAST = True
+            config.PREPROCESSING_LINEAR_PERC_977 = False
+            data = H5GIWAXSDataset(config, path = dset_path, preprocess_func=standard_preprocessing , buffer_size=5)   
+            evaluator = Evaluator()
+
+            for i, giwaxs_img_container in enumerate(data.iter_images()):
+
+                giwaxs_img = giwaxs_img_container.converted_polar_image
+                giwaxs_img = torch.tensor(giwaxs_img[:,0,:,:]).unsqueeze(0).cuda()
+                raw_giwaxs_img = giwaxs_img_container.raw_polar_image
+                labels = giwaxs_img_container.polar_labels
+                outputs = model(giwaxs_img)
+
+                postprocessed =  postprocessors['bbox'](outputs, torch.Tensor([[512, 1024]]).cuda())
+                
+                scores = postprocessed[0]['scores']
+                pred_boxes = postprocessed[0]['boxes']
+
+                idx_keep = nms(pred_boxes, scores, 0.4)
+                pred_boxes = pred_boxes[idx_keep]
+                scores = scores[idx_keep]
+
+                idx_elong = filter_non_elong(pred_boxes)
+                scores = scores[idx_elong]
+                pred_boxes = pred_boxes[idx_elong]
+
+                evaluator.get_exp_metrics(pred_boxes, scores, torch.tensor(labels.boxes, device = 'cuda'), labels.confidences)
+            
+            recalls, precisions, accuracies, scores, av_precision, recalls_levels, fp_nums = recall_precision_curve_with_intensities(evaluator.metrics)
+            df1, df2 = get_full_conf_results(evaluator.metrics)
+            print(df1)
+            print(df2)
+            return df2['ap_total'].values[0]
+
         try:
-            log_stats.update({'now_time': str(datetime.datetime.now())})
+            dset_name = '/data/constantin/datasets/41.h5'
+            model.eval()
+            eval_ap = eval_ap_func(dset_name, epoch, output_dir)
+            with open(output_dir  / 'exp_ap_40_polar.txt', 'a+') as f:
+                f.write(str(eval_ap) + "\n")
         except:
             pass
-        
-        epoch_time = time.time() - epoch_start_time
-        epoch_time_str = str(datetime.timedelta(seconds=int(epoch_time)))
-        log_stats['epoch_time'] = epoch_time_str
 
-        if args.output_dir and utils.is_main_process():
-            with (output_dir / "log.txt").open("a") as f:
-                f.write(json.dumps(log_stats) + "\n")
-
-            # for evaluation logs
-            if coco_evaluator is not None:
-                (output_dir / 'eval').mkdir(exist_ok=True)
-                if "bbox" in coco_evaluator.coco_eval:
-                    filenames = ['latest.pth']
-                    if epoch % 50 == 0:
-                        filenames.append(f'{epoch:03}.pth')
-                    for name in filenames:
-                        torch.save(coco_evaluator.coco_eval["bbox"].eval,
-                                   output_dir / "eval" / name)
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
@@ -383,6 +464,19 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('DETR training and evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()
+    if os.path.isfile(args.output_dir + '/checkpoint.pth'):
+        args.resume = args.output_dir + '/checkpoint.pth'
+
+
+    if os.path.isdir('\\'.join(args.resume.split('\\')[0:-1])):
+        args.output_dir ='\\'.join(args.resume.split('\\')[0:-1])
+    else:
+        root = '/data/constantin/train_output/'
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        args.output_dir = root + 'dinodetr' + timestamp
+
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+
+    args.export = False
     main(args)
