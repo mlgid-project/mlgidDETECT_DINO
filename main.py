@@ -19,6 +19,7 @@ from util.slconfig import DictAction, SLConfig
 from util.utils import ModelEma, BestMetricHolder
 from util.configuration import Config
 from util.evaluation import Evaluator, get_full_conf_results, recall_precision_curve_with_intensities
+from util.exp_preprocess import standard_preprocessing
 from util.labeleddataset import H5GIWAXSDataset
 import util.misc as utils
 
@@ -58,7 +59,7 @@ class SimulationDataset(torch.utils.data.Dataset):
         image = None
         while image is None:
             try:
-                image, boxes = self.simulation.simulate_img()
+                image, boxes, mask = self.simulation.simulate_img()
             except:
                 pass 
 
@@ -413,7 +414,7 @@ def main(args):
             for i, giwaxs_img_container in enumerate(data.iter_images()):
 
                 giwaxs_img = giwaxs_img_container.converted_polar_image
-                giwaxs_img = torch.tensor(giwaxs_img[:,0,:,:]).unsqueeze(0).cuda()
+                giwaxs_img = torch.tensor(giwaxs_img[:,0,:,:]).unsqueeze(0).cuda().repeat(1,3,1,1)
                 raw_giwaxs_img = giwaxs_img_container.raw_polar_image
                 labels = giwaxs_img_container.polar_labels
                 outputs = model(giwaxs_img)

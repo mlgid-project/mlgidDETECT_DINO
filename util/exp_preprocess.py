@@ -78,30 +78,30 @@ def _contrast_correction(
             log = False
             clahe = False
 
-    mask = ~xp.isnan(img) & (img != 0)
+    mask = ~np.isnan(img) & (img != 0)
 
     if linear_normalization:
         if linear_perc_997:
-            upper_clip_limit = xp.percentile(img[mask],97.0)
+            upper_clip_limit = np.percentile(img[mask],97.0)
         else:
-            upper_clip_limit = xp.percentile(img[mask],99.9)
+            upper_clip_limit = np.percentile(img[mask],99.9)
 
-        lower_clip_limit = xp.percentile(img[mask],5)
+        lower_clip_limit = np.percentile(img[mask],5)
 
-        img[mask] = xp.clip(img[mask], lower_clip_limit, upper_clip_limit)
+        img[mask] = np.clip(img[mask], lower_clip_limit, upper_clip_limit)
         img[mask] =  normalize(img, mask)
         img = img *255
 
-        img = cv2.equalizeHist(img.astype(xp.uint8))
+        img = cv2.equalizeHist(img.astype(np.uint8))
 
         img = img /255
-        img = img.astype(xp.float32)
+        img = img.astype(np.float32)
         img[~mask] = 0
         return img, mask
 
     if log:
         img[mask] =  normalize(img, mask)
-        img = xp.log10(img * coef + 1)
+        img = np.log10(img * coef + 1)
 
     if clahe:
         img = clahe_func(img * coef, limit)
@@ -141,26 +141,26 @@ def _get_quazipolar_grid(config, beam_center: Tuple[float, float] = DEFAULT_BEAM
         xp = np
 
     y0, z0 = beam_center
-    y = xp.arange(shape[1], dtype=xp.float32) - y0
-    z = xp.arange(shape[0], dtype=xp.float32) - z0
-    zz, yy = xp.meshgrid(z, y)  # meshgrid order: (z, y)
+    y = np.arange(shape[1], dtype=np.float32) - y0
+    z = np.arange(shape[0], dtype=np.float32) - z0
+    zz, yy = np.meshgrid(z, y)  # meshgrid order: (z, y)
 
-    rr = xp.sqrt(yy ** 2 + zz ** 2)
-    phi = xp.arctan2(zz, yy)
+    rr = np.sqrt(yy ** 2 + zz ** 2)
+    phi = np.arctan2(zz, yy)
     r_range = rr.min(), rr.max()
     phi_range = phi.min(), phi.max()
 
-    phi = xp.linspace(*phi_range, polar_shape[0], dtype=xp.float32)
-    r = xp.linspace(*r_range, polar_shape[1], dtype=xp.float32)
+    phi = np.linspace(*phi_range, polar_shape[0], dtype=np.float32)
+    r = np.linspace(*r_range, polar_shape[1], dtype=np.float32)
 
-    r_matrix = xp.repeat(r[None, :], polar_shape[0], axis=0)
-    p_matrix = xp.repeat(phi[:, None], polar_shape[1], axis=1)
+    r_matrix = np.repeat(r[None, :], polar_shape[0], axis=0)
+    p_matrix = np.repeat(phi[:, None], polar_shape[1], axis=1)
 
     p_coef = coef / (1e-4 + r_matrix / r_matrix.max())
-    p_matrix = xp.minimum(p_matrix * p_coef, xp.pi)
+    p_matrix = np.minimum(p_matrix * p_coef, np.pi)
 
-    polar_yy = r_matrix * xp.cos(p_matrix) + y0
-    polar_zz = r_matrix * xp.sin(p_matrix) + z0
+    polar_yy = r_matrix * np.cos(p_matrix) + y0
+    polar_zz = r_matrix * np.sin(p_matrix) + z0
 
     return polar_yy, polar_zz
 

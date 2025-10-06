@@ -21,7 +21,7 @@ from typing import Union
 from torch import Tensor
 from multiprocessing import Process, Queue, Value
 from typing import Iterator
-from .exp_preprocessing import preprocess_geometry, contrast_correction
+from .exp_preprocess import preprocess_geometry, contrast_correction
 from .imgcontainer import ImageContainer, Labels
 
 DEFAULT_CLAHE_LIMIT: float = 2000.
