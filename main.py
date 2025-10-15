@@ -63,8 +63,7 @@ class SimulationDataset(torch.utils.data.Dataset):
             except:
                 pass 
 
-        image = image.repeat(1, 1, 1)
-        image = torchvision.utils.draw_bounding_boxes(image,boxes)
+        image = image.repeat(3, 1, 1)
         num_objects = len(boxes[0:])
 
         area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
@@ -84,7 +83,7 @@ class SimulationDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         #number of images in epoch
-        return 7#500#0
+        return 1000
     
 def collate_fn(batch):
     # Initialize lists to hold the tensors
@@ -377,12 +376,6 @@ def main(args):
             f.write('epoch: ' + str(epoch) + ' loss_bbox: ' + str(train_stats['loss_bbox']) + "\n")
         with open(output_dir  / 'loss_giou.txt', 'a+') as f:
             f.write('epoch: ' + str(epoch) + ' loss_giou: ' + str(train_stats['loss_giou']) + "\n")
-        
-        evaluate(
-            model, criterion, postprocessors, data_loader, dataset, device, args.output_dir, epoch,
-            wo_class_error=wo_class_error, args=args, logger=(logger if args.save_log else None)
-        )
-
 
         class ImageProcessing():
 
