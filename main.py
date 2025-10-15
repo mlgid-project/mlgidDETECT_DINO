@@ -171,7 +171,7 @@ def build_model_main(args):
     return model, criterion, postprocessors
 
 def main(args):
-    utils.init_distributed_mode(args)
+    #utils.init_distributed_mode(args)
     dataset = SimulationDataset()
     # load cfg file and update the args
     print("Loading config file from {}".format(args.config_file))
