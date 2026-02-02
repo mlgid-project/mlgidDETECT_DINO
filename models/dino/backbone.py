@@ -174,7 +174,10 @@ def build_backbone(args):
         backbone = build_swin_transformer(args.backbone, \
                     pretrain_img_size=pretrain_img_size, \
                     out_indices=tuple(return_interm_indices), \
-                dilation=args.dilation, use_checkpoint=use_checkpoint)
+                dilation=args.dilation, use_checkpoint=(use_checkpoint and not args.export), \
+                      window_size_h=args.window_size_h, window_size_w=args.window_size_w,
+                      patch_size_h=args.patch_size_h,  patch_size_w=args.patch_size_w,
+                      )
 
         # freeze some layers
         if backbone_freeze_keywords is not None:

@@ -23,6 +23,10 @@ lr_drop_list = [33, 45]
 modelname = 'dino'
 frozen_weights = None
 backbone = 'swin_L_384_22k'
+window_size_h = 24
+window_size_w = 12
+patch_size_h = 4
+patch_size_w = 4
 use_checkpoint = True
 
 dilation = False
