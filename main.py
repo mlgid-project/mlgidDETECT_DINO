@@ -49,8 +49,9 @@ def box_xyxy_to_cxcywh(x):
 
 class SimulationDataset(torch.utils.data.Dataset):
 
-    def __init__(self, transforms = None, device = 'cuda'):
+    def __init__(self, args, transforms = None, device = 'cuda'):
 
+        self.args = args
         self.device = 'cuda'
         self.transforms = transforms
         self.simulation = FastSimulation(device=self.device)        
@@ -63,7 +64,7 @@ class SimulationDataset(torch.utils.data.Dataset):
             except:
                 pass 
 
-        image = image.repeat(3, 1, 1)
+        image = image.repeat(self.args.num_channels, 1, 1)
         num_objects = len(boxes[0:])
 
         area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
@@ -172,7 +173,7 @@ def build_model_main(args):
 
 def main(args):
     #utils.init_distributed_mode(args)
-    dataset = SimulationDataset()
+    dataset = SimulationDataset(args)
     # load cfg file and update the args
     print("Loading config file from {}".format(args.config_file))
     time.sleep(args.rank * 0.02)
@@ -393,7 +394,7 @@ def main(args):
             
         img_process = ImageProcessing(model, postprocessors)
 
-        def eval_ap_func(dset_path, epoch, output_dir):
+        def eval_ap_func(args, dset_path, epoch, output_dir):
             config = Config()
             config.EVAL_EPOCH = str(epoch)
             config.EVAL_OUTPUT_FOLDER = str(output_dir)
@@ -407,7 +408,7 @@ def main(args):
             for i, giwaxs_img_container in enumerate(data.iter_images()):
 
                 giwaxs_img = giwaxs_img_container.converted_polar_image
-                giwaxs_img = torch.tensor(giwaxs_img[:,0,:,:]).unsqueeze(0).cuda().repeat(1,3,1,1)
+                giwaxs_img = torch.tensor(giwaxs_img[:,0,:,:]).unsqueeze(0).cuda().repeat(1,args.num_channels,1,1)
                 raw_giwaxs_img = giwaxs_img_container.raw_polar_image
                 labels = giwaxs_img_container.polar_labels
                 outputs = model(giwaxs_img)
@@ -434,9 +435,9 @@ def main(args):
             return df2['ap_total'].values[0]
 
         try:
-            dset_name = '/data/constantin/datasets/41.h5'
+            dset_name = args.eval_file
             model.eval()
-            eval_ap = eval_ap_func(dset_name, epoch, output_dir)
+            eval_ap = eval_ap_func(args, dset_name, epoch, output_dir)
             with open(output_dir  / 'exp_ap_40_polar.txt', 'a+') as f:
                 f.write(str(eval_ap) + "\n")
         except:
@@ -465,7 +466,7 @@ if __name__ == '__main__':
     if os.path.isdir('\\'.join(args.resume.split('\\')[0:-1])):
         args.output_dir ='\\'.join(args.resume.split('\\')[0:-1])
     else:
-        root = '/data/constantin/train_output/'
+        root = args.root_dir
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         args.output_dir = root + 'dinodetr' + timestamp
 

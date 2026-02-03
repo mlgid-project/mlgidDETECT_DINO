@@ -1,4 +1,6 @@
 _base_ = ['coco_transformer.py']
+root_dir = '/data/train_output/'
+eval_file = '/datasets/41.h5'
 
 num_classes=91
 
@@ -27,6 +29,7 @@ window_size_h = 24
 window_size_w = 12
 patch_size_h = 4
 patch_size_w = 4
+num_channels = 1
 use_checkpoint = True
 
 dilation = False
