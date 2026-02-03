@@ -1,4 +1,43 @@
 # DINO <img src="figs/dinosaur.png" width="30">
+# Installation
+
+<details>
+  <summary>Installation</summary>
+  
+  We test our models under ```python=3.12.7,pytorch=2.5.1,cuda=12.1```. Other versions might be available as well. Click the `Details` below for more details.
+  1. Clone this repo
+   ```sh
+   git clone git@github.com:schreiber-lab/DINO_GIWAXS.git
+   cd DINO_GIWAXS
+   ```
+
+  2. Install Pytorch and torchvision
+
+   Follow the instruction on https://pytorch.org/get-started/locally/.
+   ```sh
+   # an example:
+   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+   ```
+  3. Install other needed packages
+   ```sh
+   pip install -r requirements.txt
+   ```
+  
+  4. Compiling CUDA operators
+   ```sh
+   cd models/dino/ops
+   python setup.py build install
+   # unit test (should see all checking is True)
+   python test.py
+   cd ../../..
+   ```
+</details>
+
+
+
+  We use the environment same to DAB-DETR and DN-DETR to run DINO. If you have run DN-DETR or DAB-DETR, you can skip this step. 
+
+
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/dino-detr-with-improved-denoising-anchor-1/object-detection-on-coco-minival)](https://paperswithcode.com/sota/object-detection-on-coco-minival?p=dino-detr-with-improved-denoising-anchor-1)
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/dino-detr-with-improved-denoising-anchor-1/object-detection-on-coco)](https://paperswithcode.com/sota/object-detection-on-coco?p=dino-detr-with-improved-denoising-anchor-1)
 
