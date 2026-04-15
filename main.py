@@ -334,7 +334,7 @@ def main(args):
     print("Start training")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
-        dataset = SimulationDataset()
+        dataset = SimulationDataset(args)
         data_loader = torch.utils.data.DataLoader(
             dataset,
             batch_size=2,
@@ -466,7 +466,8 @@ if __name__ == '__main__':
     if os.path.isdir('\\'.join(args.resume.split('\\')[0:-1])):
         args.output_dir ='\\'.join(args.resume.split('\\')[0:-1])
     else:
-        root = args.root_dir
+        cfg = SLConfig.fromfile(args.config_file)
+        root = cfg._cfg_dict.to_dict().get('root_dir', '')
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         args.output_dir = root + 'dinodetr' + timestamp
 
