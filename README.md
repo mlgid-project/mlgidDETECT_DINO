@@ -1,5 +1,9 @@
 # DINO-GIWAXS
-This is a GIWAXS oriented implementation of the paper "[DINO: DETR with Improved DeNoising Anchor Boxes for End-to-End Object Detection](https://arxiv.org/abs/2203.03605)". For more information on how to run the original implementation visit the original [GitHub repo](https://github.com/IDEA-Research/DINO).
+This is a GIWAXS oriented implementation of the paper "[DINO: DETR with Improved DeNoising Anchor Boxes for End-to-End Object Detection](https://arxiv.org/abs/2203.03605)". 
+
+For more information on how to run the original implementation visit the original [GitHub repo](https://github.com/IDEA-Research/DINO).
+
+Models trained using DINO-GIWAXS can be used in [mlgidDETECT](https://github.com/mlgid-project/mlgidDETECT) to perform inference. 
 # Installation
  
   We test our models under ```python=3.12.7,pytorch=2.5.1,cuda=12.1```. Other versions might be available as well. Click the `Details` below for more details.
