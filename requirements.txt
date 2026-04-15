@@ -16,3 +16,4 @@ h5py
 pyyaml
 matplotlib
 opencv-python
+onnx
