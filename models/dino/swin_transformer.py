@@ -363,18 +363,30 @@ class BasicLayer(nn.Module):
         # calculate attention mask for SW-MSA
         Hp = int(np.ceil(H / self.window_size_h)) * self.window_size_h
         Wp = int(np.ceil(W / self.window_size_w)) * self.window_size_w
-        img_mask = torch.zeros((1, Hp, Wp, 1), device=x.device)  # 1 Hp Wp 1
-        h_slices = (slice(0, -self.window_size_h),
-                    slice(-self.window_size_h, -self.shift_size_h),
-                    slice(-self.shift_size_h, None))
-        w_slices = (slice(0, -self.window_size_w),
-                    slice(-self.window_size_w, -self.shift_size_w),
-                    slice(-self.shift_size_w, None))
-        cnt = 0
-        for h in h_slices:
-            for w in w_slices:
-                img_mask[:, h, w, :] = cnt
-                cnt += 1
+        # Build region ids without in-place indexing to keep ONNX tracing stable.
+        h_idx = torch.arange(Hp, device=x.device)
+        w_idx = torch.arange(Wp, device=x.device)
+
+        h_region = torch.where(
+            h_idx < (Hp - self.window_size_h),
+            torch.zeros_like(h_idx),
+            torch.where(
+                h_idx < (Hp - self.shift_size_h),
+                torch.ones_like(h_idx),
+                torch.full_like(h_idx, 2),
+            ),
+        )
+        w_region = torch.where(
+            w_idx < (Wp - self.window_size_w),
+            torch.zeros_like(w_idx),
+            torch.where(
+                w_idx < (Wp - self.shift_size_w),
+                torch.ones_like(w_idx),
+                torch.full_like(w_idx, 2),
+            ),
+        )
+        img_mask = (h_region[:, None] * 3 + w_region[None, :]).to(dtype=x.dtype)
+        img_mask = img_mask.unsqueeze(0).unsqueeze(-1)
 
         mask_windows = window_partition(img_mask, self.window_size_h, self.window_size_w)  # nW, window_size, window_size, 1
         mask_windows = mask_windows.view(-1, self.window_size_h * self.window_size_w)
@@ -383,7 +395,13 @@ class BasicLayer(nn.Module):
 
         for blk in self.blocks:
             blk.H, blk.W = H, W
-            if self.use_checkpoint:
+            use_ckpt = (
+                self.use_checkpoint
+                and self.training
+                and (not torch.onnx.is_in_onnx_export())
+                and (not torch.jit.is_tracing())
+            )
+            if use_ckpt:
                 x = checkpoint.checkpoint(blk, x, attn_mask)
             else:
                 x = blk(x, attn_mask)
