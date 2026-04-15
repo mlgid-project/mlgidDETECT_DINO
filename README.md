@@ -36,4 +36,11 @@ Models trained using DINO-GIWAXS can be used in [mlgidDETECT](https://github.com
 
 
 
-  We use the environment same to DAB-DETR and DN-DETR to run DINO. If you have run DN-DETR or DAB-DETR, you can skip this step. 
+  We use the environment same to DAB-DETR and DN-DETR to run DINO. If you have run DN-DETR or DAB-DETR, you can skip this step.
+
+  # Onnx-File Export
+  To export an onnx file using the saved ```checkpoint.pth``` file run 
+
+  ``` 
+  python export.py --checkpoint /path-to-checkpoint/checkpoint.pth --output /output_dir/name.onnx
+  ```
