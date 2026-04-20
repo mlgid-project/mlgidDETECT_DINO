@@ -26,6 +26,11 @@ frozen_stages = 2
 modelname = 'dino'
 frozen_weights = None
 backbone = 'swin_L_384_22k'
+window_size_h = 32
+window_size_w = 8
+patch_size_h = 4
+patch_size_w = 4
+num_channels = 1
 use_checkpoint = True
 
 dilation = False
