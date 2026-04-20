@@ -249,11 +249,25 @@ def main(args):
     optimizer = torch.optim.AdamW(param_dicts, lr=args.lr,
                                   weight_decay=args.weight_decay)
     
+    if getattr(args, "multi_step_lr", False):
+        # --- START CUSTOM SCHEDULER ---
+        # Dieser Scheduler unterstützt individuelle Gamma-Werte pro Step (auch > 1.0)
+        print(f"[INFO] Using Custom LambdaLR with drops {args.lr_drop_list} and gammas {getattr(args, 'lr_gammas', 'default 0.1')}")
+        
+        def custom_lr_lambda(epoch):
+            factor = 1.0
+            # Gammas laden (Fallback auf 0.1 falls nicht in Config)
+            gammas = getattr(args, 'lr_gammas', [0.1] * len(args.lr_drop_list))
+            
+            for i, milestone in enumerate(args.lr_drop_list):
+                if epoch >= milestone:
+                    # Wenn Epoche >= Milestone, Faktor anpassen
+                    current_gamma = gammas[i] if i < len(gammas) else 0.1
+                    factor *= current_gamma
+            return factor
 
-    if args.onecyclelr:
-        lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(data_loader_train), epochs=args.epochs, pct_start=0.2)
-    elif args.multi_step_lr:
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.lr_drop_list)
+        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=custom_lr_lambda)
+        # --- END CUSTOM SCHEDULER ---
     else:
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
