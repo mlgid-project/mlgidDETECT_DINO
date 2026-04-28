@@ -22,6 +22,7 @@ from util.evaluation import Evaluator, get_full_conf_results, recall_precision_c
 from util.exp_preprocess import standard_preprocessing
 from util.labeleddataset import H5GIWAXSDataset
 import util.misc as utils
+from util.nms import perform_nms
 
 import datasets
 from datasets import build_dataset, get_coco_api_from_dataset
@@ -418,13 +419,7 @@ def main(args):
                 scores = postprocessed[0]['scores']
                 pred_boxes = postprocessed[0]['boxes']
 
-                idx_keep = nms(pred_boxes, scores, 0.4)
-                pred_boxes = pred_boxes[idx_keep]
-                scores = scores[idx_keep]
-
-                idx_elong = filter_non_elong(pred_boxes)
-                scores = scores[idx_elong]
-                pred_boxes = pred_boxes[idx_elong]
+                pred_boxes, scores = perform_nms(pred_boxes, scores, giwaxs_img_container)
 
                 evaluator.get_exp_metrics(pred_boxes, scores, torch.tensor(labels.boxes, device = 'cuda'), labels.confidences)
             

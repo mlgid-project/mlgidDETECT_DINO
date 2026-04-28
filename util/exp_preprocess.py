@@ -54,7 +54,7 @@ def normalize_image(image, mean=0.5, std=0.1):
 
 def clahe_func(img, limit: float = DEFAULT_CLAHE_LIMIT):
 
-    return cv2.createCLAHE(clipLimit=limit, tileGridSize=(1, 1)).apply(img.astype('uint16')).astype(np.float32)
+    return cv2.createCLAHE(clipLimit=limit, tileGridSize=(1, 1)).apply(np.clip(img, 0, 65535).astype('uint16')).astype(np.float32)
 
 def gaussian(x, amplitude, mean, stddev):
     return amplitude * np.exp(-((x - mean) / stddev) ** 2 / 2)
@@ -78,7 +78,7 @@ def _contrast_correction(
             log = False
             clahe = False
 
-    mask = ~np.isnan(img) & (img != 0)
+    mask = ~np.isnan(img) & (img > 0)
 
     if linear_normalization:
         if linear_perc_997:
@@ -100,8 +100,8 @@ def _contrast_correction(
         return img, mask
 
     if log:
-        img[mask] =  normalize(img, mask)
         img = np.log10(img * coef + 1)
+        img[mask] =  normalize(img, mask)
 
     if clahe:
         img = clahe_func(img * coef, limit)
