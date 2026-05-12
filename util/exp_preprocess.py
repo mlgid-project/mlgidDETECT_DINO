@@ -62,51 +62,33 @@ def gaussian(x, amplitude, mean, stddev):
 def _contrast_correction(
         config: Config = None,    
         img: np.array = None, 
-        limit: float = DEFAULT_CLAHE_LIMIT,
-        coef: float = DEFAULT_CLAHE_COEF,
-        clahe: bool = True,
         log: bool = True,
-        linear_normalization = False,
-        linear_perc_997 = False
+        histogram_equalization: bool = True,
+        perform_clipping = True,
 ):
 
-    if config is not None:
-        linear_normalization = config.PREPROCESSING_LINEAR_CONTRAST
-        linear_perc_997 = config.PREPROCESSING_LINEAR_PERC_977
-        if config.PREPROCESSING_NO_CONTRASTCORRECTION:
-            linear_normalization = False
-            log = False
-            clahe = False
+    mask = ~np.isnan(img) & (img != 0)
 
-    mask = ~np.isnan(img) & (img > 0)
-
-    if linear_normalization:
-        if linear_perc_997:
-            upper_clip_limit = np.percentile(img[mask],97.0)
-        else:
-            upper_clip_limit = np.percentile(img[mask],99.9)
-
-        lower_clip_limit = np.percentile(img[mask],5)
-
+    if perform_clipping:
+        upper_clip_percentile = config.PREPROCESSING_HIGHERCLIPPINGPERCENTILE
+        lower_clip_percentile = config.PREPROCESSING_LOWERCLIPPINGPERCENTILE
+        upper_clip_limit = np.percentile(img[mask], upper_clip_percentile)
+        lower_clip_limit = np.percentile(img[mask], lower_clip_percentile)
         img[mask] = np.clip(img[mask], lower_clip_limit, upper_clip_limit)
-        img[mask] =  normalize(img, mask)
-        img = img *255
-
-        img = cv2.equalizeHist(img.astype(np.uint8))
-
-        img = img /255
-        img = img.astype(np.float32)
-        img[~mask] = 0
-        return img, mask
 
     if log:
-        img = np.log10(img * coef + 1)
+        img = np.log10(np.abs(img) + 1e-7)
         img[mask] =  normalize(img, mask)
 
-    if clahe:
-        img = clahe_func(img * coef, limit)
-        img[mask] = normalize(img,mask)
-        img[~mask] = 0
+    if histogram_equalization:
+        img = img *255
+        hist_input = img[mask]
+        equalized = cv2.equalizeHist(hist_input.astype(np.uint8).reshape(-1, 1)).ravel()
+        img[mask] = equalized
+        img = img /255
+        img = img.astype(np.float32)
+
+    img[~mask] = 0
 
     return img, mask
 
