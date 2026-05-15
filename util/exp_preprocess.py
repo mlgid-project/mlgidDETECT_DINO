@@ -81,6 +81,7 @@ def _contrast_correction(
         img[mask] =  normalize(img, mask)
 
     if histogram_equalization:
+        img[mask] = normalize(img, mask)
         img = img *255
         hist_input = img[mask]
         equalized = cv2.equalizeHist(hist_input.astype(np.uint8).reshape(-1, 1)).ravel()
