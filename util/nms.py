@@ -2,8 +2,11 @@ import torch
 from torchvision.ops import nms
 
 def perform_nms(pred_boxes, scores, img_container):
-    # Distinguish between rings and segments based on vertical coverage
-    img_height = img_container.boxes.shape[1] # assuming boxes are in (N, 4) format with (x1, y1, x2, y2)
+    # Distinguish between rings and segments based on vertical (angular) coverage.
+    # pred_boxes are scaled to the polar image's [height, width] (= [512, 1024]), so the
+    # angular extent is the image height = converted_polar_image.shape[-2]. (The previous
+    # img_container.boxes holds predicted boxes and is unset in this fork -> AttributeError.)
+    img_height = img_container.converted_polar_image.shape[-2]
     y_extent = pred_boxes[:, 3] - pred_boxes[:, 1]
     is_ring = y_extent >= img_height * 0.35 # heuristic: rings cover at least 35% of vertical axis, segments less
     

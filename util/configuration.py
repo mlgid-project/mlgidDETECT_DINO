@@ -19,7 +19,8 @@ class Config:
         self.GENERAL_DEBUG = False
         self.MODEL_ONNX_PATH = None
         self.MODEL_REDOWNLOAD = False
-        self.MODEL_TYPE = 'faster_rcnn'
+        #'dino' to match the deployed mlgidDETECT model type (was 'faster_rcnn')
+        self.MODEL_TYPE = 'dino'
         self.MODEL_FORCE_CPU: False
         self.INPUT_IMGPATH = None
         self.INPUT_DATASET = None
@@ -31,11 +32,22 @@ class Config:
         self.PREPROCESSING_QUAZIPOLAR = False
         self.PREPROCESSING_FLIPHORIZONTAL = False
         self.PREPROCESSING_POLAR_CONVERSION = True
+        self.PREPROCESSING_POLAR_SHAPE = [512,1024]
         self.PEREPROCESSING_PERFORMCLIPPING = True
+        self.PREPROCESSING_LOG = True
+        self.PREPROCESSING_HISTOGRAMEQUALIZATION = True
         self.PREPROCESSING_HIGHERCLIPPINGPERCENTILE = 99.5
         self.PREPROCESSING_LOWERCLIPPINGPERCENTILE = 5.0
         self.OUTPUT_FOLDER = './outputs/'
         self.OUTPUT_H5PATH = None
+        #postprocessing thresholds matched to mlgidDETECT (filter_boxes uses these)
+        self.POSTPROCESSING_SCORE = 0.4
+        self.POSTPROCESSING_NMSIOU = 0.4
+        self.POSTPROCESSING_TTA = False
+        #class-aware NMS for the 2-class ring/segment model (segment=0, ring=1)
+        self.POSTPROCESSING_CLASSAWARE_NMS = False
+        self.POSTPROCESSING_NMSIOU_RING = 0.1
+        self.POSTPROCESSING_NMSIOU_SEG = 0.4
 
 
     def load_config(self):

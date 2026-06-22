@@ -1,8 +1,16 @@
 _base_ = ['coco_transformer.py']
 root_dir = '/data/train_output/'
-eval_file = '/datasets/41.h5'
+eval_file = '/mnt/lustre/work/schreiber/szb389/datasets/41.h5'
+#labeled eval datasets (name -> path); evaluated every eval_interval epochs, ap_total logged per name
+eval_files = {
+    '41': '/mnt/lustre/work/schreiber/szb389/datasets/41.h5',
+    'organic': '/mnt/lustre/work/schreiber/szb389/datasets/organic_labeled.h5',
+}
+#run the labeled eval every N epochs (evaluates on epochs 0, 2, 4, ...)
+eval_interval = 2
 
-num_classes=91
+#two learned classes: segment=0, ring=1 (label = int(is_ring)). num_classes = max_obj_id + 1.
+num_classes=2
 
 lr = 0.00001
 param_dict_type = 'default'
@@ -25,8 +33,8 @@ lr_drop_list = [33, 45]
 modelname = 'dino'
 frozen_weights = None
 backbone = 'swin_L_384_22k'
-window_size_h = 24
-window_size_w = 12
+window_size_h = 48
+window_size_w = 6
 patch_size_h = 4
 patch_size_w = 4
 num_channels = 1
@@ -107,7 +115,8 @@ dn_number = 100
 dn_box_noise_scale = 0.4
 dn_label_noise_ratio = 0.5
 embed_init_tgt = True
-dn_labelbook_size = 91
+#must cover the class ids used in DN label noise; matches num_classes
+dn_labelbook_size = 2
 
 match_unstable_error = True
 

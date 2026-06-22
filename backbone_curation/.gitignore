@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+runs/
+*.out
+figures/training_state.png
+figures/baseline_vs_ssl1.png
+figures/ssl1_vs_ssl2.png

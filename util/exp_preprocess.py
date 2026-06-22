@@ -60,12 +60,21 @@ def gaussian(x, amplitude, mean, stddev):
     return amplitude * np.exp(-((x - mean) / stddev) ** 2 / 2)
 
 def _contrast_correction(
-        config: Config = None,    
-        img: np.array = None, 
+        config: Config = None,
+        img: np.array = None,
         log: bool = True,
         histogram_equalization: bool = True,
         perform_clipping = True,
 ):
+
+    # Read the same flags mlgidDETECT's _contrast_correction reads, so the deployed and
+    # training/eval contrast pipelines stay in lockstep. Falls back to the (typo'd) DINO
+    # clipping key and to the passed defaults when a flag is absent.
+    if config is not None:
+        log = getattr(config, 'PREPROCESSING_LOG', log)
+        histogram_equalization = getattr(config, 'PREPROCESSING_HISTOGRAMEQUALIZATION', histogram_equalization)
+        perform_clipping = getattr(config, 'PREPROCESSING_PERFORMCLIPPING',
+                                   getattr(config, 'PEREPROCESSING_PERFORMCLIPPING', perform_clipping))
 
     mask = ~np.isnan(img) & (img != 0)
 

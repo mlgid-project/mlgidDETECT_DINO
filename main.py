@@ -21,8 +21,9 @@ from util.configuration import Config
 from util.evaluation import Evaluator, get_full_conf_results, recall_precision_curve_with_intensities
 from util.exp_preprocess import standard_preprocessing
 from util.labeleddataset import H5GIWAXSDataset
+from util.pygidloader import PyGIDDataset, detect_dataset_type
 import util.misc as utils
-from util.nms import perform_nms
+from util.postprocessing import onnx_to_xyxy, filter_boxes
 
 import datasets
 from datasets import build_dataset, get_coco_api_from_dataset
@@ -61,9 +62,9 @@ class SimulationDataset(torch.utils.data.Dataset):
         image = None
         while image is None:
             try:
-                image, boxes, mask = self.simulation.simulate_img()
+                image, boxes, mask, is_ring = self.simulation.simulate_img()
             except:
-                pass 
+                pass
 
         image = image.repeat(self.args.num_channels, 1, 1)
         num_objects = len(boxes[0:])
@@ -71,11 +72,12 @@ class SimulationDataset(torch.utils.data.Dataset):
         area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
         h, w = image.shape[-2:]
         boxes = box_xyxy_to_cxcywh(boxes)
-        boxes = boxes / torch.tensor([w, h, w, h], device=self.device)        
+        boxes = boxes / torch.tensor([w, h, w, h], device=self.device)
         target = {"boxes": boxes}
         target['area'] = area
 
-        target["labels"] = torch.ones((num_objects,), dtype=torch.int64, device=self.device)
+        #learned ring/segment class: segment=0, ring=1 (label = int(is_ring))
+        target["labels"] = is_ring.to(dtype=torch.int64, device=self.device)
         target["image_id"] = torch.tensor(idx, device=self.device)
         target["iscrowd"] = torch.zeros((num_objects,), dtype=torch.int64, device=self.device)
         target["orig_size"] = torch.tensor(image[0].shape, device=self.device)
@@ -143,6 +145,11 @@ def get_args_parser():
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
     parser.add_argument('--eval', action='store_true')
+    # Distinct dest so this does not collide with a config-defined `eval_file`
+    # (the cfg/args merge forbids a key existing in both). CLI value overrides the config.
+    parser.add_argument('--eval_file', dest='eval_file_cli', default=None, type=str,
+                        help='path to a labeled .h5 (pygid or roi_data) for GIWAXS AP evaluation; '
+                             'overrides eval_file from the config file')
     parser.add_argument('--num_workers', default=10, type=int)
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--debug', action='store_true')
@@ -171,6 +178,57 @@ def build_model_main(args):
     build_func = MODULE_BUILD_FUNCS.get(args.modelname)
     model, criterion, postprocessors = build_func(args)
     return model, criterion, postprocessors
+
+def evaluate_giwaxs_ap(model, postprocessors, args, dset_path, epoch, output_dir):
+    """Run GIWAXS labeled AP evaluation on a labeled .h5 file (pygid or roi_data).
+
+    Auto-detects the dataset layout (``detect_dataset_type``): pyGID/NeXus files with
+    ``data/img_gid_q`` + ``fitted_peaks`` GT route through ``PyGIDDataset``; older
+    ``roi_data`` files through ``H5GIWAXSDataset``.
+
+    Postprocessing is intentionally identical to the deployed mlgidDETECT dino path: the
+    live model's raw outputs (pred_logits, pred_boxes) are pushed through the ported
+    ``onnx_to_xyxy`` (top-225 + cxcywh->xyxy) and ``filter_boxes`` (single NMS at
+    POSTPROCESSING_NMSIOU, then score > POSTPROCESSING_SCORE), so the metrics here reflect
+    what the exported ONNX model produces in production. Returns ``ap_total``.
+    """
+    config = Config()
+    config.EVAL_EPOCH = str(epoch)
+    config.EVAL_OUTPUT_FOLDER = str(output_dir)
+    config.INPUT_DATASET = dset_path
+    config.PREPROCESSING_POLAR_SHAPE = [512, 1024]
+    #match mlgidDETECT's eval_on_dataset: lower the score threshold so the PR curve is fully sampled
+    config.POSTPROCESSING_SCORE = 0.1
+    #2-class ring/segment model: use class-aware NMS (ring=1 IoU 0.1 / segment=0 IoU 0.4)
+    config.POSTPROCESSING_CLASSAWARE_NMS = True
+    if detect_dataset_type(dset_path) == 'pygid':
+        #pyGID/NeXus labeled file (img_gid_q + fitted_peaks GT)
+        data = PyGIDDataset(config, path=dset_path, preprocess_func=standard_preprocessing, buffer_size=5, load_labels=True)
+    else:
+        #roi_data-style labeled file
+        data = H5GIWAXSDataset(config, path=dset_path, preprocess_func=standard_preprocessing, buffer_size=5)
+    evaluator = Evaluator()
+
+    for i, giwaxs_img_container in enumerate(data.iter_images()):
+        giwaxs_img = giwaxs_img_container.converted_polar_image
+        giwaxs_img = torch.tensor(giwaxs_img[:, 0, :, :]).unsqueeze(0).cuda().repeat(1, args.num_channels, 1, 1)
+        labels = giwaxs_img_container.polar_labels
+        outputs = model(giwaxs_img)
+
+        #mimic the ONNX session outputs [pred_logits, pred_boxes] and run the deployed postprocessing
+        raw_results = [outputs['pred_logits'].detach().cpu().numpy(),
+                       outputs['pred_boxes'].detach().cpu().numpy()]
+        giwaxs_img_container = onnx_to_xyxy(config, giwaxs_img_container, raw_results)
+        giwaxs_img_container = filter_boxes(config, giwaxs_img_container)
+        pred_boxes = giwaxs_img_container.boxes
+        scores = giwaxs_img_container.scores
+
+        evaluator.get_exp_metrics(pred_boxes, scores, torch.tensor(labels.boxes), labels.confidences)
+
+    df1, df2 = get_full_conf_results(evaluator.metrics)
+    print(df1)
+    print(df2)
+    return df2['ap_total'].values[0]
 
 def main(args):
     #utils.init_distributed_mode(args)
@@ -314,16 +372,15 @@ def main(args):
 
     if args.eval:
         os.environ['EVAL_FLAG'] = 'TRUE'
-        test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
-                                              data_loader_val, base_ds, device, args.output_dir, wo_class_error=wo_class_error, args=args)
-        if args.output_dir:
-            utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
-
-        log_stats = {**{f'test_{k}': v for k, v in test_stats.items()} }
-        if args.output_dir and utils.is_main_process():
-            with (output_dir / "log.txt").open("a") as f:
-                f.write(json.dumps(log_stats) + "\n")
-
+        #This GIWAXS fork has no COCO val loader; evaluate against a labeled GIWAXS .h5 instead.
+        dset_name = args.eval_file_cli or getattr(args, 'eval_file', None)
+        if not dset_name:
+            raise ValueError("No evaluation dataset given. Pass --eval_file <labeled .h5> "
+                             "or set eval_file in the config file.")
+        model.eval()
+        eval_ap = evaluate_giwaxs_ap(model, postprocessors, args, dset_name, args.start_epoch, output_dir)
+        with open(output_dir / 'exp_ap_40_polar.txt', 'a+') as f:
+            f.write(str(eval_ap) + "\n")
         return
 
     shutil.copy(os.path.dirname(os.path.realpath(__file__)) + '/simulation.py', output_dir / 'simulation.py')
@@ -379,64 +436,26 @@ def main(args):
         with open(output_dir  / 'loss_giou.txt', 'a+') as f:
             f.write('epoch: ' + str(epoch) + ' loss_giou: ' + str(train_stats['loss_giou']) + "\n")
 
-        class ImageProcessing():
-
-            def __init__(self, model, postprocessors) -> None:
-                self.model = model
-                self.postprocessors = postprocessors
-
-            def infer(self, img: np.array, k: int = None) -> bool:
-                img = Tensor(img).cuda()
-                raw_results = self.model(img)
-                postprocessed =  self.postprocessors['bbox'](raw_results, torch.Tensor([[512, 512]]).cuda())
-                scores = postprocessed[0]['scores']
-                boxes = postprocessed[0]['boxes']
-                return boxes.cpu(), scores.cpu()
-            
-        img_process = ImageProcessing(model, postprocessors)
-
-        def eval_ap_func(args, dset_path, epoch, output_dir):
-            config = Config()
-            config.EVAL_EPOCH = str(epoch)
-            config.EVAL_OUTPUT_FOLDER = str(output_dir)
-            config.INPUT_DATASET = dset_path
-            config.PREPROCESSING_POLAR_SHAPE = [512,1024]
-            config.PREPROCESSING_LINEAR_CONTRAST = True
-            config.PREPROCESSING_LINEAR_PERC_977 = False
-            data = H5GIWAXSDataset(config, path = dset_path, preprocess_func=standard_preprocessing , buffer_size=5)   
-            evaluator = Evaluator()
-
-            for i, giwaxs_img_container in enumerate(data.iter_images()):
-
-                giwaxs_img = giwaxs_img_container.converted_polar_image
-                giwaxs_img = torch.tensor(giwaxs_img[:,0,:,:]).unsqueeze(0).cuda().repeat(1,args.num_channels,1,1)
-                raw_giwaxs_img = giwaxs_img_container.raw_polar_image
-                labels = giwaxs_img_container.polar_labels
-                outputs = model(giwaxs_img)
-
-                postprocessed =  postprocessors['bbox'](outputs, torch.Tensor([[512, 1024]]).cuda())
-                
-                scores = postprocessed[0]['scores']
-                pred_boxes = postprocessed[0]['boxes']
-
-                pred_boxes, scores = perform_nms(pred_boxes, scores, giwaxs_img_container)
-
-                evaluator.get_exp_metrics(pred_boxes, scores, torch.tensor(labels.boxes, device = 'cuda'), labels.confidences)
-            
-            recalls, precisions, accuracies, scores, av_precision, recalls_levels, fp_nums = recall_precision_curve_with_intensities(evaluator.metrics)
-            df1, df2 = get_full_conf_results(evaluator.metrics)
-            print(df1)
-            print(df2)
-            return df2['ap_total'].values[0]
-
-        try:
-            dset_name = args.eval_file
+        #GIWAXS labeled eval on each configured dataset (e.g. 41 + organic), every eval_interval
+        #epochs; each is wrapped so a failure on one never aborts training or skips the others.
+        eval_interval = getattr(args, 'eval_interval', 2)
+        if epoch % eval_interval == 0:
+            eval_targets = getattr(args, 'eval_files', None) or {}
+            if not eval_targets:
+                #fall back to a single dataset (CLI override or config eval_file)
+                single = args.eval_file_cli or getattr(args, 'eval_file', None)
+                if single:
+                    eval_targets = {'eval': single}
             model.eval()
-            eval_ap = eval_ap_func(args, dset_name, epoch, output_dir)
-            with open(output_dir  / 'exp_ap_40_polar.txt', 'a+') as f:
-                f.write(str(eval_ap) + "\n")
-        except:
-            pass
+            for name, path in eval_targets.items():
+                try:
+                    eval_ap = evaluate_giwaxs_ap(model, postprocessors, args, path, epoch, output_dir)
+                    with open(output_dir / f'exp_ap_{name}.txt', 'a+') as f:
+                        f.write(f'{epoch}\t{eval_ap}\n')
+                    print(f'[epoch {epoch}] {name} ap_total = {eval_ap}')
+                except Exception as e:
+                    print(f'[epoch {epoch}] eval on {name} ({path}) failed: {type(e).__name__}: {e}')
+            model.train()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -454,17 +473,26 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('DETR training and evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()
-    if os.path.isfile(args.output_dir + '/checkpoint.pth'):
-        args.resume = args.output_dir + '/checkpoint.pth'
 
+    # Allow --resume to point at a run directory that contains checkpoint.pth.
+    if args.resume and os.path.isdir(args.resume):
+        args.resume = os.path.join(args.resume, 'checkpoint.pth')
 
-    if os.path.isdir('\\'.join(args.resume.split('\\')[0:-1])):
-        args.output_dir ='\\'.join(args.resume.split('\\')[0:-1])
-    else:
-        cfg = SLConfig.fromfile(args.config_file)
-        root = cfg._cfg_dict.to_dict().get('root_dir', '')
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        args.output_dir = root + 'dinodetr' + timestamp
+    # Pick up an existing checkpoint from --output_dir when --resume was not given.
+    if not args.resume and args.output_dir and os.path.isfile(os.path.join(args.output_dir, 'checkpoint.pth')):
+        args.resume = os.path.join(args.output_dir, 'checkpoint.pth')
+
+    # Honor an explicit --output_dir; otherwise derive one (next to the checkpoint,
+    # else the config root_dir + a timestamp). The previous logic split on '\\' and so
+    # never matched on POSIX, always falling back to root_dir and ignoring --output_dir.
+    if not args.output_dir:
+        if args.resume:
+            args.output_dir = os.path.dirname(args.resume)
+        else:
+            cfg = SLConfig.fromfile(args.config_file)
+            root = cfg._cfg_dict.to_dict().get('root_dir', '')
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            args.output_dir = root + 'dinodetr' + timestamp
 
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)

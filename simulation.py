@@ -303,10 +303,12 @@ class FastSimulation(object):
             clahe_img = clahe_img + self.background_img
             clahe_img = normalize(clahe_img)
             boxes = torch.cat([boxes, Tensor([[116,0,128,512]]).cuda()])
+            #the appended full-height box is a ring; keep is_ring aligned with boxes
+            is_ring = torch.cat([is_ring, torch.ones(1, dtype=torch.bool, device=is_ring.device)])
 
-        clahe_img, boxes, mask = flip_image(clahe_img, boxes, mask)        
+        clahe_img, boxes, mask = flip_image(clahe_img, boxes, mask)
 
-        return clahe_img, boxes, mask
+        return clahe_img, boxes, mask, is_ring
 
     @torch.no_grad()
     def simulate_boxes(self):
