@@ -162,6 +162,12 @@ and `--eval` path are all unaffected — only training changes; old checkpoints 
 | 41 (roi_data)   | **0.758** (peak 0.768) | ~0.751 | slight edge new |
 Plot: `train_output/ringseg_2class_20260603-142434/ap_curves.png`.
 
+**Superseded by the SSL-backbone effort (2026-06):** round-1 SSL backbone `ssl1` = best single
+model (organic **0.586** vs 0.554 scratch); deployed best = **ssl1+baseline ensemble**
+(organic **0.605** / 41 **0.780**); all three SSL refinements (recipe v2 / freezing / 5-scale)
+were NEGATIVE — full record incl. run paths in **`backbone_curation/RESULTS.md`**,
+deployment in `backbone_curation/ENSEMBLE_DEPLOY.md`.
+
 ## Diagnostics & roadmap
 - **Diagnostic C** (where AP is lost) run on the best checkpoint: recall 0.49 / precision 0.81 on
   organic; misses dominated by faint (vis=1 recall 0.28), high-q (recall 0.34 for q>682), and segment
