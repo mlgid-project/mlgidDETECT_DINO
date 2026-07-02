@@ -27,7 +27,7 @@ from util.postprocessing import onnx_to_xyxy, filter_boxes
 
 import datasets
 from datasets import build_dataset, get_coco_api_from_dataset
-from engine import evaluate, train_one_epoch, test
+from engine import evaluate, train_one_epoch, train_one_epoch_semi, test
 from simulation import FastSimulation
 import pickle
 from torch import Tensor
@@ -389,6 +389,23 @@ def main(args):
             f.write('\n' + str(model))
             f.write('\n' + str(args))
 
+    #semi-supervised (Semi-DETR MVP): real unlabeled corpus loader, built ONCE (static corpus,
+    #unlike SimulationDataset which is rebuilt per epoch). CPU dataset -> workers allowed.
+    real_loader = None
+    if getattr(args, 'use_semi', False):
+        assert args.use_ema, "use_semi requires use_ema=True (the EMA teacher generates pseudo-labels)"
+        from datasets.real_unlabeled import RealUnlabeledDataset, collate_unlabeled
+        real_ds = RealUnlabeledDataset(args.unlabeled_h5, strong=args.strong_aug,
+                                       geom_flip=args.semi_geom_flip)
+        real_loader = DataLoader(real_ds, batch_size=args.unlabeled_batch_size, shuffle=True,
+                                 num_workers=args.unlabeled_workers, collate_fn=collate_unlabeled,
+                                 drop_last=True, pin_memory=True,
+                                 persistent_workers=args.unlabeled_workers > 0)
+        logger.info("semi: {} real unlabeled frames from {}; semi_start_epoch={} lambda={} "
+                    "thr(ring/seg)={}/{}".format(len(real_ds), args.unlabeled_h5,
+                    args.semi_start_epoch, args.unsup_loss_weight,
+                    args.pseudo_thr_ring, args.pseudo_thr_seg))
+
     print("Start training")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
@@ -401,9 +418,14 @@ def main(args):
             collate_fn=collate_fn
         )
         epoch_start_time = time.time()
-        train_stats = train_one_epoch(
-            model, criterion, data_loader, optimizer, device, epoch,
-            args.clip_max_norm, wo_class_error=wo_class_error, lr_scheduler=lr_scheduler, args=args, logger=(logger if args.save_log else None), ema_m=ema_m)
+        if getattr(args, 'use_semi', False):
+            train_stats = train_one_epoch_semi(
+                model, criterion, data_loader, real_loader, optimizer, device, epoch,
+                args.clip_max_norm, wo_class_error=wo_class_error, lr_scheduler=lr_scheduler, args=args, logger=(logger if args.save_log else None), ema_m=ema_m)
+        else:
+            train_stats = train_one_epoch(
+                model, criterion, data_loader, optimizer, device, epoch,
+                args.clip_max_norm, wo_class_error=wo_class_error, lr_scheduler=lr_scheduler, args=args, logger=(logger if args.save_log else None), ema_m=ema_m)
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
 
@@ -455,6 +477,18 @@ def main(args):
                     print(f'[epoch {epoch}] {name} ap_total = {eval_ap}')
                 except Exception as e:
                     print(f'[epoch {epoch}] eval on {name} ({path}) failed: {type(e).__name__}: {e}')
+            #in the semi phase, also track the EMA teacher's AP (often the stronger model in
+            #mean-teacher training and the natural deployment candidate)
+            if (getattr(args, 'use_semi', False) and ema_m is not None
+                    and epoch >= args.semi_start_epoch):
+                for name, path in eval_targets.items():
+                    try:
+                        eval_ap = evaluate_giwaxs_ap(ema_m.module, postprocessors, args, path, epoch, output_dir)
+                        with open(output_dir / f'exp_ap_{name}_teacher.txt', 'a+') as f:
+                            f.write(f'{epoch}\t{eval_ap}\n')
+                        print(f'[epoch {epoch}] {name} ap_total (teacher) = {eval_ap}')
+                    except Exception as e:
+                        print(f'[epoch {epoch}] teacher eval on {name} ({path}) failed: {type(e).__name__}: {e}')
             model.train()
 
     total_time = time.time() - start_time

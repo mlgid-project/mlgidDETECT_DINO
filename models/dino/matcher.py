@@ -175,6 +175,65 @@ class SimpleMinsumMatcher(nn.Module):
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
+class TopkMatcher(SimpleMinsumMatcher):
+    """One-to-MANY assignment: each target is matched to its top-k lowest-cost queries.
+
+    Used only for the unsupervised (pseudo-label) branch during the one-to-many stage of
+    Semi-DETR-style stage-wise hybrid matching (docs/SEMI_DETR_INTEGRATION.md S5): a single
+    noisy pseudo-box supervising one query is too weak a signal, so it supervises k queries
+    early on, then training reverts to the standard one-to-one HungarianMatcher.
+    Note: a query may be assigned to more than one target (overlaps allowed, as in
+    Semi-DETR's one-to-many stage); the classification scatter then takes the last write.
+    """
+
+    def __init__(self, cost_class: float = 1, cost_bbox: float = 1, cost_giou: float = 1,
+                 focal_alpha=0.25, topk: int = 4):
+        super().__init__(cost_class=cost_class, cost_bbox=cost_bbox, cost_giou=cost_giou,
+                         focal_alpha=focal_alpha)
+        self.topk = topk
+
+    @torch.no_grad()
+    def forward(self, outputs, targets):
+        bs, num_queries = outputs["pred_logits"].shape[:2]
+
+        # cost build identical to SimpleMinsumMatcher
+        out_prob = outputs["pred_logits"].flatten(0, 1).sigmoid()
+        out_bbox = outputs["pred_boxes"].flatten(0, 1)
+
+        tgt_ids = torch.cat([v["labels"] for v in targets])
+        tgt_bbox = torch.cat([v["boxes"] for v in targets])
+
+        alpha = self.focal_alpha
+        gamma = 2.0
+        neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-(1 - out_prob + 1e-8).log())
+        pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
+        cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
+
+        cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
+        cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+
+        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
+        C = C.view(bs, num_queries, -1)
+
+        sizes = [len(v["boxes"]) for v in targets]
+        k = min(self.topk, num_queries)
+        indices = []
+        for i, c in enumerate(C.split(sizes, -1)):
+            n_tgt = sizes[i]
+            if n_tgt == 0:
+                indices.append((torch.as_tensor([], dtype=torch.int64),
+                                torch.as_tensor([], dtype=torch.int64)))
+                continue
+            cost_i = c[i]                                            # (num_queries, n_tgt)
+            topq = cost_i.topk(k, dim=0, largest=False).indices      # (k, n_tgt) lowest-cost queries
+            src = topq.t().reshape(-1)                               # each tgt -> its k queries
+            tgt = torch.arange(n_tgt, device=src.device).repeat_interleave(k)
+            indices.append((src, tgt))
+
+        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64))
+                for i, j in indices]
+
+
 def build_matcher(args):
     assert args.matcher_type in ['HungarianMatcher', 'SimpleMinsumMatcher'], "Unknown args.matcher_type: {}".format(args.matcher_type)
     if args.matcher_type == 'HungarianMatcher':

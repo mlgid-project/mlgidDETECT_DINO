@@ -122,6 +122,39 @@ the real lever for the organic set is #3 Path B, fine-tuning on real labeled dat
 
 ---
 
+## I. Semi-supervised pseudo-labeling on the real corpus (Semi-DETR MVP, DINO) — TRAINING-ONLY
+Goal: sim→real adaptation via mean-teacher pseudo-labeling of the 13k-frame real unlabeled corpus
+(the #1 untried lever per ROADMAP). Full design + rationale: **`docs/SEMI_DETR_INTEGRATION.md`**
+(Semi-DETR, Zhang et al. CVPR 2023, arXiv:2307.08095). The exported ONNX graph, pre/post-processing,
+and `--eval` path are all unaffected — only training changes; old checkpoints still load.
+- **`datasets/real_unlabeled.py`** — NEW. `RealUnlabeledDataset` serves weak/strong view pairs of
+  `backbone_ssl_corpus.h5` (CPU/numpy → `num_workers>0` allowed, unlike the cuda `SimulationDataset`).
+  Strong aug = `photometric_strong` (gamma/exposure/q-ramp/noise, mirrors `augment_v2` MINUS its
+  internal χ-flip — weak/strong must stay pixel-aligned or pseudo-boxes would be wrong); optional
+  shared χ-flip is applied to BOTH views before it. No-data stays exactly 0.
+- **`engine.py`** — NEW `make_pseudo_targets` (EMA-teacher forward on weak views → per-class score
+  thresholds, seg lower than ring for faint recall → class-aware NMS ring 0.1/seg 0.4 → target dicts
+  in the exact `SimulationDataset` schema) and NEW `train_one_epoch_semi`
+  (`L_sup(synthetic, DN on) + λ(epoch)·L_unsup(real pseudo, DN off)`; λ ramps after
+  `semi_start_epoch`; teacher hard-seeded from the student at the semi boundary via `ema_m.set`).
+  DN is disabled on pseudo-targets by zeroing `model.dn_number` for that forward (calling
+  `model(x)` with no targets in train mode would crash in `prepare_for_cdn`; DN toward noisy
+  pseudo-boxes would also just reinforce teacher error). Logs `loss_unsup`/`lam`/`pseudo_seg`/
+  `pseudo_ring` per step — if `pseudo_seg` decays to 0 the loop is eating its own tail.
+- **`models/dino/matcher.py`** — NEW `TopkMatcher` (one-to-many: each pseudo-box supervises its
+  top-M lowest-cost queries), the building block for Semi-DETR stage-wise hybrid matching.
+- **`models/dino/dino.py`** — `SetCriterion` gained `matcher_o2m`/`use_o2m` (default off); the four
+  matcher call sites (main/aux/interm/enc) use the o2m matcher only while the engine flips
+  `use_o2m` around the unsupervised criterion call. `build_dino` attaches the `TopkMatcher`.
+- **`main.py`** — builds the real loader once before the epoch loop when `use_semi`; branches to
+  `train_one_epoch_semi`; per-epoch eval additionally logs the EMA teacher's AP during the semi
+  phase (`exp_ap_<name>_teacher.txt`) — the teacher is the natural deployment candidate.
+- **`config/DINO/DINO_4scale_swin_semi.py`** — NEW config with all knobs (`semi_start_epoch=50`,
+  `unsup_loss_weight=2.0` + 5-epoch ramp, `pseudo_thr_ring/seg=0.4/0.3`, `use_ema=True`,
+  `ema_decay=0.999`; phase-3 `hybrid_matching=False` default).
+- **`backbone_curation/ssl/run_detector_semi.sbatch`** (+ `_smoke`) — launchers; `--amp` required
+  (two student forwards per step ≈ 2× activations). Auto-resume conventions unchanged.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|

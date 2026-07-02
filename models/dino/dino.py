@@ -351,6 +351,11 @@ class SetCriterion(nn.Module):
         self.weight_dict = weight_dict
         self.losses = losses
         self.focal_alpha = focal_alpha
+        # optional one-to-many matcher for the semi-supervised unsupervised branch
+        # (Semi-DETR stage-wise hybrid matching, docs/SEMI_DETR_INTEGRATION.md S5).
+        # The engine flips use_o2m around the pseudo-label criterion call only.
+        self.matcher_o2m = None
+        self.use_o2m = False
 
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (Binary focal loss)
@@ -483,7 +488,9 @@ class SetCriterion(nn.Module):
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
         device=next(iter(outputs.values())).device
-        indices = self.matcher(outputs_without_aux, targets)
+        # one-to-many matcher for the unsupervised pseudo-label branch when enabled (S5)
+        matcher = self.matcher_o2m if (self.use_o2m and self.matcher_o2m is not None) else self.matcher
+        indices = matcher(outputs_without_aux, targets)
 
         if return_indices:
             indices0_copy = indices
@@ -546,7 +553,7 @@ class SetCriterion(nn.Module):
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if 'aux_outputs' in outputs:
             for idx, aux_outputs in enumerate(outputs['aux_outputs']):
-                indices = self.matcher(aux_outputs, targets)
+                indices = matcher(aux_outputs, targets)
                 if return_indices:
                     indices_list.append(indices)
                 for loss in self.losses:
@@ -588,7 +595,7 @@ class SetCriterion(nn.Module):
         # interm_outputs loss
         if 'interm_outputs' in outputs:
             interm_outputs = outputs['interm_outputs']
-            indices = self.matcher(interm_outputs, targets)
+            indices = matcher(interm_outputs, targets)
             if return_indices:
                 indices_list.append(indices)
             for loss in self.losses:
@@ -606,7 +613,7 @@ class SetCriterion(nn.Module):
         # enc output loss
         if 'enc_outputs' in outputs:
             for i, enc_outputs in enumerate(outputs['enc_outputs']):
-                indices = self.matcher(enc_outputs, targets)
+                indices = matcher(enc_outputs, targets)
                 if return_indices:
                     indices_list.append(indices)
                 for loss in self.losses:
@@ -808,6 +815,13 @@ def build_dino(args):
     criterion = SetCriterion(num_classes, matcher=matcher, weight_dict=weight_dict,
                              focal_alpha=args.focal_alpha, losses=losses,
                              )
+    # one-to-many matcher for semi-supervised hybrid matching (off unless the engine
+    # sets criterion.use_o2m around the unsupervised branch; docs/SEMI_DETR_INTEGRATION.md S5)
+    from .matcher import TopkMatcher
+    criterion.matcher_o2m = TopkMatcher(
+        cost_class=args.set_cost_class, cost_bbox=args.set_cost_bbox,
+        cost_giou=args.set_cost_giou, focal_alpha=args.focal_alpha,
+        topk=getattr(args, 'hybrid_topk_M', 4))
     criterion.to(device)
     postprocessors = {'bbox': PostProcess(num_select=args.num_select, nms_iou_threshold=args.nms_iou_threshold)}
     if args.masks:
