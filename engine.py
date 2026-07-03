@@ -159,6 +159,13 @@ def make_pseudo_targets(teacher, weak_imgs, args):
                     keep_idx.append(cidx[nms(xyxy[cidx], sc[cidx], iou)])
             keep_idx = torch.cat(keep_idx)
             bx, sc, lb = bx[keep_idx], sc[keep_idx], lb[keep_idx]
+        # hard per-image cap (top-k by score): guard against pseudo-label hallucination
+        # explosions — run 1 collapsed with ~200 spurious segments/frame passing the
+        # threshold (see MODIFICATIONS.md phase I)
+        max_per_img = getattr(args, 'pseudo_max_per_img', 30)
+        if bx.shape[0] > max_per_img:
+            topk = sc.topk(max_per_img).indices
+            bx, sc, lb = bx[topk], sc[topk], lb[topk]
         n = bx.shape[0]
         bx = bx.float()                                              # fp32 like SimulationDataset targets (amp: teacher emits fp16)
         targets.append({

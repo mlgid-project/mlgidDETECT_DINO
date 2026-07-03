@@ -19,11 +19,17 @@
 set -e
 REPO=/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO
 PY=/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/bin/python
-OUT_DIR=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_semi1
+# dino_semi1 = run 1 (from-scratch, collapsed via ring-starved pseudo-labels; kept as record)
+OUT_DIR=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_semi2
 H5=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/backbone_ssl_corpus.h5
-# optional full-detector warm start (shortens/skips burn-in; see config header):
-#PRETRAIN=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_ssl1/checkpoint.pth
+# full-detector warm start from the mature ssl1 checkpoint — REQUIRED for the v2 config
+# (semi_start_epoch=5 assumes a good teacher from the start; see config header)
+PRETRAIN=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_ssl1/checkpoint.pth
 export PYTHONPATH=$REPO
+
+if [ ! -f "$PRETRAIN" ]; then
+    echo "ERROR: warm-start checkpoint not found at $PRETRAIN"; exit 1
+fi
 
 if [ ! -f "$H5" ]; then
     echo "ERROR: real unlabeled corpus not found at $H5"; exit 1

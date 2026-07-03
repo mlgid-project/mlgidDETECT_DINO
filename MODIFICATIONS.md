@@ -155,6 +155,18 @@ and `--eval` path are all unaffected — only training changes; old checkpoints 
 - **`backbone_curation/ssl/run_detector_semi.sbatch`** (+ `_smoke`) — launchers; `--amp` required
   (two student forwards per step ≈ 2× activations). Auto-resume conventions unchanged.
 
+**Run 1 (`dino_semi1`, job 2650922, from-scratch + 50-ep burn-in): FAILED — class collapse,
+2026-07-03.** The epoch-50 teacher was under-confident on RINGS in the real domain (sim→real gap;
+the mature ssl1 teacher on the same corpus yields ~24 ring pseudo-boxes/batch, the young one ~3), so
+`thr_ring=0.4` starved ring pseudo-labels to extinction within ~8 epochs → unsup loss taught "no
+rings in real-like images" → 41 AP collapsed 0.63→~0.10 (UT §3.3 class-bias spiral, on the class we
+did NOT protect: the recall-chasing LOW seg threshold was inverted vs the teacher's actual real-domain
+confidence profile). Late phase: ~200 hallucinated segments/frame passed `thr_seg=0.3` (avg
+pseudo_seg ~400/batch) → garbage-dominated unsup signal at λ=2. Killed at ep159. Diagnosed entirely
+from the logged `pseudo_seg`/`pseudo_ring` counters — keep them. **v2 fixes (in config + engine):
+warm start from ssl1 (`semi_start_epoch=5`), thresholds swapped (ring 0.30 / seg 0.35), hard
+`pseudo_max_per_img=30` cap after NMS, λ 2.0→1.0. Run 2 = `dino_semi2`.**
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
