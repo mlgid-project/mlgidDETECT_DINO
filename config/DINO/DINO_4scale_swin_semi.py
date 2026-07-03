@@ -14,6 +14,14 @@ _base_ = ['DINO_4scale_swin.py']
 # thr_ring=0.4 starved ring pseudo-labels within ~8 epochs (class collapse, 41 AP
 # 0.63 -> 0.10), then segment hallucinations exploded (~200/frame). v2 = warm start from a
 # mature checkpoint + swapped thresholds + per-image cap + halved lambda.
+# v3 = FROZEN-TEACHER DIAGNOSTIC after run-2 drift (job 2651525, dino_semi2): counters
+# stayed healthy (no collapse) but ALL AP curves declined monotonically for ~50 semi epochs
+# (teacher organic 0.55->0.41, 41 0.74->0.66) with slow ring-count inflation (19->34/batch)
+# = confirmation-bias drift through the EMA loop. v3 severs the loop: ema_decay=1.0 freezes
+# the teacher as (settled) ssl1, so pseudo-labels cannot drift by construction; lambda halved
+# to 0.5. Interpretation: if AP STILL declines -> the pseudo-label signal itself is harmful
+# at these thresholds (next: drop box-regression on pseudo-labels / quality weighting); if AP
+# holds or improves -> the feedback loop was the culprit (next: slower EMA / re-anchoring).
 use_semi = True
 unlabeled_h5 = '/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/backbone_ssl_corpus.h5'
 unlabeled_batch_size = 2
@@ -23,7 +31,8 @@ semi_geom_flip = False     # shared chi-flip of both views (MVP: off -> no box t
 semi_start_epoch = 5       # SHORT re-stabilization burn-in — ASSUMES full-detector warm start
                            # via --pretrain_model_path (run_detector_semi.sbatch); use ~50 if
                            # training from scratch (but see run-1 collapse note above)
-unsup_loss_weight = 1.0    # lambda_max, halved after run 1 (the unsup gradient is strong)
+unsup_loss_weight = 0.5    # lambda_max (run 2 drifted at 1.0 — half the gradient budget was
+                           # pseudo-label noise)
 unsup_warmup_epochs = 5    # linear lambda ramp over the first epochs of the semi phase
 pseudo_thr_ring = 0.30     # LOWER than seg: the teacher is under-confident on rings in the
                            # real domain (run-1 lesson — 0.4 starved rings entirely)
@@ -32,7 +41,9 @@ pseudo_max_per_img = 30    # hard top-k cap per frame after class-aware NMS
 
 # --- EMA teacher (required by use_semi; ModelEma already existed in util/utils.py) ---
 use_ema = True
-ema_decay = 0.999          # Semi-DETR teacher momentum
+ema_decay = 1.0            # FROZEN teacher (update is a no-op): teacher = student hard-seeded
+                           # at semi_start_epoch (= warm-started ssl1 after 5 settling epochs),
+                           # then never changes. Restore 0.999 for mean-teacher dynamics.
 ema_epoch = 5              # EMA steps start here (= semi_start_epoch; teacher is hard-seeded
                            # from the student at the semi boundary, engine.train_one_epoch_semi)
 

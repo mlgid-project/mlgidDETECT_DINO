@@ -19,8 +19,9 @@
 set -e
 REPO=/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO
 PY=/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/bin/python
-# dino_semi1 = run 1 (from-scratch, collapsed via ring-starved pseudo-labels; kept as record)
-OUT_DIR=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_semi2
+# dino_semi1 = run 1 (from-scratch; class collapse). dino_semi2 = run 2 (warm start,
+# EMA 0.999; slow confirmation-bias drift). dino_semi3 = frozen-teacher diagnostic.
+OUT_DIR=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_semi3
 H5=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/backbone_ssl_corpus.h5
 # full-detector warm start from the mature ssl1 checkpoint — REQUIRED for the v2 config
 # (semi_start_epoch=5 assumes a good teacher from the start; see config header)

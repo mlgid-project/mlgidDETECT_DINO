@@ -167,6 +167,21 @@ from the logged `pseudo_seg`/`pseudo_ring` counters — keep them. **v2 fixes (i
 warm start from ssl1 (`semi_start_epoch=5`), thresholds swapped (ring 0.30 / seg 0.35), hard
 `pseudo_max_per_img=30` cap after NMS, λ 2.0→1.0. Run 2 = `dino_semi2`.**
 
+**Run 2 (`dino_semi2`, job 2651525, ssl1 warm start + EMA 0.999 + λ 1.0): FAILED — slow
+confirmation-bias drift, 2026-07-04.** The v2 fixes eliminated the collapse (pseudo counters healthy
+and balanced through ep54: ~16 seg / 20–34 ring per batch, cap never bound) but ALL four AP curves
+declined monotonically over ~50 semi epochs: teacher organic 0.552→0.406, teacher 41 0.744→0.663
+(EMA-smoothed ⇒ genuine degradation, not noise); student similar. Secondary signal: ring pseudo-count
+inflation 19→34/batch with flat segments = slow confidence inflation (run-1's spiral in slow motion,
+also inflates eval FPs past the 0.1 score cut). Read: at λ=1.0 roughly half the gradient budget is
+pseudo-label noise; the sup branch cannot anchor against it and the error compounds through the EMA
+loop (worse student → worse teacher → worse labels). Killed at ep54. **v3 = FROZEN-TEACHER
+DIAGNOSTIC (`dino_semi3`): `ema_decay=1.0` (teacher = settled ssl1, never updates — severs the
+feedback loop by construction) + λ 1.0→0.5. Decision rule: AP still declines ⇒ the pseudo-label
+signal itself is harmful at these thresholds (next lever: drop box-regression on pseudo-labels per
+Unbiased Teacher, or SSRT-style quality weighting); AP holds/improves ⇒ the EMA loop was the culprit
+(next lever: slower teacher / periodic re-anchoring).**
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
