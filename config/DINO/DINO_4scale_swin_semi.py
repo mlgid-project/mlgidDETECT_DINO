@@ -22,6 +22,17 @@ _base_ = ['DINO_4scale_swin.py']
 # to 0.5. Interpretation: if AP STILL declines -> the pseudo-label signal itself is harmful
 # at these thresholds (next: drop box-regression on pseudo-labels / quality weighting); if AP
 # holds or improves -> the feedback loop was the culprit (next: slower EMA / re-anchoring).
+#
+# v3 VERDICT (job 2652578, dino_semi3, 100 semi epochs): loop severed cleanly (counters flat
+# 18/18 for 100 ep) and no collapse — but organic sat ~0.51 then eroded to ~0.48 vs the 0.573
+# warm-start point (41 ~0.72 vs 0.746). Even a good frozen teacher's pseudo-labels are a net
+# TAX at these settings -> the harmful half is the signal itself, most plausibly the BOX
+# COORDINATES (confidence vouches for what, not where — Unbiased Teacher, ICLR 2021).
+# v4 = CLASSIFICATION-ONLY unsupervised loss: unsup_cls_only=True drops L1/GIoU on
+# pseudo-labels (boxes still steer the Hungarian matching, they carry no coordinate gradient).
+# Frozen teacher + lambda 0.5 kept (one variable at a time). If organic holds ~0.57 or climbs,
+# reintroduce geometry via quality weighting (SSRT-DETR S3.5); if it still erodes, record the
+# MVP as a documented negative (3 clean ablations: loop, lambda, loss content).
 use_semi = True
 unlabeled_h5 = '/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/backbone_ssl_corpus.h5'
 unlabeled_batch_size = 2
@@ -38,6 +49,8 @@ pseudo_thr_ring = 0.30     # LOWER than seg: the teacher is under-confident on r
                            # real domain (run-1 lesson — 0.4 starved rings entirely)
 pseudo_thr_seg = 0.35      # raised from 0.3 (segment hallucinations drove the run-1 explosion)
 pseudo_max_per_img = 30    # hard top-k cap per frame after class-aware NMS
+unsup_cls_only = True      # v4: drop L1/GIoU on pseudo-labels, keep only classification
+                           # (see run-3 verdict above; Unbiased Teacher move)
 
 # --- EMA teacher (required by use_semi; ModelEma already existed in util/utils.py) ---
 use_ema = True

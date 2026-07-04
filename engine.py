@@ -263,7 +263,16 @@ def train_one_epoch_semi(model: torch.nn.Module, criterion: torch.nn.Module,
                     ld_uns = criterion(out_uns, pseudo)
                 finally:
                     criterion.use_o2m = False
-                l_uns = sum(ld_uns[k] * weight_dict[k] for k in ld_uns.keys() if k in weight_dict)
+                if getattr(args, 'unsup_cls_only', False):
+                    # classification-only unsupervised loss (Unbiased Teacher, ICLR 2021):
+                    # the teacher's confidence vouches for WHAT is there, not WHERE exactly —
+                    # pseudo-box coordinates are the noisy half of the signal, so drop
+                    # L1/GIoU regression on pseudo-labels. Boxes still steer the matching
+                    # (Hungarian cost), they just carry no coordinate gradient.
+                    l_uns = sum(ld_uns[k] * weight_dict[k] for k in ld_uns.keys()
+                                if k in weight_dict and k.startswith('loss_ce'))
+                else:
+                    l_uns = sum(ld_uns[k] * weight_dict[k] for k in ld_uns.keys() if k in weight_dict)
                 losses = losses + lam * l_uns
                 unsup_value = float(lam * l_uns.detach())
 

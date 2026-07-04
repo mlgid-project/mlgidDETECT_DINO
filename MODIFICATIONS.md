@@ -182,6 +182,21 @@ signal itself is harmful at these thresholds (next lever: drop box-regression on
 Unbiased Teacher, or SSRT-style quality weighting); AP holds/improves ⇒ the EMA loop was the culprit
 (next lever: slower teacher / periodic re-anchoring).**
 
+**Run 3 (`dino_semi3`, job 2652578, frozen teacher + λ 0.5): VERDICT = the pseudo-label SIGNAL
+itself is a net tax, 2026-07-04.** 100 semi epochs: counters dead flat (18/18 per batch — loop
+severed as designed, retro-confirming run-2's ring inflation was teacher drift), NO collapse, 41
+held ~0.72 (vs 0.746 start) — but organic sat ~0.51 (ep16-70) then eroded to ~0.48 (ep72-100) vs
+the 0.573 warm-start point, never recovering. Both branches of the drift mechanism are now
+excluded; what remains is the content of the labels. Prime suspect = BOX COORDINATES (confidence
+vouches for what, not where — Jiang 2018 / Unbiased Teacher): L1/GIoU regression toward
+slightly-wrong pseudo-boxes steadily degrades localization, which AP punishes directly. Killed at
+ep102. **v4 (`dino_semi4`): `unsup_cls_only=True` — unsupervised branch keeps only the
+classification loss (`loss_ce*` keys); pseudo-boxes still steer the Hungarian matching but carry no
+coordinate gradient (engine.py train_one_epoch_semi). Frozen teacher + λ 0.5 kept (one variable at
+a time). Outcomes: organic holds/climbs ⇒ geometry noise was the poison → reintroduce boxes via
+quality weighting (SSRT-DETR §3.5); still erodes ⇒ MVP pseudo-labeling recorded as a documented
+negative with three clean ablations (loop / λ / loss content).**
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
