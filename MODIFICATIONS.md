@@ -220,6 +220,29 @@ degradation: collapse → drift → slow erosion → slower erosion) but never c
   training path of every non-semi config is byte-identical to before phase I.
 - Run records: `detector_runs/dino_semi{1,2,3,4}` + `backbone_curation/ssl/dino_semi-*.out`.
 
+## J. Cross-DINO Boost Loss + Category-Size soft label (Exp A) — TRAINING-ONLY
+Next lever after phase I closed (per `docs/CROSS_DINO_INVESTIGATION.md` §4a/§7): the portable,
+ONNX-safe subset of Cross-DINO (arXiv:2505.21868). Equations verified against the paper before
+implementing (Eq. 4: `cs = sqrt((h/H)(w/W))·y`; Eq. 5 Boost Loss; α=0.25/β=1.0/γ=2.0; applied at
+all classification-loss sites; matching unchanged).
+- **`models/dino/utils.py`** — new `boost_loss` beside `sigmoid_focal_loss`. Unit-tested property:
+  with `cs == targets` (cs=1 at positives) and β=1 it reduces EXACTLY to `sigmoid_focal_loss` —
+  the CS soft label is the only difference.
+- **`models/dino/dino.py`** — `SetCriterion.loss_labels` gains a `use_boost_loss` branch: builds the
+  CS map from the matched GT boxes (cxcywh already normalized → `sqrt(w·h)` at the class slot) and
+  calls `boost_loss`. Fires at every call site (main/aux/interm/enc/DN) = the paper's "encoder and
+  all decoder predictions". `build_dino` attaches `use_boost_loss`/`boost_{alpha,beta,gamma}`
+  (defaults off — all existing configs unchanged).
+- **`config/DINO/DINO_4scale_swin_boost.py`** — Exp-A config (paper defaults). Documents the domain
+  caveat: our elongated boxes give cs ~0.17 (ring) / ~0.04 (segment), so all positive targets sit
+  far below 1 and rings are weighted ~4× over segments — **β is the calibration knob** (sweep
+  {0.5, 0.25} if training degrades or segment recall drops).
+- **`backbone_curation/ssl/run_detector_boost.sbatch`** — fine-tune from the ssl1 checkpoint,
+  output `detector_runs/dino_boost1`. A/B read-out: organic + 41 AP vs the warm-start band
+  (organic ~0.55-0.58 / 41 ~0.73-0.75, established across the dino_semi2-4 burn-ins). Gate on
+  organic; stop rule per the investigation doc (if Exp A and CCTM both fail to move organic,
+  Cross-DINO is investigated-and-declined).
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|

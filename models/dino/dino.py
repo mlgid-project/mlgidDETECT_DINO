@@ -31,7 +31,7 @@ from .matcher import build_matcher
 from .segmentation import (DETRsegm, PostProcessPanoptic, PostProcessSegm,
                            dice_loss)
 from .deformable_transformer import build_deformable_transformer
-from .utils import sigmoid_focal_loss, MLP
+from .utils import sigmoid_focal_loss, boost_loss, MLP
 
 from ..registry import MODULE_BUILD_FUNCS
 from .dn_components import prepare_for_cdn,dn_post_process
@@ -375,7 +375,22 @@ class SetCriterion(nn.Module):
         target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
 
         target_classes_onehot = target_classes_onehot[:,:,:-1]
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2) * src_logits.shape[1]
+        if getattr(self, 'use_boost_loss', False):
+            # Cross-DINO Boost Loss + Category-Size soft label (arXiv:2505.21868 Eq. 4-5,
+            # docs/CROSS_DINO_INVESTIGATION.md S4a): the positive target is not 1 but
+            # sqrt of the matched GT box's normalized area, placed at the class slot.
+            # Applied at every loss_labels call site (main/aux/interm/enc/DN), matching
+            # the paper's "encoder feature and all decoder predictions". Matching is
+            # unchanged. Training-only: no effect on the exported ONNX graph.
+            tgt_boxes_o = torch.cat([t['boxes'][J] for t, (_, J) in zip(targets, indices)])
+            cs_o = (tgt_boxes_o[:, 2] * tgt_boxes_o[:, 3]).clamp(min=1e-8).sqrt().to(src_logits.dtype)
+            cs = torch.zeros_like(target_classes_onehot)
+            cs[idx[0], idx[1], target_classes_o] = cs_o
+            loss_ce = boost_loss(src_logits, target_classes_onehot, cs, num_boxes,
+                                 alpha=self.boost_alpha, beta=self.boost_beta,
+                                 gamma=self.boost_gamma) * src_logits.shape[1]
+        else:
+            loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2) * src_logits.shape[1]
         losses = {'loss_ce': loss_ce}
 
         if log:
@@ -822,6 +837,12 @@ def build_dino(args):
         cost_class=args.set_cost_class, cost_bbox=args.set_cost_bbox,
         cost_giou=args.set_cost_giou, focal_alpha=args.focal_alpha,
         topk=getattr(args, 'hybrid_topk_M', 4))
+    # Cross-DINO Boost Loss + CS soft label (off unless the config sets use_boost_loss;
+    # docs/CROSS_DINO_INVESTIGATION.md S4a)
+    criterion.use_boost_loss = getattr(args, 'use_boost_loss', False)
+    criterion.boost_alpha = getattr(args, 'boost_alpha', 0.25)
+    criterion.boost_beta = getattr(args, 'boost_beta', 1.0)
+    criterion.boost_gamma = getattr(args, 'boost_gamma', 2.0)
     criterion.to(device)
     postprocessors = {'bbox': PostProcess(num_select=args.num_select, nms_iou_threshold=args.nms_iou_threshold)}
     if args.masks:

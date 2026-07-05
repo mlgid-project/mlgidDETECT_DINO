@@ -104,6 +104,31 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     return loss.mean(1).sum() / num_boxes
 
 
+def boost_loss(inputs, targets, cs, num_boxes, alpha: float = 0.25, beta: float = 1.0,
+               gamma: float = 2):
+    """Cross-DINO Boost Loss with Category-Size (CS) soft labels
+    (arXiv:2505.21868, Eq. 4-5). Drop-in alternative to sigmoid_focal_loss.
+
+        positives (matched query, GT class): -alpha * (1 - p^beta)^gamma * cs^beta * log(p)
+        negatives (everything else):         -(1-alpha) * p^gamma * log(1 - p)
+
+    cs = sqrt((h/H)(w/W)) of the matched GT box, placed at the positive class slot
+    (0 elsewhere); targets is the usual binary one-hot map. With cs == targets
+    (cs=1 at positives) and beta=1 this reduces EXACTLY to sigmoid_focal_loss —
+    the CS soft label is the only difference.
+
+    Args:
+        inputs:  (bs, nq, C) logits
+        targets: (bs, nq, C) binary one-hot
+        cs:      (bs, nq, C) CS soft label map
+    """
+    p = inputs.sigmoid().clamp(min=1e-6, max=1 - 1e-6)
+    pos = alpha * ((1 - p.pow(beta)) ** gamma) * cs.pow(beta) * p.log()
+    neg = (1 - alpha) * p.pow(gamma) * (1 - targets) * (1 - p).log()
+    loss = -(pos + neg)
+    return loss.mean(1).sum() / num_boxes
+
+
 class MLP(nn.Module):
     """ Very simple multi-layer perceptron (also called FFN)"""
 
