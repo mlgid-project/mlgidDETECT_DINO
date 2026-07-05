@@ -74,6 +74,15 @@ NMS — beats both on BOTH sets: **organic 0.605** (+0.037 vs best single), **41
 both swin-L models; uses each run's `checkpoint.pth` = LAST epoch). Deployment/export:
 `ENSEMBLE_DEPLOY.md` (use `export_onnx_ensemble.py`).
 
+## Semi-supervised pseudo-labeling (2026-07) — NEGATIVE
+
+The follow-on Semi-DETR-style mean-teacher experiment series (4 runs, `detector_runs/dino_semi1-4`)
+concluded as a **documented negative**: MVP hard-pseudo-label training on the 13k real corpus ends
+below its own warm-start AP at every ablated operating point (teacher maturity / EMA loop / λ /
+loss content each isolated). Full autopsies + the label-incompleteness confound + what a revisit
+should try first: **`MODIFICATIONS.md` phase I**. The ssl1+baseline ensemble above remains the
+deployed best.
+
 ## Diagnosis carried forward
 
 `ssl1`'s dominant remaining failure is **faint peaks**: organic ap_low ~0.42 vs ap_high

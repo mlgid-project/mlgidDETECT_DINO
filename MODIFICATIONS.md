@@ -197,6 +197,29 @@ a time). Outcomes: organic holds/climbs ⇒ geometry noise was the poison → re
 quality weighting (SSRT-DETR §3.5); still erodes ⇒ MVP pseudo-labeling recorded as a documented
 negative with three clean ablations (loop / λ / loss content).**
 
+**Run 4 (`dino_semi4`, job 2653256, frozen teacher + λ 0.5 + cls-only): STILL a net tax —
+SERIES CLOSED as a documented NEGATIVE, 2026-07-05.** 200 semi epochs: counters flat (17-18/18)
+throughout, 41 roughly held (0.737 → ~0.715), but organic eroded 0.562 → ~0.50 (ep40-100) →
+**plateau ~0.465 (ep100-204)** — slower than run 3 but same direction and endpoint, ~0.10 below the
+warm-start point. Killed at ep206 (plateaued ~100 epochs).
+
+**Series conclusion (4 single-variable ablations: teacher maturity / EMA loop / λ / loss content):**
+MVP teacher-student pseudo-labeling (Semi-DETR/Unbiased-Teacher style, hard pseudo-labels at fixed
+per-class thresholds) does NOT transfer to this synthetic→real GIWAXS setup at any ablated operating
+point — every variant ends below its own warm-start AP. The failure is *graded* (each fix slowed the
+degradation: collapse → drift → slow erosion → slower erosion) but never crossed into net positive.
+- **Unresolved confound (record honestly):** eval label-incompleteness. The teacher plausibly labels
+  real-but-unannotated peaks (Diagnostic C: FPs sit ON rings); a student trained to be confident on
+  them loses measured precision/AP even if it genuinely improved. Cheap future test:
+  recall-at-fixed-FP or FP visualization (`diagnostics/` pattern) of the `dino_semi4` checkpoint
+  vs ssl1 — if run-4's "extra" detections are real peaks, the negative verdict softens.
+- **If revisited, try first:** SSRT-DETR §3.5 quality weighting (soft, per-image trust instead of
+  hard thresholds), §3.4 multi-view consistency filtering, much HIGHER precision-protecting
+  thresholds, or pseudo-labels restricted to a curated high-quality corpus subset.
+- The semi machinery stays in the repo, default-off (`use_semi` unset in base configs) — the
+  training path of every non-semi config is byte-identical to before phase I.
+- Run records: `detector_runs/dino_semi{1,2,3,4}` + `backbone_curation/ssl/dino_semi-*.out`.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
