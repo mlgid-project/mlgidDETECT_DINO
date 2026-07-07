@@ -288,9 +288,20 @@ encoder memory before decoder query selection, giving the decoder a finer "cross
   Loss (training-only), CCTM **is** on the exported path, so a full-model ONNX parity check on the
   first checkpoint remains the pre-deploy gate.
 - **`config/DINO/DINO_4scale_swin_cctm.py`** (`use_cctm=True`) + **`run_detector_cctm.sbatch`**
-  (fine-tune ssl1 → `detector_runs/dino_cctm1`). A/B organic vs ssl1 0.586; gate on organic. Job
-  **2659048** launched 2026-07-06. STOP RULE (doc §7): if CCTM also fails to move organic →
-  Cross-DINO investigated-and-declined; do **not** port the Strip-MLP backbone.
+  (fine-tune from ssl1). A/B organic vs ssl1 0.586; gate on organic. STOP RULE (doc §7): if CCTM also
+  fails to move organic → Cross-DINO investigated-and-declined; do **not** port the Strip-MLP backbone.
+- **Identity-init validated empirically** (`dino_cctm1`, job 2659048, uniform 1e-5, aborted): epoch-0
+  eval organic **0.561** / 41 **0.759** ≈ ssl1 (0.586/0.762) — no epoch-0 shock (contrast Boost β=1.0
+  which dipped to 0.511). Confirms the zero-init LayerScale starts the model exactly at ssl1. It also
+  showed the flip side: at the body's 1e-5 rate `gamma` barely moves (still ≈ssl1 at ep2), so an
+  architectural module grafted onto a converged model can't gain traction → a null would be a false
+  negative.
+- **Higher CCTM LR (the real run):** `util/get_param_dicts.py` gains an optional third param group —
+  `cctm.*` at `args.lr * lr_cctm_mult` while backbone/encoder stay at `lr`/`lr_backbone`. Config sets
+  `lr_cctm_mult=10.0` → CCTM trains at 1e-4 (the usual from-scratch rate), body at 1e-5. Default
+  (`lr_cctm_mult=1.0`/absent) is byte-identical to the original two-group split — no other config
+  affected. Relaunched as **`dino_cctm2`, job 2659055** (2026-07-06). Escalation: a null even at 10×
+  CCTM-LR → one co-trained run (SSL backbone init, CCTM from epoch 0) before invoking the stop rule.
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |

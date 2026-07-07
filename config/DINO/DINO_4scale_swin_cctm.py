@@ -22,6 +22,13 @@
 # portable Cross-DINO module. STOP RULE (doc S7): if CCTM also fails to move
 # organic, Cross-DINO is investigated-and-declined -- do NOT port the Strip-MLP
 # backbone.
+# CCTM-LR NOTE: an uniform-LR warm-start (dino_cctm1, aborted) confirmed the identity
+# init works (epoch-0 organic 0.561 / 41 0.759 ≈ ssl1, no shock) but also that gamma
+# barely moves at the body's 1e-5 fine-tune rate -- an architectural module grafted onto
+# a converged model needs a faster rate to gain traction, else a null is a false negative.
+# So the cctm.* params train at 10x (1e-4, the usual from-scratch rate) via lr_cctm_mult
+# while the warm-started backbone/encoder stay at 1e-5 (see util/get_param_dicts.py).
 _base_ = ['DINO_4scale_swin.py']
 
 use_cctm = True
+lr_cctm_mult = 10.0        # cctm.* params at args.lr * 10 = 1e-4; body stays at 1e-5
