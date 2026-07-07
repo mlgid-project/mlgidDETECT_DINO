@@ -243,6 +243,55 @@ all classification-loss sites; matching unchanged).
   organic; stop rule per the investigation doc (if Exp A and CCTM both fail to move organic,
   Cross-DINO is investigated-and-declined).
 
+**Exp A VERDICT (2026-07-06): DECLINED — the β-sweep is monotonically negative.**
+- **β=1.0** (`dino_boost1`, job 2655289): organic eroded from the 0.586 ssl1 warm start to a flat
+  **~0.42** plateau by ep~40 (−0.17, no recovery over 160 ep); 41 0.737 → ~0.65. Killed ep199. This
+  is exactly the pre-registered cs-starvation mode — the positive loss term is scaled by cs (ring
+  ~0.17, segment ~0.04), so the model is trained to under-score true peaks and the ranking collapses
+  (visible as `train_loss_ce` ~0.003, ≈10× below baseline focal). lr_drop@280 cannot close a 0.14 gap.
+- **β=0.5** (`dino_boost2`, job 2656944): fresh ssl1 warm start; ran to ep310, converged after the
+  lr_drop@280 at organic **0.525** (stable, range 0.515–0.534) / 41 **0.706** — a mild but real net
+  deficit, still below the continued-train band (organic 0.55–0.58).
+- **Monotonic recovery toward β=0:** 1.0→0.42, 0.5→0.525, 0 (≡ plain focal ≡ ssl1)→0.586. Every step
+  that turns the size-weighting *down* buys organic back. In our domain — all objects uniformly
+  tiny-cs (elongated boxes; no size diversity for the method to exploit) — the Category-Size weighting
+  is **pure tax**, and the best operating point is "boost off". β=0.25 was skipped: the 2-point
+  monotonic trend predicts ~0.55 (still ≤ baseline), i.e. not a win.
+- **Decision:** Boost Loss declined. `use_boost_loss` stays default-off (all non-boost configs
+  unchanged; the code + unit test remain in the tree). Proceed to Exp B (CCTM) — the doc §7 stop-rule
+  requires BOTH portable modules to fail before Cross-DINO is fully declined.
+
+## K. Cross-DINO CCTM feature-enrichment module (Exp B)
+Second (and final) portable Cross-DINO piece after Boost Loss (Exp A) was declined. **CCTM** (Cross
+Coding Twice Module, arXiv:2505.21868 §III-C) reinjects the pre-encoder backbone feature into the
+encoder memory before decoder query selection, giving the decoder a finer "cross feature".
+- **`models/dino/deformable_transformer.py`** — new `CCTM(nn.Module)`: two rounds of elementwise
+  sigmoid-gated fusion of encoder memory `E` (`memory`) and the input-projected backbone `B`
+  (`src_flatten`), which are token-aligned `(bs, Σhw, 256)`. Inserted right after the encoder returns
+  `memory`, before `gen_encoder_output_proposals` (the `two_stage='standard'` query selection). A
+  `use_cctm` flag is threaded through `__init__` and `build_deformable_transformer`
+  (`getattr(args,'use_cctm',False)` → all existing configs unchanged). The module is created AFTER
+  `_reset_parameters()` so its custom init is preserved. Warm-start load is `strict=False`, so the
+  new `cctm.*` keys (absent from the ssl1 checkpoint) simply keep their init.
+- **Warm-start design (the lesson from Exp A):** a per-channel zero-init LayerScale (`gamma`) wraps
+  the fusion, so CCTM is an **EXACT identity at init** (unit-tested: `max|out−E| = 0`). The fine-tune
+  therefore *starts* precisely at ssl1's operating point and learns how much fusion to add — no
+  epoch-0 objective shock (the thing that made Boost a net tax). `gamma` receives gradient first
+  (ReZero-style), which then unlocks the gate projections.
+- **Fidelity note:** the paper's Eq. 2-3 are reconstructed from text/figure (no public code) and
+  include an unbounded `2·E·B'·E'` term; we implement the **bounded, convex** realization of the same
+  described intent (stability matters for a warm-start fine-tune, not from-scratch). The structural
+  fidelity the investigation doc calls well-confirmed — post-encoder / pre-decoder, elementwise gated
+  reinjection, applied twice — is preserved.
+- **ONNX-safe (verified):** only `Linear`/mul/add/sigmoid; opset-16 export of the module traces
+  cleanly; it does not touch the MSDeformAttn custom op or change the token/feature count. Unlike Boost
+  Loss (training-only), CCTM **is** on the exported path, so a full-model ONNX parity check on the
+  first checkpoint remains the pre-deploy gate.
+- **`config/DINO/DINO_4scale_swin_cctm.py`** (`use_cctm=True`) + **`run_detector_cctm.sbatch`**
+  (fine-tune ssl1 → `detector_runs/dino_cctm1`). A/B organic vs ssl1 0.586; gate on organic. Job
+  **2659048** launched 2026-07-06. STOP RULE (doc §7): if CCTM also fails to move organic →
+  Cross-DINO investigated-and-declined; do **not** port the Strip-MLP backbone.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|

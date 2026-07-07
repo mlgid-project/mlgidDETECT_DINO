@@ -83,6 +83,21 @@ loss content each isolated). Full autopsies + the label-incompleteness confound 
 should try first: **`MODIFICATIONS.md` phase I**. The ssl1+baseline ensemble above remains the
 deployed best.
 
+## Cross-DINO portable subset (2026-07)
+
+Porting the two ONNX-safe pieces of Cross-DINO (arXiv:2505.21868) as fine-tunes from `ssl1`, gating
+on organic AP (`docs/CROSS_DINO_INVESTIGATION.md`).
+
+- **Exp A — Boost Loss + Category-Size soft label: DECLINED (negative).** β-sweep is monotonically
+  negative: β=1.0 (`dino_boost1`) organic **0.42**, β=0.5 (`dino_boost2`) organic **0.525**, β=0
+  (≡ plain focal ≡ ssl1) organic **0.586**. Our boxes are uniformly tiny-cs (elongated), so the
+  size-weighting has no diversity to exploit and is pure tax — best operating point is "off". Details:
+  `MODIFICATIONS.md` phase J.
+- **Exp B — CCTM feature-enrichment module: RUNNING** (`dino_cctm1`, job 2659048, from 2026-07-06).
+  Identity-at-init (zero-init LayerScale) warm-start; ONNX-safe (opset-16 export verified). A/B vs
+  ssl1 0.586. Stop rule: if CCTM also fails to move organic, Cross-DINO is investigated-and-declined
+  (do not port the Strip-MLP backbone). Details: `MODIFICATIONS.md` phase K.
+
 ## Diagnosis carried forward
 
 `ssl1`'s dominant remaining failure is **faint peaks**: organic ap_low ~0.42 vs ap_high

@@ -1,0 +1,27 @@
+# Exp B of the Cross-DINO portable subset (docs/CROSS_DINO_INVESTIGATION.md S4b/S7):
+# CCTM (Cross Coding Twice Module) inserted at the encoder->decoder boundary in
+# models/dino/deformable_transformer.py (after `memory`, before query selection).
+# It reinjects the pre-encoder (input-projected backbone) feature into the encoder
+# memory via two rounds of elementwise sigmoid-gated fusion, giving the decoder a
+# finer "cross feature".
+#
+# ON the exported ONNX path (unlike Boost Loss, which was training-only), but SAFE:
+# only Linear/mul/add/sigmoid, does not touch the MSDeformAttn custom op, preserves
+# the token/feature count. An ONNX parity check on the first checkpoint closes the
+# deployment-risk question (doc S7 step 2).
+#
+# WARM-START DESIGN: the module is an EXACT IDENTITY at init (zero-init LayerScale),
+# so this fine-tune begins precisely at ssl1's operating point and learns how much
+# fusion to add -- avoiding the epoch-0 shock that made Boost Loss a net tax.
+#
+# Protocol: fine-tune from the ssl1 checkpoint (run_detector_cctm.sbatch), A/B the
+# organic + 41 AP curves against the ssl1 baseline (organic ~0.586 / 41 ~0.762;
+# continued-train band organic ~0.55-0.58 / 41 ~0.73-0.75). Gate on organic.
+# Boost Loss (Exp A) was DECLINED -- beta-sweep 1.0->0.5 monotonically negative
+# (organic 0.42 -> 0.525, both below baseline). CCTM is the second and final
+# portable Cross-DINO module. STOP RULE (doc S7): if CCTM also fails to move
+# organic, Cross-DINO is investigated-and-declined -- do NOT port the Strip-MLP
+# backbone.
+_base_ = ['DINO_4scale_swin.py']
+
+use_cctm = True

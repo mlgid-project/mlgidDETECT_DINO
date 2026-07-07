@@ -22,9 +22,56 @@ from util.misc import inverse_sigmoid
 from .utils import gen_encoder_output_proposals, MLP,_get_activation_fn, gen_sineembed_for_position
 from .ops.modules import MSDeformAttn
 
+class CCTM(nn.Module):
+    """Cross Coding Twice Module (Cross-DINO, arXiv:2505.21868, Sec. III-C).
+
+    Sits between the deformable encoder and the decoder query-selection. Reinjects
+    the pre-encoder (input-projected backbone) feature B into the encoder memory E
+    via two rounds of elementwise sigmoid-gated fusion, yielding a finer "cross
+    feature" E_cf that feeds the decoder. B (`src_flatten`) and E (`memory`) are
+    token-aligned `(bs, sum_hw, d_model)`, so the fusion is a straight elementwise
+    op -- no re-flattening, no level bookkeeping.
+
+    Only Linear / mul / add / sigmoid -> ONNX-traceable (opset-16 core); does not
+    touch the MSDeformAttn custom op and preserves the token/feature count.
+
+    NOTE (implementation vs paper): the paper's Eq. 2-3 are reconstructed from the
+    text/figure (no public code) and include an unbounded `2*E*B'*E'` term. We use
+    the *bounded, convex* realization of the same described intent (two-step gated
+    reinjection of backbone detail) -- numerically tamer, which matters because we
+    fine-tune from a converged checkpoint rather than train from scratch. The
+    structural fidelity (post-encoder / pre-decoder, elementwise gated reinjection,
+    applied twice) -- the part the investigation doc calls well-confirmed -- is kept.
+
+    A per-channel LayerScale (`gamma`, zero-init) wraps the fusion so the module is
+    an IDENTITY at initialization: a warm-started fine-tune begins exactly at the
+    pretrained operating point and learns how much fusion to add, rather than
+    shocking the encoder features (the failure mode seen when Boost Loss changed the
+    objective abruptly at epoch 0).
+    """
+    def __init__(self, d_model):
+        super().__init__()
+        self.gate_e = nn.Linear(d_model, d_model)          # encoder gate  E'
+        self.gate_b = nn.Linear(d_model, d_model)          # backbone gate B'
+        self.gamma = nn.Parameter(torch.zeros(d_model))    # LayerScale -> identity at init
+
+    def forward(self, E, B):
+        Ep = torch.sigmoid(self.gate_e(E))                 # (bs, sum_hw, d) in (0,1)
+        Bp = torch.sigmoid(self.gate_b(B))
+        # cross code once: keep encoder feature where its gate is high, else pull in
+        # backbone detail (convex gated blend -> bounded, stable)
+        C1 = E * Ep + B * (1.0 - Ep)
+        # cross code twice: joint gate keeps the once-coded feature only where BOTH
+        # streams agree, else fall back to raw backbone detail
+        g = Ep * Bp
+        Ecf = C1 * g + B * (1.0 - g)
+        # LayerScale residual -> exact identity at init (gamma = 0)
+        return E + self.gamma * (Ecf - E)
+
+
 class DeformableTransformer(nn.Module):
 
-    def __init__(self, d_model=256, nhead=8, 
+    def __init__(self, d_model=256, nhead=8,
                  num_queries=300, 
                  num_encoder_layers=6,
                  num_unicoder_layers=0,
@@ -70,6 +117,7 @@ class DeformableTransformer(nn.Module):
                  embed_init_tgt=False,
 
                  use_detached_boxes_dec_out=False,
+                 use_cctm=False,
                  ):
         super().__init__()
         self.num_feature_levels = num_feature_levels
@@ -209,6 +257,10 @@ class DeformableTransformer(nn.Module):
 
         self._reset_parameters()
 
+        # CCTM feature-enrichment block (Cross-DINO Exp B); default off. Created
+        # AFTER _reset_parameters so its zero-init LayerScale (identity) is preserved.
+        self.cctm = CCTM(d_model) if use_cctm else None
+
         self.rm_self_attn_layers = rm_self_attn_layers
         if rm_self_attn_layers is not None:
             print("Removing the self-attn in {} decoder layers".format(rm_self_attn_layers))
@@ -314,6 +366,10 @@ class DeformableTransformer(nn.Module):
         # - enc_intermediate_output: None or (nenc+1, bs, nq, c) or (nenc, bs, nq, c)
         # - enc_intermediate_refpoints: None or (nenc+1, bs, nq, c) or (nenc, bs, nq, c)
         #########################################################
+
+        if self.cctm is not None:
+            # reinject pre-encoder backbone detail (src_flatten) into encoder memory
+            memory = self.cctm(memory, src_flatten)
 
         if self.two_stage_type =='standard':
             if self.two_stage_learn_wh:
@@ -1062,7 +1118,8 @@ def build_deformable_transformer(args):
         module_seq=args.decoder_module_seq,
 
         embed_init_tgt=args.embed_init_tgt,
-        use_detached_boxes_dec_out=use_detached_boxes_dec_out
+        use_detached_boxes_dec_out=use_detached_boxes_dec_out,
+        use_cctm=getattr(args, 'use_cctm', False),
     )
 
 

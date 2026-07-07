@@ -16,5 +16,10 @@ _base_ = ['DINO_4scale_swin.py']
 
 use_boost_loss = True
 boost_alpha = 0.25         # paper default (matches focal_alpha)
-boost_beta = 1.0           # paper default; the per-dataset knob (see caveat above)
+# beta SWEEP: 1.0 (paper default) ran as dino_boost1 -> documented NEGATIVE
+#   (organic 0.586 warm-start eroded to a ~0.42 plateau over 200 ep; the predicted
+#   cs-starvation -- positive loss term scaled by cs 0.04-0.17 -> model under-scores
+#   true peaks -> AP collapses). Now sweep point 2: beta=0.5 (dino_boost2), which
+#   lifts effective targets ring 0.17->0.41, segment 0.04->0.20. Next fallback 0.25.
+boost_beta = 0.5           # sweep point 2 of {0.5, 0.25}; the per-dataset knob (caveat above)
 boost_gamma = 2.0          # paper default (matches focal gamma)
