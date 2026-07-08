@@ -93,10 +93,17 @@ on organic AP (`docs/CROSS_DINO_INVESTIGATION.md`).
   (≡ plain focal ≡ ssl1) organic **0.586**. Our boxes are uniformly tiny-cs (elongated), so the
   size-weighting has no diversity to exploit and is pure tax — best operating point is "off". Details:
   `MODIFICATIONS.md` phase J.
-- **Exp B — CCTM feature-enrichment module: RUNNING** (`dino_cctm1`, job 2659048, from 2026-07-06).
-  Identity-at-init (zero-init LayerScale) warm-start; ONNX-safe (opset-16 export verified). A/B vs
-  ssl1 0.586. Stop rule: if CCTM also fails to move organic, Cross-DINO is investigated-and-declined
-  (do not port the Strip-MLP backbone). Details: `MODIFICATIONS.md` phase K.
+- **Exp B — CCTM feature-enrichment module: DECLINED (trustworthy null).** `dino_cctm2` (CCTM @10× LR,
+  identity-at-init) converged at organic **0.567** / 41 **0.760** — no lift over ssl1 0.586. A
+  mechanistic diagnostic (cctm2 vs ssl1, 817 organic GT peaks) shows why: CCTM lifts recall only on
+  already-easy peaks (bright 0.69→0.73, ring 0.83→0.88) and leaves our ceiling **untouched** — faint
+  0.33→0.33, high-q 0.44→0.44 — at a small precision cost. It reinjects backbone detail, which cannot
+  add faint-peak sensitivity that is not in the backbone to begin with. Details: `MODIFICATIONS.md`
+  phase K.
+- **Cross-DINO overall: investigated-and-declined.** Both portable modules (Boost, CCTM) failed the
+  organic gate → the Strip-MLP backbone is **not** ported. Diagnostic take-home: the ceiling is
+  *sensitivity to faint / high-q peaks*, which detail-routing architectures do not address. Next lever:
+  Co-DETR/Co-DINO training-only aux heads (adds sensitivity, zero inference cost).
 
 ## Diagnosis carried forward
 

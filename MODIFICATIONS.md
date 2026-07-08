@@ -303,6 +303,26 @@ encoder memory before decoder query selection, giving the decoder a finer "cross
   affected. Relaunched as **`dino_cctm2`, job 2659055** (2026-07-06). Escalation: a null even at 10×
   CCTM-LR → one co-trained run (SSL backbone init, CCTM from epoch 0) before invoking the stop rule.
 
+**Exp B VERDICT (2026-07-08): DECLINED — trustworthy null; the mechanism misses our ceiling.**
+- `dino_cctm2` (CCTM @10× LR) converged post lr-drop@280 at organic **0.567** (0.556–0.577) / 41
+  **0.760** — organic in-band but below ssl1 0.586 (no lift on the gate); 41 held at baseline. The 10×
+  LR worked (curve moved/varied ⇒ gamma grew, the module genuinely trained), so the null is trustworthy.
+- **Mechanistic diagnostic** (`diagnose_C`-style, organic, 817 GT peaks, cctm2 vs ssl1) settles the
+  co-train question: CCTM raises recall on ALREADY-EASY peaks — bright (vis=3) 0.693→0.726, ring
+  0.833→0.875, inner-q 0.567→0.598 — but does NOTHING for the two modes that cap organic: **faint
+  (vis=1) 0.330→0.330 and high-q (682–1024) 0.436→0.436, both identical**; precision slips 0.841→0.833
+  (FP/img 10.4→11.2, more confident FPs). Net AP flat = easy-peak gains cancelled by the precision cost.
+- **Why co-train won't rescue it:** CCTM reinjects `B` (the backbone feature); faint/high-q peaks are
+  weak in `B` itself (the representation/sensitivity ceiling the SSL effort already identified).
+  Reinjecting detail sharpens what is already visible — it cannot manufacture sensitivity, and
+  co-adaptation cannot use signal that is not there.
+- **DECISION: Cross-DINO investigated-and-declined.** Both portable modules failed the organic gate
+  (Boost declined; CCTM null + off-target). Do NOT port the Strip-MLP backbone (doc §7 stop rule).
+  CCTM code + the `lr_cctm_mult` param group stay in the repo **default-OFF** (`use_cctm=False` /
+  `lr_cctm_mult=1.0` → byte-identical no-op; all other configs unchanged). **NEXT LEVER:**
+  Co-DETR/Co-DINO training-only auxiliary heads — adds faint-peak *sensitivity* (the right axis the
+  diagnostic points to), zero inference cost, ONNX-safe (heads dropped at export). Chosen 2026-07-08.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
