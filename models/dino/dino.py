@@ -317,6 +317,13 @@ class DINO(nn.Module):
                     {'pred_logits': a, 'pred_boxes': b} for a, b in zip(enc_outputs_class, enc_outputs_coord)
                 ]
 
+        # Co-DINO training-only auxiliary head: run the dense head on the encoder pyramid
+        # the transformer stashed. Guarded by self.training + co_heads presence; the
+        # 'co_head_outputs' key is never in the ONNX export whitelist -> deploy-safe.
+        if self.training and getattr(self, 'co_heads', None) is not None \
+                and self.transformer.co_head_pyramid is not None:
+            out['co_head_outputs'] = self.co_heads(self.transformer.co_head_pyramid)
+
         out['dn_meta'] = dn_meta
 
         return out
@@ -643,6 +650,11 @@ class SetCriterion(nn.Module):
                     l_dict = {k + f'_enc_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
+        # Co-DINO dense aux-head loss (training-only): present only when the model emitted
+        # 'co_head_outputs' and a co_criterion is attached. Keys flow through weight_dict.
+        if 'co_head_outputs' in outputs and getattr(self, 'co_criterion', None) is not None:
+            losses.update(self.co_criterion(outputs['co_head_outputs'], targets))
+
         if return_indices:
             indices_list.append(indices0_copy)
             return losses, indices_list
@@ -824,6 +836,14 @@ def build_dino(args):
         interm_weight_dict.update({k + f'_interm': v * interm_loss_coef * _coeff_weight_dict[k] for k, v in clean_weight_dict_wo_dn.items()})
         weight_dict.update(interm_weight_dict)
 
+    # Co-DINO aux-head loss weights (training-only; added AFTER the per-layer aux copies
+    # so they are not suffixed/duplicated). Off unless use_co_heads.
+    if getattr(args, 'use_co_heads', False):
+        co_coef = getattr(args, 'co_loss_coef', 2.0)      # paper lambda_2 (encoder supervision)
+        weight_dict['loss_co_cls'] = co_coef * args.cls_loss_coef
+        weight_dict['loss_co_bbox'] = co_coef * args.bbox_loss_coef
+        weight_dict['loss_co_giou'] = co_coef * args.giou_loss_coef
+
     losses = ['labels', 'boxes', 'cardinality']
     if args.masks:
         losses += ["masks"]
@@ -843,6 +863,20 @@ def build_dino(args):
     criterion.boost_alpha = getattr(args, 'boost_alpha', 0.25)
     criterion.boost_beta = getattr(args, 'boost_beta', 1.0)
     criterion.boost_gamma = getattr(args, 'boost_gamma', 2.0)
+    # Co-DINO collaborative aux head + its dense one-to-many criterion (training-only; off
+    # unless use_co_heads). The head is a submodule of the model (params train, ddp/export
+    # move it); co_criterion is attached to SetCriterion so its losses flow through the
+    # existing weighted sum (engine.py unchanged). At export self.training is False so the
+    # head is never entered and its output key is never produced.
+    if getattr(args, 'use_co_heads', False):
+        from .co_heads import CoHeads, CoCriterion
+        model.co_heads = CoHeads(d_model=args.hidden_dim, num_classes=num_classes,
+                                 num_levels=args.num_feature_levels)
+        criterion.co_criterion = CoCriterion(num_classes, focal_alpha=args.focal_alpha,
+                                             center_radius=getattr(args, 'co_center_radius', 1.5))
+    else:
+        model.co_heads = None
+        criterion.co_criterion = None
     criterion.to(device)
     postprocessors = {'bbox': PostProcess(num_select=args.num_select, nms_iou_threshold=args.nms_iou_threshold)}
     if args.masks:

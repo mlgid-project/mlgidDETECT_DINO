@@ -118,6 +118,7 @@ class DeformableTransformer(nn.Module):
 
                  use_detached_boxes_dec_out=False,
                  use_cctm=False,
+                 use_co_heads=False,
                  ):
         super().__init__()
         self.num_feature_levels = num_feature_levels
@@ -261,6 +262,12 @@ class DeformableTransformer(nn.Module):
         # AFTER _reset_parameters so its zero-init LayerScale (identity) is preserved.
         self.cctm = CCTM(d_model) if use_cctm else None
 
+        # Co-DINO collaborative aux head (training-only): when enabled, the forward
+        # stashes the encoder feature pyramid here for DINO.forward to run the aux head.
+        # The head module itself lives on the DINO model (built in build_dino).
+        self.collect_co_pyramid = use_co_heads
+        self.co_head_pyramid = None
+
         self.rm_self_attn_layers = rm_self_attn_layers
         if rm_self_attn_layers is not None:
             print("Removing the self-attn in {} decoder layers".format(rm_self_attn_layers))
@@ -370,6 +377,13 @@ class DeformableTransformer(nn.Module):
         if self.cctm is not None:
             # reinject pre-encoder backbone detail (src_flatten) into encoder memory
             memory = self.cctm(memory, src_flatten)
+
+        # Co-DINO: stash the (post-CCTM) encoder memory reshaped to a 2-D pyramid for the
+        # training-only auxiliary head. Reset each forward; only populated while training.
+        self.co_head_pyramid = None
+        if self.collect_co_pyramid and self.training:
+            from .co_heads import memory_to_pyramid
+            self.co_head_pyramid = memory_to_pyramid(memory, spatial_shapes, level_start_index)
 
         if self.two_stage_type =='standard':
             if self.two_stage_learn_wh:
@@ -1120,6 +1134,7 @@ def build_deformable_transformer(args):
         embed_init_tgt=args.embed_init_tgt,
         use_detached_boxes_dec_out=use_detached_boxes_dec_out,
         use_cctm=getattr(args, 'use_cctm', False),
+        use_co_heads=getattr(args, 'use_co_heads', False),
     )
 
 

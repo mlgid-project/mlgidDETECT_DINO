@@ -323,6 +323,34 @@ encoder memory before decoder query selection, giving the decoder a finer "cross
   Co-DETR/Co-DINO training-only auxiliary heads — adds faint-peak *sensitivity* (the right axis the
   diagnostic points to), zero inference cost, ONNX-safe (heads dropped at export). Chosen 2026-07-08.
 
+## L. Co-DINO collaborative auxiliary head (Co-DETR, arXiv:2211.12860) — TRAINING-ONLY
+Next lever after Cross-DINO declined (`docs/CO_DINO_INVESTIGATION.md`). Our ceiling is faint/high-q
+peak SENSITIVITY (recall); Co-DETR's aux head injects dense one-to-many supervision into the *encoder*
+features → the most on-thesis lever (adds sensitivity, not detail-routing/re-weighting). Phase-0 MVP:
+ONE FCOS center-sampling head, encoder-supervision only, no customized positive queries.
+- **`models/dino/co_heads.py`** (new) — `memory_to_pyramid` (inverse of the encoder flatten,
+  unit-tested); `CoHeads` (shared 3×3-conv stem + cls/box heads over the 4 encoder pyramid levels);
+  `CoCriterion` (FCOS center-sampling one-to-many assignment, smallest-area tie-break, focal-cls +
+  GIoU/L1-box). FCOS not ATSS: our elongated arcs would starve ATSS anchor-IoU.
+- **Wiring (all default-off via `getattr(args,'use_co_heads',False)`):** `deformable_transformer.py`
+  stashes the (post-CCTM) encoder memory as a 2-D pyramid, training-only; `dino.py` runs the head
+  (`out['co_head_outputs']`, `self.training`-gated), adds `loss_co_{cls,bbox,giou}` to `weight_dict`,
+  attaches `model.co_heads` + `criterion.co_criterion`; `SetCriterion.forward` folds the co-losses
+  into its returned dict → **`engine.py` unchanged** (they ride the existing weighted sum).
+  `get_param_dicts.py` generalized to optionally split `co_heads.*` into a higher-LR group.
+- **Deploy-safe (verified by GPU smoke):** strictly training-only — eval/export produces NO
+  `co_head_outputs` (the `self.training` gate + the ONNX whitelist reading only
+  `pred_logits`/`pred_boxes`); eval-mode output keys are byte-identical to baseline. Warm-start load
+  leaves only the 12 `co_heads.*` tensors fresh. Unit tests: dense loss finite, gradient reaches the
+  encoder features, empty-GT and smallest-area tie-break correct, pyramid reshape is the exact inverse.
+- **Two recipes built:** `DINO_4scale_swin_codino.py` (warm-start fine-tune of ssl1, co-heads @10× LR)
+  and `DINO_4scale_swin_codino_scratch.py` (**FROM-SCRATCH co-train**: ssl1's exact recipe — SSL
+  backbone via `backbone_dir`, uniform 1e-5, no amp — + co-heads from epoch 0). **Chose from-scratch**
+  (the faithful test: a training-scheme change that shapes *encoder* feature learning needs the encoder
+  to co-adapt from init, which a warm-start under-tests). Clean A/B: the only difference vs ssl1
+  (organic 0.586 / 41 0.762) is the aux head. Run `dino_codino_scratch1`. **GATE = organic AP AND the
+  faint/high-q recall probe** (`diag_compare.py`); AP-up-but-recall-flat = CCTM-null shape → decline.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
