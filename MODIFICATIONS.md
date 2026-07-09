@@ -351,6 +351,32 @@ ONE FCOS center-sampling head, encoder-supervision only, no customized positive 
   (organic 0.586 / 41 0.762) is the aux head. Run `dino_codino_scratch1`. **GATE = organic AP AND the
   faint/high-q recall probe** (`diag_compare.py`); AP-up-but-recall-flat = CCTM-null shape → decline.
 
+## M. Style-transfer input matching (synthetic→real appearance) — TRAINING-ONLY
+Pivot after four detector-side levers (semi, Boost, CCTM, Co-DINO) all came back null/negative — the
+finding is the bottleneck is the DATA (sim2real), not the detector. Attack it directly
+(`docs/STYLE_TRANSFER_INVESTIGATION.md`): the faint/high-q recall ceiling is capped by training on
+synthetic peaks whose faint ones don't *look* real.
+- **`datasets/style_match.py`** (new) — monotone per-image CDF/histogram match of SYNTHETIC images onto
+  a reference intensity distribution pooled from REAL corpus frames (`backbone_ssl_corpus.h5`, 12,991
+  frames, disjoint from eval, in the model's `[0,1]` `to_model_input` space). Rank-preserving →
+  no-data (0) stays 0, intensity ordering preserved. `build_reference` (offline, run once → `style_ref.pt`),
+  `load_reference`, `cdf_match`.
+- **`main.py`** — `SimulationDataset.__getitem__` applies `cdf_match` before the channel-repeat, gated by
+  `use_style_match` (default off). PURELY a training-data transform: **no model/loss/export changes**.
+  Eval uses `PyGIDDataset` (`SimulationDataset` is training-only, `main.py:246/423`) → real-image
+  preprocessing + ONNX byte-identical.
+- **Distinct from reverted Path A** (phase H): Path A fixed mask geometry + quantization *level count*;
+  this matches the distribution *shape* to a real reference, and gates on the faint/high-q **recall
+  probe** (not AP — Path A's AP-only test could miss a faint-recall change).
+- **Verified:** unit tests (weakly monotone, 0 inversions; zeros + local-max preserved; histogram-match
+  decile-Δ 0.0006). Faint-peak contrast retention (1,628 simulated peaks): median contrast unchanged,
+  faint tail slightly *lifted* (p10 0.0068→0.0078), +2.4pp peaks below 1 8-bit level; faintest quartile
+  ~29% flatten to ≤1 level (accepted — real peaks are low-contrast; the recall probe is the judge).
+  Dataset integration + inference-untouched confirmed on GPU.
+- **`config/DINO/DINO_4scale_swin_stylematch.py`** + **`run_detector_stylematch.sbatch`** — warm-start
+  screen from ssl1 (fair here: a DATA change needs no architectural co-adaptation). Run `dino_stylematch1`.
+  GATE = faint(vis=1)/high-q recall probe; stop after Phase 0 if flat.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|

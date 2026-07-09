@@ -56,7 +56,14 @@ class SimulationDataset(torch.utils.data.Dataset):
         self.args = args
         self.device = 'cuda'
         self.transforms = transforms
-        self.simulation = FastSimulation(device=self.device)        
+        self.simulation = FastSimulation(device=self.device)
+        # Style-transfer input matching (training-only; docs/STYLE_TRANSFER_INVESTIGATION.md):
+        # match synthetic pixel intensities onto a real-corpus reference so faint peaks look
+        # real. Off unless use_style_match; inference/preprocessing/ONNX untouched.
+        self.style_ref = None
+        if getattr(args, 'use_style_match', False):
+            from datasets.style_match import load_reference
+            self.style_ref = load_reference(args.style_ref_path, device=self.device)
 
     def __getitem__(self, idx):
         image = None
@@ -65,6 +72,10 @@ class SimulationDataset(torch.utils.data.Dataset):
                 image, boxes, mask, is_ring = self.simulation.simulate_img()
             except:
                 pass
+
+        if self.style_ref is not None:
+            from datasets.style_match import cdf_match
+            image = cdf_match(image, self.style_ref)
 
         image = image.repeat(self.args.num_channels, 1, 1)
         num_objects = len(boxes[0:])
