@@ -351,6 +351,17 @@ ONE FCOS center-sampling head, encoder-supervision only, no customized positive 
   (organic 0.586 / 41 0.762) is the aux head. Run `dino_codino_scratch1`. **GATE = organic AP AND the
   faint/high-q recall probe** (`diag_compare.py`); AP-up-but-recall-flat = CCTM-null shape → decline.
 
+**Co-DINO VERDICT (2026-07-10): DECLINED.** `dino_codino_scratch1` ran to ep286 (past lr-drop 280) and
+held organic **~0.03–0.04 below ssl1** (mean Δ ep82–300 ≈ −0.035) with **41 even** — the sim2real
+signature: dense one-to-many supervision on synthetic holds on synthetic-like 41 but drags real organic.
+Recall probe (`diag_compare`, codino ckpt vs ssl1, 817 organic GT, `base` mode — co_heads are
+training-only, 12 keys ignored at inference) shows **no faint/high-q gain**: recall 0.537→0.435;
+**vis=1 0.330→0.244**, **high-q 0.436→0.317** (both WORSE — the target axes), ring unchanged 0.833.
+(The −0.10 recall-at-0.3 overstates vs AP −0.03 — codino shifted to a higher-precision/lower-recall
+point, 64 vs 83 FP — but the target axes show no gain regardless.) So even the *faithful* test (encoder
+co-adapting from ep0) does not lift the ceiling. `use_co_heads` stays default-off. Cut ep286. Co-DINO
+joins semi / Boost / CCTM as a clean documented negative.
+
 ## M. Style-transfer input matching (synthetic→real appearance) — TRAINING-ONLY
 Pivot after four detector-side levers (semi, Boost, CCTM, Co-DINO) all came back null/negative — the
 finding is the bottleneck is the DATA (sim2real), not the detector. Attack it directly
