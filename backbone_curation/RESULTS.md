@@ -104,6 +104,24 @@ on organic AP (`docs/CROSS_DINO_INVESTIGATION.md`).
   organic gate → the Strip-MLP backbone is **not** ported. Diagnostic take-home: the ceiling is
   *sensitivity to faint / high-q peaks*, which detail-routing architectures do not address. Next lever:
   Co-DETR/Co-DINO training-only aux heads (adds sensitivity, zero inference cost).
+- **Co-DINO (Co-DETR aux heads), from-scratch co-train: DECLINED (negative).** Collaborative
+  one-to-many (FCOS) aux heads inject dense supervision into encoder features (training-only, discarded
+  at inference). Recall probe (`dino_codino_scratch1` vs ssl1) shows **no faint/high-q gain**: vis=1
+  0.33→0.24, high-q 0.44→0.32 — dense aux supervision did not add the missing sensitivity. Details:
+  `MODIFICATIONS.md` phase L.
+- **Style-transfer input matching (synthetic→real appearance): DECLINED (negative).** Per-image CDF/
+  histogram match of synthetic training images onto a real-corpus intensity distribution (training-only
+  transform; no model/loss/ONNX change). `dino_stylematch1` (full 500 ep): **AP dead-even wash** (post-drop
+  organic Δ −0.002, 41 Δ +0.005 vs ssl1), and the recall gate came back **faint-flat / high-q-worse**
+  (vis=1 0.33→0.32, high-q 0.436→0.37). Global 1-D intensity matching does not crack the faint ceiling —
+  the sim2real gap that matters is **structural** (noise texture/background), not the histogram. Details:
+  `MODIFICATIONS.md` phase M.
+- **Lever series status (2026-07): five single-variable levers all NEGATIVE** — Semi-DETR pseudo-labeling,
+  Cross-DINO Boost, CCTM, Co-DINO, style-match. Four detector-side + one data-appearance ⇒ remaining
+  plausible cracks: (a) *structural* sim2real realism (learned/physics noise+background injection, not
+  histogram matching), (b) eval label-incompleteness (faint "misses" partly unlabeled in GT — see
+  "KEY FINDING" / `viz_fp.png`). Cheapest next step: a label-completeness re-eval before another
+  training lever.
 
 ## Diagnosis carried forward
 

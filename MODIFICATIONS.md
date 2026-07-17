@@ -387,6 +387,27 @@ synthetic peaks whose faint ones don't *look* real.
 - **`config/DINO/DINO_4scale_swin_stylematch.py`** + **`run_detector_stylematch.sbatch`** — warm-start
   screen from ssl1 (fair here: a DATA change needs no architectural co-adaptation). Run `dino_stylematch1`.
   GATE = faint(vis=1)/high-q recall probe; stop after Phase 0 if flat.
+- **VERDICT — DECLINED (documented negative).** `dino_stylematch1` ran the full 500 epochs (ep499).
+  - **AP: dead-even wash.** Post-drop plateau (ep282–436, n=78 matched evalpoints vs ssl1): organic
+    Δ **−0.0017** (0.5604 vs 0.5621), 41 Δ **+0.0049** (0.7504 vs 0.7456); organic peak 0.5848 vs 0.5860.
+    Neither the tax the other four levers were, nor a win.
+  - **Recall probe (the gate): faint flat, high-q worse.** Same 8-img organic probe (`diag_compare.py`,
+    GT=817), ssl1 → style-match: overall recall 0.537→0.518; **vis=1 (faint) 0.33→0.32 (flat — ceiling
+    unmoved)**; **q 682–1024 (high-q) 0.436→0.37 (−0.066, the largest move, wrong direction)**; vis=2
+    0.53→0.492, vis=3 0.693→0.673. Only positive is a marginal precision/FP tick (0.841→0.849,
+    FP/img 10.4→9.4 — the expected side effect of detecting slightly less).
+  - **Conclusion:** global 1-D intensity-distribution (CDF/histogram) matching does **not** crack the
+    faint ceiling. The sim2real gap that matters for faint/high-q recall is **structural** (noise
+    texture, background morphology, detector artifacts), not the intensity histogram shape. Machinery
+    stays in the repo, default-off (`use_style_match=False`); training path for all other configs
+    unchanged, inference/ONNX byte-identical.
+  - **Series status:** FIVE single-variable levers now closed as documented negatives (Semi-DETR
+    pseudo-labeling · Cross-DINO Boost · CCTM · Co-DINO · style-match). Four detector-side + one
+    data-appearance all null/negative ⇒ the remaining plausible cracks are (a) *structural* sim2real
+    realism (learned/GAN-style or physics-based noise+background injection, not histogram matching),
+    and (b) the persistent eval label-incompleteness confound (faint "misses" partly unlabeled in GT —
+    see "Diagnostics & roadmap" KEY FINDING). Next cheap independent test: label-completeness re-eval
+    (expert review of `viz_fp.png` / recall-at-fixed-FP) before spending another training lever.
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
