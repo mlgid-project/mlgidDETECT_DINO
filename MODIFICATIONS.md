@@ -409,6 +409,44 @@ synthetic peaks whose faint ones don't *look* real.
     see "Diagnostics & roadmap" KEY FINDING). Next cheap independent test: label-completeness re-eval
     (expert review of `viz_fp.png` / recall-at-fixed-FP) before spending another training lever.
 
+## N. Structural sim2real noise injection (real-level pixel grain) — TRAINING-ONLY
+Step 2 of the sim2real track, after style-match (phase M) closed the 1-D intensity HISTOGRAM gap
+and did NOT move faint recall. Direct structural measurement (tmp_diag/{struct_gap,robust_grain,
+mf_snr}.py, on real corpus frames vs current synthetic output, both in the model's [0,1] space)
+found the remaining gap is SPATIAL TEXTURE — invisible to the 1-D histogram:
+- **REAL** frames carry a heavy WHITE pixel-grain floor: robust (MAD) high-pass residual **0.121**,
+  autocorrelation length ~1 px (white), isotropic. **SYNTHETIC** frames are ~4x smoother
+  (MAD **0.032**) — the sim's noise (Perlin/Poisson) is added before a 3x3 smoothing kernel and is
+  spatially correlated (~3 px). Visually: real = pervasive sandpaper grain; synth = smooth
+  gradients with sharp edges (tmp_diag/{montage,texture_montage}.png).
+- MECHANISM: the detector only ever trains on smooth synthetic backgrounds -> its low-level
+  features never adapt to the real noise floor -> misfires on grainy real images (missed faint/
+  high-q peaks). This is a DOMAIN-ADAPTATION gap, distinct from the phase-M marginal gap.
+- **`datasets/struct_noise.py`** (new) — `add_grain`: per-image white Gaussian grain, std ~
+  U[0.05, 0.13] (0.13 -> synth MAD grain ~0.13, matching real 0.121), added to the FINAL [0,1]
+  image AFTER the sim's smoothing so it survives; no-data (0) preserved, valid pixels in [1/255,1].
+- **NO peak-boosting (verified unnecessary).** Naive per-pixel contrast-vs-sigma suggested grain
+  would bury 63% of peaks; but a detector INTEGRATES over a peak's footprint, so the correct
+  detectability metric is matched-filter SNR ||s||_2/sigma ~ amplitude*sqrt(N). Measured: peaks
+  have median footprint ~210 px, and at real grain sigma=0.12 even the faintest quartile sits at
+  MF-SNR ~26 (only ~1% truly buried). Grain-only keeps peaks detectable via spatial coherence; an
+  explicit boost moved MF-SNR 26.2 -> 26.4 (no-op). Optional `boost_peaks`/`grain_with_peak_floor`
+  kept in the module, off by default (`struct_noise_boost=False`).
+- **`main.py`** — `SimulationDataset.__getitem__` applies `add_grain` before the channel-repeat,
+  gated by `use_struct_noise` (default off). PURELY a training-data transform: **no model/loss/
+  export changes**. Eval uses PyGIDDataset -> real-image preprocessing + ONNX byte-identical.
+- **Distinct from style-match (M) and the reverted Path A (H).** M matched the intensity histogram
+  SHAPE; H changed mask geometry + quantization level count; this matches the 2-D noise TEXTURE
+  (spatial grain), the one thing the 1-D metrics are blind to.
+- **Verified:** grain reaches real level (synth MAD 0.032 -> 0.135 at sigma_hi vs real 0.121);
+  peak survival by MF-SNR (above); no-data preserved; dataset integration produces valid [0,1]
+  samples; py_compile + config-load OK; inference path untouched.
+- **`config/DINO/DINO_4scale_swin_structnoise.py`** + **`backbone_curation/ssl/
+  run_detector_structnoise.sbatch`** — warm-start screen from ssl1 (fair: a DATA change needs no
+  architectural co-adaptation, same as M). Run `dino_structnoise1`, 500 ep, lr-drop 280.
+  GATE = faint(vis=1)/high-q recall probe (diag_compare.py) vs ssl1; stop after Phase 0 if flat.
+- **VERDICT — PENDING** (run launched, awaiting plateau + recall probe).
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|

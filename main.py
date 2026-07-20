@@ -64,6 +64,13 @@ class SimulationDataset(torch.utils.data.Dataset):
         if getattr(args, 'use_style_match', False):
             from datasets.style_match import load_reference
             self.style_ref = load_reference(args.style_ref_path, device=self.device)
+        # Structural sim2real noise (training-only; datasets/struct_noise.py): inject white
+        # pixel-grain matched to the measured real texture (high-pass std ~0.144, autocorr ~1px)
+        # so faint synthetic peaks sit in a real-like noise floor. Off unless use_struct_noise;
+        # inference/preprocessing/ONNX untouched.
+        self.struct_noise = tuple(getattr(args, 'struct_noise_sigma', (0.05, 0.13))) \
+            if getattr(args, 'use_struct_noise', False) else None
+        self.struct_noise_boost = getattr(args, 'struct_noise_boost', False)
 
     def __getitem__(self, idx):
         image = None
@@ -76,6 +83,17 @@ class SimulationDataset(torch.utils.data.Dataset):
         if self.style_ref is not None:
             from datasets.style_match import cdf_match
             image = cdf_match(image, self.style_ref)
+
+        if self.struct_noise is not None:
+            from datasets.struct_noise import add_grain, grain_with_peak_floor, sample_sigma
+            # inject real-level white grain (domain-adaptation). boxes are still xyxy-pixel here;
+            # matched-filter SNR shows peaks stay detectable via spatial integration, so grain-only
+            # is the default; struct_noise_boost re-enables the (unnecessary) explicit peak boost.
+            sig = sample_sigma(*self.struct_noise)
+            if self.struct_noise_boost:
+                image = grain_with_peak_floor(image, boxes, sig)
+            else:
+                image = add_grain(image, sig)
 
         image = image.repeat(self.args.num_channels, 1, 1)
         num_objects = len(boxes[0:])
