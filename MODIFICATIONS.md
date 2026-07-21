@@ -445,7 +445,23 @@ found the remaining gap is SPATIAL TEXTURE — invisible to the 1-D histogram:
   run_detector_structnoise.sbatch`** — warm-start screen from ssl1 (fair: a DATA change needs no
   architectural co-adaptation, same as M). Run `dino_structnoise1`, 500 ep, lr-drop 280.
   GATE = faint(vis=1)/high-q recall probe (diag_compare.py) vs ssl1; stop after Phase 0 if flat.
-- **VERDICT — PENDING** (run launched, awaiting plateau + recall probe).
+- **VERDICT — DECLINED (2026-07-21).** Run `dino_structnoise1` (job 2677809, warm-start ssl1)
+  evaluated at the post-lr-drop plateau (ep282-302, 11 eval points) + recall probe (diag_sn-2679464):
+  - **AP:** organic post-drop mean **0.5414 vs ssl1 0.5621 (-2.1 pts)**; 41 wash (0.7510 vs
+    0.7456, +0.5). Organic's best value (0.5694) was at ep10 — right after the warm start,
+    i.e. grain training actively pulled organic AP DOWN from the ssl1 state.
+  - **Recall probe** (organic, score>0.3, checkpoint ep302 vs ssl1): overall **0.512 vs 0.537**;
+    faint vis=1 **0.32 vs 0.33** (no gain on the target stratum); high-q third **0.395 vs 0.436**
+    (-4.1 pts, worse on the other target stratum); precision 0.821 vs 0.841, FP/img 11.4 vs 10.4.
+    Only ring recall ticked up (0.875 vs 0.833) at the cost of segments (0.501 vs 0.528).
+  - **Interpretation:** adding real-level white grain to smooth synthetic images does NOT teach
+    real-noise robustness — it just makes training harder/noisier (uniformly slightly worse, same
+    signature as phase M's high-quantization arm). Together M+N close the sim2real appearance
+    hypothesis: neither matching the 1-D intensity histogram nor the 2-D noise texture moves
+    faint/high-q recall. The remaining candidate is peak CONFIGURATION realism (structures/
+    intensities), tested by the physics-CIF track (docs/PHYSICS_SIM_INVESTIGATION.md).
+  - Machinery kept (off by default): `use_struct_noise=False` everywhere; config + sbatch retained
+    for reproducibility. No production impact (training-only lever, never deployed).
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
