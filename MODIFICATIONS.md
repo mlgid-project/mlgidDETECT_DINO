@@ -462,6 +462,69 @@ found the remaining gap is SPATIAL TEXTURE — invisible to the 1-D histogram:
     intensities), tested by the physics-CIF track (docs/PHYSICS_SIM_INVESTIGATION.md).
   - Machinery kept (off by default): `use_struct_noise=False` everywhere; config + sbatch retained
     for reproducibility. No production impact (training-only lever, never deployed).
+  - Run went the full 500 ep (completed 2026-07-21 23:52); ep498 organic 0.5423 — verdict unchanged.
+
+## O. q-decay intensity envelope — DECLINED BY MEASUREMENT, NEVER RUN (2026-07-20)
+Pre-registered cheap test of the strongest single physics mechanism behind the sim2real gap:
+"real high-q peaks are systematically weak (form factors / Debye-Waller), synthetic ones are
+randomly bright, so the detector never learns the real high-q regime". Planned as a training-only
+multiplicative envelope on the final image (`datasets/q_decay.py`, mirroring `struct_noise.py`).
+**Killed by two measurements BEFORE building the run** (~30 GPU-min instead of a 1.7-day run):
+- `tmp_diag/qprofile.py`: column-level radial profiles are nearly FLAT in both domains — log+HE
+  in the shared preprocessing chain removes physical q-decay from real AND synthetic images.
+- `tmp_diag/peak_contrast_vs_q.py`: the peak-level relation is INVERTED vs the hypothesis. Real
+  labeled peaks are MOST contrasty at high q (organic high/low median ratio **14.3**, 41 **1.97**)
+  while synthetic is backwards (**0.70**). Organic's FAINTEST peaks live at LOW q.
+Implications: (a) an attenuation envelope would push synth the WRONG way — no run; (b) the high-q
+recall deficit is not labeled-peak faintness; (c) the mismatch is in the JOINT (q, intensity)
+distribution, which no hand-tuned 1-D envelope can fix — motivating phase P. `datasets/q_decay.py`
+was deleted rather than left as dead code.
+
+## P. Physics-based CIF simulation (peak configuration from real crystallography) — TRAINING-ONLY
+User-proposed direction after M+N closed the sim2real APPEARANCE hypothesis. The standard sim
+places peaks at RANDOM q with RANDOM intensities; this dilutes training with images whose peak
+configurations come from real structures (CIF -> structure factors -> orientations), giving the
+correct joint (q, chi, intensity) statistics and real morphology (powder rings vs textured arcs)
+automatically. Full design record: `docs/PHYSICS_SIM_INVESTIGATION.md`.
+- **`physics_simulation.py`** (NEW sibling; `simulation.py` NOT modified) — `PhysicsSimulation.
+  simulate_img()` honors the exact FastSimulation 4-tuple contract and REUSES the entire standard
+  appearance chain (internal FastSimulation for detector mask / dark areas / detector-gap filtering
+  / `img_from_labels`, then the same module-level chain in the same order). A physics image differs
+  from a standard one ONLY in peak placement and relative intensities. Composition per image (user
+  spec): 0-1 powder + 1-2 oriented entries; per-entry scale 0.08-1.0 (minor/major phases).
+- **`physics_sim/build_exclusion_list.py`** — eval-exclusion via mlgidMATCH at a lowered threshold
+  (0.05; user: "really find all candidates"), over 41.h5 + organic_labeled.h5 (45.h5 excluded per
+  user). Segments use the library tree matcher with AUDITED caps (top-64 screen candidates per
+  node, top-6 branch recursions; every cap event counted into the output) plus a full uncapped NN
+  screen stored as an audit layer; rings use a two-sided 1-D q-coverage test done here (the library
+  rings path needs `create_all` caches we deliberately don't build). A SELF-TEST (simulate from
+  known CIFs, require self-recovery) gates the whole run.
+- **`physics_sim/generate_bank.py`** -> `bank.npz` — per CIF: 1 powder entry + 8 recorded random
+  fiber orientations, top-200 peaks each, stored as (|q|, chi, intensity). Exclusions: matched
+  powder -> powder mode dropped; matched orientation -> entries within 10 deg dropped, OTHER
+  orientations of the same structure stay usable (user spec). `physics_sim/merge_shards.py` merges
+  array output and REFUSES an incomplete set.
+- **`main.py`** — `SimulationDataset` gains `use_physics_sim` / `physics_sim_fraction` /
+  `physics_bank_path` (default off); `__getitem__` picks physics vs standard per sample. No model,
+  loss, or export change; eval path and ONNX byte-identical.
+- **`config/DINO/DINO_4scale_swin_physics.py`** + `run_detector_physics.sbatch` — warm-start ssl1,
+  **fraction 0.5 for the first run** (user decision: maximize measurable impact, tune afterwards).
+- **THREE BUGS found and fixed during bring-up** (each would have silently corrupted the result):
+  1. `mlgidmatch 0.1.3` + `pygidsim 0.1.5` are API-incompatible (`giwaxs_2d` kwarg `q_range` ->
+     `q_xy_range`/`q_z_range`); exact-translation shim in `patch_pygidsim_compat`.
+  2. Eval peak extraction silently yielded ZERO samples — h5py cannot build a direct-read
+     conversion path for these datasets (`np.asarray(dset)` raises), `qz_qxy_range` is sometimes a
+     byte string `b'(0, 3.2, 0, 3.2)'` (same workaround as `util/labeleddataset.py`), and organic's
+     `fitted_peaks` is a COMPOUND dataset, not a group.
+  3. Exclusion-margin angles were computed in MILLER space. mlgidMATCH reports orientations as
+     Miller directions and pygidsim maps them via `orientation @ rec`; for a realistic non-cubic
+     cell the naive angle reads 45 deg where the physical angle is 70.8 deg — far past the 10 deg
+     margin, so matched eval orientations could have leaked into training. Angles are now measured
+     after the Cartesian map.
+  Also: a `multiprocessing` fork pool DEADLOCKED against torch/OpenMP (8 h, zero units); parallelism
+  is now Slurm array shards. Do not reintroduce multiprocessing there.
+- **GATE** (as every lever): organic/41 AP per epoch; decisive = faint(vis=1)/high-q recall probe
+  vs ssl1. **VERDICT — PENDING** (bank + verification complete, run launched 2026-07-22).
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |

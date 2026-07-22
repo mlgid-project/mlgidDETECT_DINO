@@ -71,12 +71,23 @@ class SimulationDataset(torch.utils.data.Dataset):
         self.struct_noise = tuple(getattr(args, 'struct_noise_sigma', (0.05, 0.13))) \
             if getattr(args, 'use_struct_noise', False) else None
         self.struct_noise_boost = getattr(args, 'struct_noise_boost', False)
+        # Physics-based CIF simulation (training-only; physics_simulation.py): a fraction of
+        # images get peak configurations from real crystallography (pygidsim bank) instead of
+        # random q/intensity. Off unless use_physics_sim; eval/ONNX untouched.
+        self.physics_sim = None
+        if getattr(args, 'use_physics_sim', False):
+            from physics_simulation import PhysicsSimulation
+            self.physics_sim = PhysicsSimulation(args.physics_bank_path, device=self.device)
+            self.physics_fraction = getattr(args, 'physics_sim_fraction', 0.5)
 
     def __getitem__(self, idx):
         image = None
         while image is None:
             try:
-                image, boxes, mask, is_ring = self.simulation.simulate_img()
+                if self.physics_sim is not None and float(torch.rand(())) < self.physics_fraction:
+                    image, boxes, mask, is_ring = self.physics_sim.simulate_img()
+                else:
+                    image, boxes, mask, is_ring = self.simulation.simulate_img()
             except:
                 pass
 
