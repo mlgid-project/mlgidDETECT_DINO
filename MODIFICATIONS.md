@@ -523,8 +523,20 @@ automatically. Full design record: `docs/PHYSICS_SIM_INVESTIGATION.md`.
      after the Cartesian map.
   Also: a `multiprocessing` fork pool DEADLOCKED against torch/OpenMP (8 h, zero units); parallelism
   is now Slurm array shards. Do not reintroduce multiprocessing there.
+- **FOURTH BUG (post-launch crash, fixed 2026-07-30).** Both 2026-07-22 runs died on epoch 0,
+  iteration 1 with `AssertionError` in the matcher (`util/box_ops.py:53`, `x2>=x1 & y2>=y1` on
+  targets). `filter_dark_area`'s polar/quazipolar branch clamps `y2` down (toward the quazipolar
+  line ~0.77*x1) and `y1` up, which can invert a box, and its `polar_indices` keep-mask is computed
+  BEFORE the quazipolar clamp so it does not catch it. The standard sim survives via a final
+  ordering guard (`simulation.py:416-420`) that `physics_simulation.py` was missing; that guard
+  (drop `x2<=x1`/`y2<=y1`, re-clamp) is now applied after the dark-area filter. The pre-launch gate
+  only checked box ALIGNMENT, not ORDERING — it now also runs a 300-draw box-ordering stress
+  (0 inverted over 10,883 boxes after the fix). Verified live: both relaunched runs stepped past the
+  crash point cleanly (warm-start to epoch 2, from-scratch stepping, 0 tracebacks).
 - **GATE** (as every lever): organic/41 AP per epoch; decisive = faint(vis=1)/high-q recall probe
-  vs ssl1. **VERDICT — PENDING** (bank + verification complete, run launched 2026-07-22).
+  vs ssl1. **VERDICT — PENDING** (bank + verification complete; first launch 2026-07-22 crashed on
+  the inverted-box bug above, relaunched 2026-07-30: warm-start `dino_physics1` 2701978 + from-scratch
+  `dino_physics_scratch1` 2701979).
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |

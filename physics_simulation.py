@@ -155,6 +155,20 @@ class PhysicsSimulation(object):
         if len(boxes) == 0:
             return None
 
+        # Drop inverted/degenerate boxes, then re-clamp -- EXACTLY as the standard sim does at
+        # simulation.py:416-420. The polar/quazipolar dark-area clamp inside filter_dark_area can
+        # push y2 below y1 (it minimizes boxes[:,3] toward angle_limits.max / the quazipolar line
+        # while maximizing boxes[:,1] toward angle_limits.min), and polar_indices -- computed
+        # BEFORE the quazipolar clamp -- does not catch it. The DINO matcher asserts x2>=x1 & y2>=y1
+        # on target boxes (util/box_ops.py:53), so an unfiltered inverted box crashes training on
+        # the first batch that draws one. This guard is what the standard sim relies on; omitting it
+        # was why both physics runs (2682288/2682289) died on epoch 0.
+        valid = (boxes[:, 0] < boxes[:, 2]) & (boxes[:, 1] < boxes[:, 3])
+        boxes, intensities, is_ring = boxes[valid], intensities[valid], is_ring[valid]
+        if len(boxes) == 0:
+            return None
+        clamp_boxes(boxes)
+
         img = f.img_from_labels(boxes, intensities, is_ring)
         if img.min() == img.max() or torch.any(img.isnan()):
             return None
