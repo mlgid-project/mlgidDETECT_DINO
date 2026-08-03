@@ -534,9 +534,32 @@ automatically. Full design record: `docs/PHYSICS_SIM_INVESTIGATION.md`.
   (0 inverted over 10,883 boxes after the fix). Verified live: both relaunched runs stepped past the
   crash point cleanly (warm-start to epoch 2, from-scratch stepping, 0 tracebacks).
 - **GATE** (as every lever): organic/41 AP per epoch; decisive = faint(vis=1)/high-q recall probe
-  vs ssl1. **VERDICT — PENDING** (bank + verification complete; first launch 2026-07-22 crashed on
-  the inverted-box bug above, relaunched 2026-07-30: warm-start `dino_physics1` 2701978 + from-scratch
-  `dino_physics_scratch1` 2701979).
+  vs ssl1.
+- **VERDICT — DECLINED (2026-08-03).** 50% physics-CIF dilution is negative on every gate.
+  - **AP (from-scratch `dino_physics_scratch1` 2701979, ssl1 backbone + random head, no-amp faithful
+    test; TIMEOUT at ep474, well past lr-drop@280 so the plateau is settled).** Converged (ep300+)
+    vs ssl1 baseline `dino_ssl1`: organic **0.5395 vs 0.5634 (Δ −0.024)**, 41 **0.6255 vs 0.7454
+    (Δ −0.120)**. Even physics's all-time-peak organic (0.580 @ep166, pre-drop) sits below ssl1's
+    peak (0.586 @ep238). A transient pre-drop organic lead (Δ +0.013…+0.023 over ep140–210) was pure
+    early-convergence speed — ssl1 overtakes at its lr-drop and physics never recovers.
+  - **AP (warm-start `dino_physics1` 2701978, fine-tune ssl1 ckpt, COMPLETED ep498).** Brief spike
+    (organic 0.617 @ep10) then decays under dilution to converged **0.565 / 0.616** — below the
+    deployed ssl1 single-backbone (0.586 / 0.762) on both gates; 41 collapses ~−0.15.
+  - **Decisive recall probe (`tmp_diag/diag_sweep.py`, organic, converged ckpts ep474 vs ep436).**
+    At a FIXED score 0.3 physics *appears* to win recall (0.668 vs 0.537, incl. faint 0.485 vs 0.33,
+    high-q 0.551 vs 0.436) — but that is pure miscalibration: physics fires ~5.5× more boxes
+    (56.9 vs 10.4 FP/img, precision 0.545 vs 0.841). At a **matched operating point** the win
+    inverts on every stratum. Matched precision (~0.83): overall **0.324 vs 0.530**, faint
+    **0.189 vs 0.326**, high-q **0.263 vs 0.432**. Matched FP/img (~11): overall **0.381 vs 0.528**,
+    high-q **0.309 vs 0.432**. ssl1 dominates physics at every precision target (0.60–0.85) on
+    overall/faint/high-q. Physics dilution made the detector trigger-happy and *worse* precisely on
+    the high-q stratum it was built to fix (−0.17 high-q recall at matched precision).
+  - **Conclusion:** the seventh single-variable lever to fail (after Semi-DETR, Boost, CCTM, Co-DINO,
+    style-match, struct-noise). Physical peak-configuration priors from real crystallography did not
+    close the sim2real gap — the ceiling is representation/sensitivity, not peak realism. Deployed
+    best unchanged = **ssl1 + baseline ensemble** (organic 0.605 / 41 0.780). Runs
+    2701978/2701979 and `bank.npz` retained; no code reverted (all physics paths are opt-in and
+    default off, so main is byte-identical at inference).
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
