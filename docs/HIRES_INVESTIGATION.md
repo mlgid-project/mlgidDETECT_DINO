@@ -108,5 +108,10 @@ operating point, per the phase-P calibration lesson) and the label-adjusted view
 ## Runs
 - `dino_hires1` — job **2721965**, from-scratch, 512×2048 (launched 2026-08-05). Out:
   `detector_runs/dino_hires1`. Launcher: `backbone_curation/ssl/run_detector_hires.sbatch`.
-  RESUMABLE (72h cap, auto-resume checkpoint.pth). Verdict PENDING — decide at the post-lr-drop
-  plateau (ep300+) on organic/41 AP + the faint/high-q recall probe vs ssl1 and the ensemble.
+  Verdict PENDING — decide at the post-lr-drop plateau (ep300+) on organic/41 AP + the faint/high-q
+  recall probe vs ssl1 and the ensemble.
+- *Step time ~18 min/epoch at 2048 (~2× the 1024 speed), so ~150h for 500 ep → past the 72h wall.*
+  **Auto-resubmit chain** (jobs 2721990→2721991→2721992→2721993, each `--dependency=afterany` the
+  previous, 5 windows ≈ 15 days capacity): every link auto-resumes from `checkpoint.pth` (written
+  each epoch) and NO-OPs once organic eval reaches epoch ≥ 498 (completion guard in the sbatch), so
+  surplus links exit in ~1 s. To stop early, `scancel` the pending links.
