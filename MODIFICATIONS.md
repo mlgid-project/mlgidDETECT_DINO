@@ -561,6 +561,59 @@ automatically. Full design record: `docs/PHYSICS_SIM_INVESTIGATION.md`.
     2701978/2701979 and `bank.npz` retained; no code reverted (all physics paths are opt-in and
     default off, so main is byte-identical at inference).
 
+## Q. Label-completeness diagnostic (Step 1) — the organic eval is LABEL-LIMITED (2026-08-05)
+New plan after the 7 declined levers: before spending another training lever, check whether the
+organic GATE itself is trustworthy. Prior hint ("Diagnostics & roadmap" KEY FINDING): the best
+single model's confident FPs sit ON rings. This quantifies it on the *deployed* model.
+- **NEW `diagnostics/label_completeness.py`** — runs the deployed ENSEMBLE (ssl1 + baseline,
+  detection-level NMS fusion, exactly `ensemble_eval.py`) on organic; classifies each unmatched
+  detection (FP) as ON-RING (q-dist to nearest GT peak < 8px AND I(q) percentile > 0.5 → candidate
+  real unlabeled peak) vs OFF-RING (candidate genuine error); reports standard vs label-adjusted
+  precision + an expert-review montage (`diagnostics/label_completeness.png`). GPU sbatch:
+  `tmp_diag/run_label_completeness.sbatch` (job 2721947).
+- **RESULT (organic, 817 GT, score>0.3):** recall 0.605, precision(standard) **0.764**,
+  precision(label-adjusted, on-ring FPs as ignore) **0.890**. On-ring share of FPs 0.60; of
+  HIGH-confidence (>0.5) FPs **0.74**; median FP q-dist to nearest GT peak **1.8px**; only 10% of
+  FPs off-ring (>20px). Montage: on-ring FPs land on real arcs at unlabeled χ; off-ring FPs are the
+  spurious tall segment-bars / low-q noise.
+- **Verdict: the organic eval is label-LIMITED, not model-limited.** True precision ~0.89 vs measured
+  0.76 → measured AP/precision is pessimistic. CONSEQUENCE for every future lever: a model that
+  detects MORE faint/high-q REAL peaks scores some as FPs (unlabeled) → raw AP can stay flat on a
+  genuine improvement. Judge on the faint/high-q recall probe (matched operating point, phase-P
+  calibration lesson) + the label-adjusted view, not AP alone. Pending expert confirmation of the
+  montage (Schreiber group). Diagnostic only; no training/inference change.
+
+## R. Higher input resolution 512×2048 (Step 2) — FROM-SCRATCH — VERDICT PENDING
+First Step-2 "representation sensitivity" lever (`docs/HIRES_INVESTIGATION.md`). Attack the faint/
+high-q sensitivity ceiling directly: double the q-axis resolution (1024→2048; χ/HEIGHT unchanged) so
+faint/small high-q peaks get 2× the samples. **RAW-DATA GATE passed:** organic native q-image is
+1641×1641, 41 is 1350×1350 — both finer than 1024, so 2048 exposes REAL detail (verified: real
+frames resample crisply, GT boxes on peaks full-range, `tmp_diag/hires_real_montage.png`).
+From-scratch (SSL-backbone init + random head + ssl1 recipe; single variable vs ssl1 =
+q-resolution). NEW MODEL LINE (ONNX input → (1,1,512,2048); the 512×1024 deployment is untouched).
+- **Config-gated, byte-identical to all prior runs at 1024:** new key `polar_shape=[512,2048]`
+  (`config/DINO/DINO_4scale_swin_hires.py`) drives both the sim (`simulation.HEIGHT/WIDTH` via the
+  `main.py` `SimulationDataset`) and the real-eval resample (`evaluate_giwaxs_ap`). Absent elsewhere
+  → [512,1024].
+- **`simulation.py` (5 edits, each byte-identical at WIDTH=1024):** (1) removed the dead global-WIDTH
+  reset that force-clobbered WIDTH→1024; (2) hardcoded bg ring box `[116,0,128,512]` → q-coords ×
+  WIDTH/1024, χ=HEIGHT; (3) quazipolar image-mask factor `(1-(WIDTH-512)/1024)` → `512/WIDTH`; (4)
+  quazipolar BOX-CLAMP factor (same) — **THE label-corruption hazard**: old factor goes NEGATIVE at
+  2048 → inverted boxes → matcher crash (phase-P bug 4); `512/WIDTH` is the resolution-invariant form
+  (0.5@1024, 0.25@2048); (5) detector-gap radius `self.rs`/`ws` × WIDTH/1024 (were absolute → clipped
+  a different SEGMENT set at 2048, shifting the ring/segment mix). Model/transformer/PE/postproc: NO
+  change (resolution-agnostic; SSL backbone keys match at 2048).
+- **Pre-launch verification** (`tmp_diag/hires_smoke.py`, `hires_compare.py`; jobs 2721954/56/59/63):
+  [A] 8436 boxes/200 draws, **0 inverted / 0 oob**; [B] synthetic (C,512,2048) in [0,1], boxes in
+  range; [C] organic+41 resample to (1,1,512,2048), GT 0 inverted/0 oob, boxes on peaks; [D] real
+  train step batch=2 peak **8.4GB/40GB** → batch stays 2 (no confound); [E] 1024-vs-2048 distribution
+  PASS (zero_frac diff 0.03, box-align rel-diff 0.15, q-hist L1 0.16, box count matched after edit 5).
+- **Config + launcher:** `config/DINO/DINO_4scale_swin_hires.py`, `backbone_curation/ssl/
+  run_detector_hires.sbatch` (from-scratch, 500ep, lr-drop 280, `--exclude=galvani-cn203`). Run
+  **`dino_hires1`, job 2721965** (launched 2026-08-05). GATE = organic/41 AP + faint/high-q recall
+  probe vs ssl1 (0.586/0.762) AND the deployed ensemble (0.605/0.780); apply the phase-Q label-limit
+  caveat when reading AP.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|

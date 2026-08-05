@@ -56,6 +56,15 @@ class SimulationDataset(torch.utils.data.Dataset):
         self.args = args
         self.device = 'cuda'
         self.transforms = transforms
+        # Higher-resolution polar grid (training-only single variable; docs/HIRES_INVESTIGATION.md):
+        # a config `polar_shape=[H,W]` widens the sim/eval grid to expose faint/high-q detail the
+        # native data carries (organic raw q-image 1641x1641 >> 512x1024). Default absent => the sim
+        # keeps its 512x1024 globals, byte-identical to every prior run. Set the module globals BEFORE
+        # building FastSimulation (it reads simulation.HEIGHT/WIDTH at construction).
+        ph = getattr(args, 'polar_shape', None)
+        if ph is not None:
+            import simulation as _sim
+            _sim.HEIGHT, _sim.WIDTH = int(ph[0]), int(ph[1])
         self.simulation = FastSimulation(device=self.device)
         # Style-transfer input matching (training-only; docs/STYLE_TRANSFER_INVESTIGATION.md):
         # match synthetic pixel intensities onto a real-corpus reference so faint peaks look
@@ -236,7 +245,9 @@ def evaluate_giwaxs_ap(model, postprocessors, args, dset_path, epoch, output_dir
     config.EVAL_EPOCH = str(epoch)
     config.EVAL_OUTPUT_FOLDER = str(output_dir)
     config.INPUT_DATASET = dset_path
-    config.PREPROCESSING_POLAR_SHAPE = [512, 1024]
+    #polar grid for real-image resampling + GT box conversion; follows the training resolution
+    #(config `polar_shape=[H,W]`), default [512,1024] so every non-hires run is byte-identical.
+    config.PREPROCESSING_POLAR_SHAPE = list(getattr(args, 'polar_shape', [512, 1024]))
     #match mlgidDETECT's eval_on_dataset: lower the score threshold so the PR curve is fully sampled
     config.POSTPROCESSING_SCORE = 0.1
     #2-class ring/segment model: use class-aware NMS (ring=1 IoU 0.1 / segment=0 IoU 0.4)

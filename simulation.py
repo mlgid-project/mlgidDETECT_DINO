@@ -217,12 +217,10 @@ class FastSimulation(object):
             self.sim_config.ring_intensity_range: tuple = (2, 50)
             self.sim_config.seg_intensity_range: tuple = (10, 50)
 
-        global WIDTH
+        # (was: a dead branch that force-reset the module WIDTH back to 1024 on 50% of calls --
+        # it would silently clobber a configured higher-resolution WIDTH. Drop the reset; keep only
+        # the 50% re-init quirk the ssl1/baseline runs trained with. Byte-identical at WIDTH=1024.)
         if random.random() < 0.5:
-            if WIDTH == 1024:
-                WIDTH = 1024
-            else:
-                WIDTH = 1024
             self.__init__()
 
         self.detector_mask = False
@@ -302,7 +300,7 @@ class FastSimulation(object):
         if self.background_img is not None:
             clahe_img = clahe_img + self.background_img
             clahe_img = normalize(clahe_img)
-            boxes = torch.cat([boxes, Tensor([[116,0,128,512]]).cuda()])
+            boxes = torch.cat([boxes, Tensor([[116*WIDTH/1024, 0, 128*WIDTH/1024, HEIGHT]]).cuda()])
             #the appended full-height box is a ring; keep is_ring aligned with boxes
             is_ring = torch.cat([is_ring, torch.ones(1, dtype=torch.bool, device=is_ring.device)])
 
@@ -524,7 +522,7 @@ class FastSimulation(object):
         
         if self.quazipolar_dark_area:
             mask = torch.zeros_like(img, device=self.device)
-            dark_area_idx = self.y > self.quazipolar_coef * (1 - (WIDTH - 512)/1024) * self.x
+            dark_area_idx = self.y > self.quazipolar_coef * (512/WIDTH) * self.x
             mask[dark_area_idx.squeeze()] = 1            
             mask_angle_limits, level = calculate_angle_limits_mask()
             img = normalize(img)
@@ -654,8 +652,8 @@ class FastSimulation(object):
                 self.quazipolar_dark_area = True
                 self.quazipolar_coef = 1.54 + (-.2 + .4*random.random())
                 #if rings reach into the quazipolar area, clamp them to the allowed area
-                quazipolar_indices = (boxes[:, 3] >= self.quazipolar_coef * (1 - (WIDTH - 512)/1024) * boxes[:, 0]) & (boxes[:, 0] < (1/self.quazipolar_coef *(WIDTH)))
-                boxes[quazipolar_indices, 3] =  self.quazipolar_coef * (1 - (WIDTH - 512)/1024) * boxes[quazipolar_indices, 0]
+                quazipolar_indices = (boxes[:, 3] >= self.quazipolar_coef * (512/WIDTH) * boxes[:, 0]) & (boxes[:, 0] < (1/self.quazipolar_coef *(WIDTH)))
+                boxes[quazipolar_indices, 3] =  self.quazipolar_coef * (512/WIDTH) * boxes[quazipolar_indices, 0]
                 indices = indices_outside_image & polar_indices
 
                 return boxes, indices
@@ -720,8 +718,12 @@ class FastSimulation(object):
     def create_detector_mask(self):
         self.detector_mask = True
         n = 2
-        self.rs = np.random.uniform(80, 380, n)
-        self.ws = np.random.uniform(1, 7, n)
+        # detector-gap radius/width live in `mask_coords` units (= x*cos(...), so they scale with
+        # WIDTH). Scale the absolute 80..380 / 1..7 sampling by WIDTH/1024 so the gap sits at the
+        # same PHYSICAL q at any resolution -- else at 2048 it clips a different set of segment peaks
+        # (filter_peaks_detector_gap), shifting the ring/segment mix. Byte-identical at WIDTH=1024.
+        self.rs = np.random.uniform(80, 380, n) * (WIDTH / 1024)
+        self.ws = np.random.uniform(1, 7, n) * (WIDTH / 1024)
 
         if n == 2 and abs(self.rs[1] - self.rs[0]) < 100:
             self.rs, self.ws = self.rs[:1], self.ws[:1]
