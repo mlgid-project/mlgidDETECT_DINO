@@ -583,7 +583,7 @@ single model's confident FPs sit ON rings. This quantifies it on the *deployed* 
   calibration lesson) + the label-adjusted view, not AP alone. Pending expert confirmation of the
   montage (Schreiber group). Diagnostic only; no training/inference change.
 
-## R. Higher input resolution 512×2048 (Step 2) — FROM-SCRATCH — VERDICT PENDING
+## R. Higher input resolution 512×2048 (Step 2) — FROM-SCRATCH — **DECLINED (8th lever negative)**
 First Step-2 "representation sensitivity" lever (`docs/HIRES_INVESTIGATION.md`). Attack the faint/
 high-q sensitivity ceiling directly: double the q-axis resolution (1024→2048; χ/HEIGHT unchanged) so
 faint/small high-q peaks get 2× the samples. **RAW-DATA GATE passed:** organic native q-image is
@@ -610,9 +610,49 @@ q-resolution). NEW MODEL LINE (ONNX input → (1,1,512,2048); the 512×1024 depl
   PASS (zero_frac diff 0.03, box-align rel-diff 0.15, q-hist L1 0.16, box count matched after edit 5).
 - **Config + launcher:** `config/DINO/DINO_4scale_swin_hires.py`, `backbone_curation/ssl/
   run_detector_hires.sbatch` (from-scratch, 500ep, lr-drop 280, `--exclude=galvani-cn203`). Run
-  **`dino_hires1`, job 2721965** (launched 2026-08-05). GATE = organic/41 AP + faint/high-q recall
-  probe vs ssl1 (0.586/0.762) AND the deployed ensemble (0.605/0.780); apply the phase-Q label-limit
-  caveat when reading AP.
+  **`dino_hires1`, job 2721965** (launched 2026-08-05, auto-resubmit chain 2721990–93 across the 72h
+  walls). GATE = organic/41 AP + faint/high-q recall probe vs ssl1 (0.586/0.762) AND the deployed
+  ensemble (0.605/0.780); apply the phase-Q label-limit caveat when reading AP.
+
+### VERDICT: NEGATIVE — declined (cancelled at ep405/500, 2026-08-10)
+**AP gate (post-lr-drop plateau, ep300–404 mean):** organic **0.444** vs ssl1 0.563 (**−0.12**);
+41 **0.641** vs ssl1 0.745 (**−0.10**). hires best-ever organic 0.468 @ep256 / 41 0.680 @ep250, both
+below its OWN pre-drop values — the lr-drop produced no gain. The deficit was ~0.13 at ep82 and
+~0.12 at ep404: **it never closed at any point in the schedule**, so this is not an undertraining
+artifact. Remaining 95 epochs at lr 1e-6 could not move it; run cancelled to free the GPU.
+
+**Decisive recall probe** (`tmp_diag/hires_probe.py`, job 2730643; ep405 snapshot; organic; matched
+operating point per the phase-P calibration lesson — ssl1@0.30 det=522 vs hires@0.15 det=538):
+
+| stratum | ssl1 (1024) | hires (2048) | Δ |
+|---|---|---|---|
+| **high-q third** | 0.434 | **0.236** | **−0.198** |
+| low-q third | 0.567 | **0.685** | **+0.118** |
+| mid-q third | 0.585 | 0.549 | −0.036 |
+| **ring** | 0.833 | **0.583** | **−0.250** |
+| segment | 0.528 | 0.474 | −0.054 |
+| faint (vis=1) | 0.330 | 0.271 | −0.058 |
+| recall / precision | 0.537 / 0.841 | 0.477 / 0.725 | −0.060 / −0.116 |
+
+**The lever's own mechanism is refuted, not merely unproven.** The hypothesis was "2× q-samples →
+better high-q sensitivity". The measured effect is the OPPOSITE and is *stratum-specific*: high-q
+recall roughly halved (−0.198) and ring recall collapsed (−0.250), while **low-q recall IMPROVED
+(+0.118)**. Doubling the q-axis did not extend sensitivity outward — it redistributed it toward low
+q. Probable cause: a peak's fixed integrated intensity is spread over 2× the q-pixels, so per-pixel
+contrast DROPS, which hurts precisely the faint low-contrast high-q peaks the lever targeted; rings
+(already the most q-elongated objects) become 2× wider against an unchanged query budget.
+
+**The phase-Q label-limit caveat cannot rescue this**: unlabeled real peaks inflate FPs, i.e. they
+depress *precision*, but the failure here is in **recall**, which is computed against labeled GT and
+is immune to un-annotated peaks. Both the AP gate and the decisive probe agree.
+
+**Transferable lesson (contradicts the pre-registered rationale):** "the raw data carries finer
+detail than the grid exposes" (native 1641×1641 / 1350×1350) was a *necessary* condition for this
+lever and was correctly verified — but it is NOT sufficient. Resolution helps only if per-pixel
+CONTRAST survives the resample; for spread-out low-contrast features it is actively harmful. Any
+future resolution lever must gate on measured post-resample contrast in the target stratum, not on
+native-vs-grid sampling alone. Follow-ups from the Step-1/2 plan remain open: Step 3 = dense
+heatmap/segmentation head, Step 4 = physics analysis-by-synthesis.
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |

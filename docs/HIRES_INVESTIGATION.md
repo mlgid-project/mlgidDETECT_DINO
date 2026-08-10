@@ -1,6 +1,8 @@
 # Higher input resolution (512×2048) — investigation
 
-Status: **implemented, verified, launched — training verdict PENDING.**
+Status: **DECLINED — NEGATIVE on both gates (see "Verdict" at the end). Run cancelled at ep405/500
+on 2026-08-10.** The mechanism this lever proposed is refuted, not merely unproven: doubling the
+q-axis *halved* high-q recall while *improving* low-q recall.
 Branch: `development`. Design record for the first Step-2 "representation sensitivity" lever after
 the seven single-variable levers of the 2026-07 lever log (MODIFICATIONS.md phases I–P) all
 returned null/negative and converged on one conclusion: *the ceiling is the learned
@@ -114,4 +116,53 @@ operating point, per the phase-P calibration lesson) and the label-adjusted view
   **Auto-resubmit chain** (jobs 2721990→2721991→2721992→2721993, each `--dependency=afterany` the
   previous, 5 windows ≈ 15 days capacity): every link auto-resumes from `checkpoint.pth` (written
   each epoch) and NO-OPs once organic eval reaches epoch ≥ 498 (completion guard in the sbatch), so
-  surplus links exit in ~1 s. To stop early, `scancel` the pending links.
+  surplus links exit in ~1 s. To stop early, `scancel` the pending links. **The chain worked as
+  designed** — link 2721990 picked up across the first 72h wall with no manual action.
+
+## Verdict — NEGATIVE, lever declined (2026-08-10, ep405/500)
+
+**AP gate, post-lr-drop plateau (ep300–404 mean):**
+
+| | hires 512×2048 | ssl1 512×1024 | Δ |
+|---|---|---|---|
+| organic | 0.444 | 0.563 | −0.12 |
+| 41 | 0.641 | 0.745 | −0.10 |
+
+hires' best-ever (organic 0.468 @ep256, 41 0.680 @ep250) is *below its own pre-drop level*; the
+lr-drop yielded nothing. The deficit measured ~0.13 at ep82 and ~0.12 at ep404 — **it never closed**,
+which rules out undertraining as the explanation. Cancelled with 95 epochs left at lr 1e-6.
+
+**Decisive recall probe** — `tmp_diag/hires_probe.py` (job 2730643), organic eval, ep405 snapshot.
+Compared at a MATCHED operating point (phase-P calibration lesson): the script sweeps the score
+threshold for both models, caches per-image predictions once and re-matches at every threshold, and
+compares at equal detection count (ssl1@0.30 det=522 ↔ hires@0.15 det=538). q-thirds are computed in
+NORMALIZED q (box centre / WIDTH) so a "third" is the same physical band at both resolutions.
+
+| stratum | ssl1 | hires | Δ |
+|---|---|---|---|
+| **high-q third** | 0.434 | **0.236** | **−0.198** |
+| low-q third | 0.567 | **0.685** | **+0.118** |
+| mid-q third | 0.585 | 0.549 | −0.036 |
+| **ring** | 0.833 | **0.583** | **−0.250** |
+| segment | 0.528 | 0.474 | −0.054 |
+| faint (vis=1) | 0.330 | 0.271 | −0.058 |
+| overall recall | 0.537 | 0.477 | −0.060 |
+| precision | 0.841 | 0.725 | −0.116 |
+
+**Interpretation.** The lever predicted a high-q recall *gain*. It produced a high-q recall *halving*
+alongside a low-q *gain* — a stratum-specific reversal, which is far more informative than a flat
+null. Doubling the q-axis redistributed sensitivity toward low q instead of extending it outward.
+Most likely because a peak's fixed integrated intensity now spreads over 2× the q-pixels, so
+**per-pixel contrast falls**, hitting the faint low-contrast high-q peaks hardest; rings, the most
+q-elongated objects, additionally double in width against an unchanged query budget (ring recall
+−0.250 is the largest single loss).
+
+**The phase-Q label-limit caveat does not apply to this conclusion.** Un-annotated real peaks show up
+as FPs and therefore depress *precision*; the failure here is in *recall*, measured against labeled
+GT and immune to missing annotations. AP gate and probe agree independently.
+
+**Lesson for future resolution levers.** The pre-registered raw-data gate ("native 1641×1641 / 1350×
+1350 is finer than the 1024 grid, so 2048 exposes real detail") was correct and *necessary* — but it
+is **not sufficient**. Resolution pays off only if per-pixel CONTRAST survives the resample. Gate any
+future resolution change on measured post-resample contrast *within the target stratum*, not on
+native-vs-grid sampling alone.
