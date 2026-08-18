@@ -654,6 +654,140 @@ future resolution lever must gate on measured post-resample contrast in the targ
 native-vs-grid sampling alone. Follow-ups from the Step-1/2 plan remain open: Step 3 = dense
 heatmap/segmentation head, Step 4 = physics analysis-by-synthesis.
 
+## S. Prominence probe — the residual recall gap is NOT contrast-limited (2026-08-18)
+
+**Motivation.** Eight consecutive levers declined (phases I–R), and the last one failed specifically
+on *recall* of faint/high-q peaks. Before spending a ninth run, measure whether the peaks the
+deployed ensemble misses are physically distinguishable in the input at all. If they are not, the
+eval is at the information floor of the data and every further modelling lever will also fail.
+
+**Method** (`diagnostics/prominence_probe.py`, job 2754438, ~4 min on one A100). For every labeled
+peak, its **topographic prominence** = 0-dimensional superlevel-set persistence: sweep a threshold
+downward; each local maximum births a component at its own height; when two merge the ELDER (higher
+birth) survives and the younger dies at the merge level, so `prominence = birth − death`. This is
+"how far must I descend from this summit before reaching ground that leads somewhere higher" — a
+measure of how far a peak stands out from its *local* surroundings, independent of the absolute
+background level. No smoothing and no threshold needed: a noise spike simply births a component
+with negligible prominence. Measured on the exact HE'd image the network receives (which is
+quantised to ~110–140 distinct levels, so every distinct value is used as a sweep level and the
+persistence is **exact**, not approximated). Model = deployed ensemble, score>0.3, same q-matcher
+as every prior probe. Core routine verified against hand-computed cases
+(`tmp_diag/prom_core_selftest.py`), including a 0.9-high bump on a 0.5-high hill next to a taller
+peak: naive height says 0.83, correct prominence is 0.33, the code returns 0.33.
+
+**Result — the information-floor hypothesis is REJECTED.**
+
+| set | peaks | recall | separation AUC | median prominence found | missed |
+|---|---|---|---|---|---|
+| organic | 817 | 0.605 | **0.489** | 0.208 | **0.247** |
+| 41 | 1680 | 0.834 | **0.597** | 0.259 | 0.173 |
+
+AUC = P(a random *found* peak is more prominent than a random *missed* one); 0.5 means prominence
+explains nothing. On organic it is **0.489** — below 0.5, i.e. the missed peaks are if anything
+*more* prominent than the found ones. Detection rate is flat right across the prominence deciles
+(0.54–0.66, no trend). On 41 the only dip is the faintest decile (0.599 vs ~0.85 elsewhere).
+
+**What does predict recall: the annotator's confidence, at matched prominence.**
+
+| organic | n | recall | median prominence |
+|---|---|---|---|
+| conf 0.1 | 291 | 0.375 | 0.235 |
+| conf 0.5 | 132 | 0.621 | 0.233 |
+| conf 1.0 | 394 | 0.769 | 0.200 |
+
+Recall doubles across the tiers while prominence is flat — the low-confidence peaks are the *more*
+prominent ones. Cross-tabulating settles it: within each prominence tercile confidence still
+separates hard (organic brightest tercile: 0.326 vs 0.814), while prominence does ~nothing within a
+confidence group (organic conf=1.0 across terciles: 0.755 / 0.729 / 0.814). Same pattern on 41
+(brightest tercile 0.663 vs 0.977).
+
+**Headroom.** Misses more prominent than the median *found* peak: 173 on organic (**+0.212** of GT),
+119 on 41 (**+0.071**). If conf=0.1 peaks reached the conf=1.0 rate: organic 0.605→0.745,
+41 0.834→0.934.
+
+**organic high-q INVERSION.** High-q peaks there are the *most* prominent (0.290 vs 0.078 at low q)
+yet have the *worst* recall (0.475 vs 0.685). Phase R's founding premise — "high-q peaks are faint,
+more q-resolution will help" — was wrong about organic from the start, consistent with its failure.
+
+**Free confirmation of phase Q.** Unmatched detections are not noise: a typical one is more
+prominent than 35–40% of *labeled* peaks.
+
+**Transferable lesson.** Nearly every declined lever (hires, struct-noise, style-match, q-decay,
+physics-sim realism) attacked CONTRAST or appearance realism. This probe says that axis is not
+binding — a coherent post-hoc explanation for the whole 8-negative streak. Do not build another
+contrast lever.
+
+**Caveats.** Prominence is measured in the histogram-equalised model input — the correct domain for
+"can the network see it", but not raw physical contrast. organic is only 8 frames (817 peaks), so
+its effective n is well below 817. The 41 ring/segment split in the probe output is INVALID (n=2):
+`H5GIWAXSDataset` never populates `polar_labels.is_ring`; organic's (24 rings) is fine.
+
+Figure: `diagnostics/prominence_probe.png`. Per-peak records: `tmp_diag/prominence_{organic,41}.npz`.
+
+## T. Near-miss probe — the gap is a χ-SEPARATION problem, not sensitivity (2026-08-18)
+
+**Motivation.** Phase S established there is headroom but not what to build: a missed peak can be
+lost at four different places, each needing a completely different fix.
+
+**Method** (`diagnostics/nearmiss_probe.py`, job 2754964). Replay the deployed ensemble's own
+stages — `900 queries × 2 classes → top-225 → pooled 450 → NMS → score>0.3` — and for every missed
+GT record the best score of a *compatible* box (the q-matcher's own criterion: IoU>0.1 and
+|Δq|<10 px) at each stage, then bucket it. Sanity check passed: recall@0.30 reproduces phase S
+exactly (0.605 / 0.834), so the staging is faithful.
+
+**Result — the model responds at most of the peaks it "misses".**
+
+| bucket (organic, 323 misses) | n | median best score | meaning |
+|---|---|---|---|
+| `ASSIGNMENT` | 69 | **0.90** | qualifying box IS in the final output; Hungarian matching gave it to a neighbouring GT |
+| `BELOW_THRESH` | 84 | 0.17 | survives NMS, scores under 0.30 |
+| `RANK_CUT` | 82 | 0.07 | a query responded but did not survive top-225 |
+| `NO_RESPONSE` | 74 | 0.00 | genuine blindness |
+| `NMS_KILLED` | 14 | 0.41 | NMS removed it |
+
+**77% (organic) / 70% (41) of misses have a model response somewhere.** True blindness is only
+**9.1% of organic GT / 5.0% of 41 GT**. Median best raw query score: detected 0.853, missed 0.134.
+On 41: `BELOW_THRESH` 112, `NO_RESPONSE` 84, `ASSIGNMENT` 46, `RANK_CUT` 30, `NMS_KILLED` 7.
+
+**THE MECHANISM — 84.5% of organic misses sit within 8 q-px of a peak the model DID detect**
+(91.3% within 8 q-px of *any* labeled peak). For `ASSIGNMENT` it is absolute: 100% have a same-q
+neighbour, 94% of those were detected, and the median separation is **3.9 px in χ** — while GT
+boxes are only ~**8 px tall in χ** (of 512). Azimuthally adjacent labels overlap heavily, the model
+emits ONE box, and the matcher scores the other peak as a miss.
+
+Two populations: tightly-packed χ siblings (`ASSIGNMENT`+`NO_RESPONSE`+`NMS_KILLED` = 49% of
+misses, Δχ ≈ 4–6 px) and well-separated same-ring peaks (`BELOW_THRESH`+`RANK_CUT` = 51%,
+Δχ ≈ 36–52 px, unambiguous and about scoring/ranking).
+
+**The labels are correct.** Two labels 3.9 px apart in χ are 0.69° apart, which raised the question
+of annotation over-segmentation. **Confirmed by the user (2026-08-18): the fitted peaks in the
+verification set are correct, hand-labeled, not over-segmented.** The tight-χ population is
+therefore a real model defect, not a labeling artifact — the separation failure stands.
+
+**This explains phase R.** The binding constraint is separation along **χ**. Phase R doubled **q**
+(1024→2048) and deliberately held χ at 512 — the wrong axis — and paid per-pixel contrast for it.
+The observed halving of high-q recall follows directly.
+
+**Operating point.** Dropping 0.30 → 0.05 gives recall 0.605→0.720 (organic) and 0.834→0.911 (41),
+and phase Q means the measured precision cost is overstated. **But this does NOT move the AP gate** —
+AP integrates over thresholds, so re-thresholding is a deployment decision about the shipped
+product, not a lever result. Do not report it as a metric win.
+
+**Not worth pursuing.** `RANK_CUT` boxes are weak (only 23/82 organic above 0.1), so raising
+`num_select` recovers little. NMS tuning is worth ~4% of misses. **Live inconsistency noted:**
+`util/postprocessing.onnx_to_xyxy` hardcodes `num_select=225` while `config/DINO/DINO_4scale_swin.py`
+sets `num_select = 150`.
+
+**INDICATED NEXT LEVER (#9, not yet run): raise the χ/HEIGHT resolution, NOT q.** The χ axis is
+512 px over 90° = 0.176°/px; at feature strides 8/16/32 an 8-px box is ≤1 feature pixel, so the
+network physically cannot separate two peaks 3.9 px apart. Reuse phase R's config-gated
+`polar_shape` machinery (it already generalises). Pre-register the gate as the *separation* metric
+this probe measures — `ASSIGNMENT`-bucket count and recall among same-q sibling peaks — not only
+organic/41 AP. Raw-data gate to verify first: at radius r px the native angular sampling is ~1/r
+rad/px, so finer χ is supported at mid/high q but not near the beamstop.
+
+Per-peak records: `tmp_diag/nearmiss_{organic,41}.npz`.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
@@ -673,6 +807,9 @@ deployment in `backbone_curation/ENSEMBLE_DEPLOY.md`.
   peaks; ~12 FP/img, half high-confidence. Script `diagnostics/diagnose_C.py`, fig `diagnostics/diagnose_C.png`.
   → it's a representation/sensitivity ceiling, not preprocessing. Full analysis + forward ideas
   (self-supervised backbone on real+sim; physics-informed) in **`ROADMAP.md`**.
+  **SUPERSEDED by phases S/T (2026-08-18):** the "sensitivity ceiling" reading is wrong. Prominence
+  does not predict which peaks are missed (AUC 0.489 organic), and 84.5% of misses sit within 8 q-px
+  of a peak the model DID detect. It is a χ-SEPARATION ceiling, not a sensitivity one.
 - **Physics wins validated & shelved** (`diagnostics/{diagnose_rings,sweep_nms,viz_fp}.py` + PNGs):
   symmetry is out-of-frame (single 0–90° quadrant); ring-aware FP rejection fails (FPs are ON rings,
   ~93% within 8px-q of a real peak); NMS tuning doesn't help (FPs aren't duplicates). **The FPs are
