@@ -179,6 +179,25 @@ class SimulationConfig():
     hot_pixels_p: float = 0.001
     hot_pixels_prob: float = 0.2
     prob_single_obj: float = 0.1
+    # --- azimuthal peak clusters (MODIFICATIONS.md U; training-only, OFF by default) ---------
+    # Real GIWAXS frames are dominated by several peaks sharing one q (one ring) at different chi:
+    # 85.9% of organic labeled peaks have a same-q sibling within 8 q-px, median chi-gap 49.5 px but
+    # 12.5% of gaps below 5 px. The stock simulator cannot produce that: add_peaks_on_rings spaces
+    # peaks on a fixed [0,1/6,2/6,3/6] grid of a ring >=200 px tall (so >=33 px apart), fires on only
+    # 10% of images, and caps at 4 per ring. Probes S/T showed 84.5% of missed peaks sit within
+    # 8 q-px of a DETECTED peak (median chi-gap 3.9 px) -- i.e. the model was never trained on the
+    # configuration that dominates its errors.
+    use_peak_clusters: bool = False
+    cluster_extra_ratio: float = 0.6      # extra sibling peaks as a fraction of the segment count
+    cluster_tight_frac: float = 0.32      # share of gaps drawn from the TIGHT component
+    cluster_tight_gap_px: tuple = (1.0, 6.0)
+    cluster_broad_lognorm: tuple = (4.007, 0.95)   # ln(55) median, sigma -- broad component
+    # P(n extra siblings) for a seeded peak, from the organic cluster-size histogram
+    cluster_size_p: tuple = (0.358, 0.265, 0.178, 0.069, 0.050, 0.034, 0.016, 0.031)
+    cluster_q_jitter_px: float = 1.0      # siblings share the ring: q jitter well inside the 8 px tol
+    cluster_int_range: tuple = (0.4, 1.2) # sibling intensity relative to its parent
+    cluster_awidth_range: tuple = (0.6, 1.4)
+    cluster_width_range: tuple = (0.8, 1.2)
 
 
 class FastSimulation(object):
@@ -221,7 +240,13 @@ class FastSimulation(object):
         # it would silently clobber a configured higher-resolution WIDTH. Drop the reset; keep only
         # the 50% re-init quirk the ssl1/baseline runs trained with. Byte-identical at WIDTH=1024.)
         if random.random() < 0.5:
-            self.__init__()
+            # Preserve sim_config and device across the re-init. The bare self.__init__() reset
+            # sim_config to a DEFAULT SimulationConfig (and device to 'cuda'), silently discarding
+            # any configured simulation on ~half of all calls. Values are identical for the default
+            # path (SimulationConfig has constant defaults and its construction consumes no RNG), so
+            # this stays byte-identical for every prior run -- verified by gate G1 of
+            # diagnostics/verify_clusters.py.
+            self.__init__(sim_config=self.sim_config, device=self.device)
 
         self.detector_mask = False
         self.create_detector_mask()
@@ -397,6 +422,24 @@ class FastSimulation(object):
         a_widths = a_widths[indices]
         is_ring = is_ring[indices]
 
+        # Azimuthal peak clusters (MODIFICATIONS.md U) -- gated, default off. COMPUTED HERE, while
+        # pos/widths/a_pos/a_widths are still the per-object arrays aligned with is_ring: the
+        # add_peaks_on_rings call below REBINDS those four names (to None on the ~90% of calls where
+        # it declines), so anything indexing them afterwards is either None or mis-length. The
+        # result is appended after that block, once boxes/intensities/is_ring are final.
+        _cluster_add = None
+        if getattr(sc, 'use_peak_clusters', False):
+            _seg = torch.logical_not(is_ring.bool())
+            if bool(_seg.any()):
+                _c = self.add_peak_clusters(pos[_seg], widths[_seg], a_pos[_seg], a_widths[_seg],
+                                            intensities[_seg])
+                if _c[0] is not None and len(_c[0]):
+                    _cb = self._boxes_from_positions(*_c[:4])
+                    _keep = self.filter_peaks_detector_gap(_cb)
+                    _cb, _cint = _cb[_keep], _c[4][_keep]
+                    if len(_cb):
+                        _cluster_add = (_cb, _cint)
+
         #add peaks on rings
         pos, widths, a_pos, a_widths, intensities_peaks =   self.add_peaks_on_rings(pos[is_ring], widths[is_ring], boxes[is_ring], intensities[is_ring])
         if pos is not None:
@@ -407,7 +450,12 @@ class FastSimulation(object):
             boxes = torch.cat([boxes, boxes_peaks_on_rings])
             intensities = torch.cat([intensities, intensities_peaks])
             is_ring = torch.cat([is_ring, torch.zeros((len(intensities_peaks)), device=self.device)])
-        
+
+        if _cluster_add is not None:
+            boxes = torch.cat([boxes, _cluster_add[0]])
+            intensities = torch.cat([intensities, _cluster_add[1]])
+            is_ring = torch.cat([is_ring, torch.zeros(len(_cluster_add[1]), device=self.device)])
+
         if not boxes.shape[0]:
             return self.simulate_labels()
         
@@ -440,6 +488,84 @@ class FastSimulation(object):
         return boxes
         
     
+
+    def _sample_chi_gaps(self, n):
+        """chi-gaps for sibling peaks: a two-component mixture whose quantiles bracket the measured
+        organic distribution (p5 2.5 / p10 3.9 / p25 20.5 / p50 49.5 / p75 113.7 / p90 184.8 px).
+        Deliberately PARAMETRIC with rounded constants rather than an empirical resample of eval
+        labels -- 41 is then an uncontaminated gate (MODIFICATIONS.md U)."""
+        sc = self.sim_config
+        lo, hi = sc.cluster_tight_gap_px
+        tight = torch.rand(n, device=self.device) < sc.cluster_tight_frac
+        g_tight = torch.rand(n, device=self.device) * (hi - lo) + lo
+        mu, sigma = sc.cluster_broad_lognorm
+        g_broad = torch.exp(torch.randn(n, device=self.device) * sigma + mu)
+        return torch.where(tight, g_tight, g_broad)
+
+    def add_peak_clusters(self, pos, widths, a_pos, a_widths, intensities):
+        """Spawn azimuthal siblings at the SAME q for a fraction of segment peaks.
+
+        Called AFTER the generation-time NMS (like add_peaks_on_rings), so the deliberately
+        overlapping labels are not deleted by it -- no change to existing filtering behaviour.
+        Returns (pos, widths, a_pos, a_widths, intensities) for the new peaks, or None.
+        """
+        sc = self.sim_config
+        n_seg = pos.shape[0]
+        if n_seg == 0:
+            return None, None, None, None, None
+        p = torch.tensor(sc.cluster_size_p, device=self.device, dtype=torch.float32)
+        p = p / p.sum()
+        mean_sib = float((p * torch.arange(len(p), device=self.device, dtype=torch.float32)).sum())
+        if mean_sib <= 0:
+            return None, None, None, None, None
+        # seed probability chosen so the expected number of extras is cluster_extra_ratio * n_seg,
+        # independent of obj_num
+        seed_p = min(1.0, sc.cluster_extra_ratio / mean_sib)
+        seeded = torch.rand(n_seg, device=self.device) < seed_p
+        if not bool(seeded.any()):
+            return None, None, None, None, None
+        idx = seeded.nonzero(as_tuple=True)[0]
+        n_sib = torch.multinomial(p, len(idx), replacement=True)          # extras per seeded peak
+        keep = n_sib > 0
+        idx, n_sib = idx[keep], n_sib[keep]
+        if len(idx) == 0:
+            return None, None, None, None, None
+        parent = torch.repeat_interleave(idx, n_sib)                       # one row per new sibling
+        m = parent.shape[0]
+
+        # cumulative chi-offsets so members of one cluster are spread along the ring, not stacked
+        gaps = self._sample_chi_gaps(m)
+        sign = torch.where(torch.rand(m, device=self.device) < 0.5, -1.0, 1.0)
+        # segmented cumulative sum: offsets restart at each new parent, so a cluster's members
+        # spread ALONG the ring instead of stacking at one offset
+        newgrp = torch.ones(m, dtype=torch.bool, device=self.device)
+        newgrp[1:] = parent[1:] != parent[:-1]
+        csum = torch.cumsum(gaps, 0)
+        base = torch.zeros(m, device=self.device)
+        starts = newgrp.nonzero(as_tuple=True)[0]
+        base[starts] = csum[starts] - gaps[starts]      # csum immediately before each group
+        base = torch.cummax(base, 0).values             # propagate to the rest of the group
+        offs = (csum - base) * sign
+
+        u = lambda rng: torch.rand(m, device=self.device) * (rng[1] - rng[0]) + rng[0]
+        new_pos = pos[parent] + torch.randn(m, device=self.device) * sc.cluster_q_jitter_px
+        new_widths = widths[parent] * u(sc.cluster_width_range)
+        new_a_pos = a_pos[parent] + offs
+        new_a_widths = a_widths[parent] * u(sc.cluster_awidth_range)
+        new_int = intensities[parent] * u(sc.cluster_int_range)
+
+        # Keep only siblings inside the measured chi range. Physically a peak outside 0..90 deg is
+        # not observed; mechanically this is REQUIRED, because clamp_boxes() runs AFTER the
+        # (y1 < y2) validity filter, so a box lying wholly outside the image clamps to ZERO height
+        # and img_from_labels then evaluates 0/0 in
+        #   (y - a_pos)**2 / a_widths**2
+        # producing a NaN image, which simulate_img silently discards and regenerates. Unfiltered,
+        # ~31% of siblings landed out of range and NaN'd 2 frames in 3.
+        keep = (new_a_pos >= 0) & (new_a_pos <= HEIGHT)
+        if not bool(keep.any()):
+            return None, None, None, None, None
+        return (new_pos[keep], new_widths[keep], new_a_pos[keep],
+                new_a_widths[keep], new_int[keep])
 
     def add_peaks_on_rings(self, x_position, widths, boxes, ring_intensities):
         #no peaks on rings

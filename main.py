@@ -65,7 +65,22 @@ class SimulationDataset(torch.utils.data.Dataset):
         if ph is not None:
             import simulation as _sim
             _sim.HEIGHT, _sim.WIDTH = int(ph[0]), int(ph[1])
-        self.simulation = FastSimulation(device=self.device)
+        # Azimuthal peak clusters (training-only; MODIFICATIONS.md U): several peaks sharing one q
+        # at different chi, with the chi-gap distribution the real data actually has (12.5% of gaps
+        # below 5 px). Probes S/T showed 84.5% of missed peaks sit within 8 q-px of a DETECTED peak,
+        # i.e. the stock simulator never shows the configuration that dominates the errors.
+        # Off unless use_peak_clusters => sim_config=None => byte-identical to every prior run.
+        _sim_config = None
+        if getattr(args, 'use_peak_clusters', False):
+            from simulation import SimulationConfig
+            _sim_config = SimulationConfig()
+            _sim_config.use_peak_clusters = True
+            for _k in ('cluster_extra_ratio', 'cluster_tight_frac', 'cluster_tight_gap_px',
+                       'cluster_broad_lognorm', 'cluster_size_p', 'cluster_q_jitter_px',
+                       'cluster_int_range', 'cluster_awidth_range', 'cluster_width_range'):
+                if hasattr(args, _k):
+                    setattr(_sim_config, _k, getattr(args, _k))
+        self.simulation = FastSimulation(sim_config=_sim_config, device=self.device)
         # Style-transfer input matching (training-only; docs/STYLE_TRANSFER_INVESTIGATION.md):
         # match synthetic pixel intensities onto a real-corpus reference so faint peaks look
         # real. Off unless use_style_match; inference/preprocessing/ONNX untouched.

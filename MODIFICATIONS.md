@@ -788,6 +788,114 @@ rad/px, so finer χ is supported at mid/high q but not near the beamstop.
 
 Per-peak records: `tmp_diag/nearmiss_{organic,41}.npz`.
 
+### T2. Does this DETR need NMS at all? — **NO CHANGE; NMS is not the bottleneck** (2026-08-18)
+
+Direct follow-up to T. NMS encodes "high overlap ⇒ duplicate", which is false for genuinely
+adjacent peaks: two 8.5 px boxes at separation *d* have IoU (8.5−d)/(8.5+d), crossing the deployed
+`POSTPROCESSING_NMSIOU_SEG = 0.4` at d ≈ 3.6 px. So NMS cannot be tuned to keep real close pairs and
+drop real duplicates — only to trade one for the other. DETR-family models are trained with
+one-to-one Hungarian matching so that duplicate suppression is *learned*; DINO's reference inference
+runs no NMS. `diagnostics/sweep_nms.py` had only ever swept DOWNWARD (0.4→0.1); the loosening
+direction was untested.
+
+`diagnostics/nms_sweep_single.py` (job 2755004), **single model ssl1, no ensemble** — caches each
+frame's pre-NMS top-225 once, then re-runs NMS at 11 settings including fully off.
+
+| organic | ap_total | recall | precision | tight-pair recall (χ-gap <5 px, n=165) |
+|---|---|---|---|---|
+| seg_iou = 0.40 (deployed) | 0.5683 | 0.537 | 0.841 | 0.352 |
+| seg_iou = 0.70 (best AP) | 0.5710 | 0.545 | 0.833 | 0.352 |
+| NMS FULLY OFF | 0.5413 | 0.548 | 0.797 | 0.358 |
+
+| 41 | ap_total | recall | precision | tight-pair recall (n=176) |
+|---|---|---|---|---|
+| seg_iou = 0.40 (deployed) | 0.7441 | 0.772 | 0.705 | 0.449 |
+| NMS FULLY OFF | 0.6902 | 0.774 | 0.664 | 0.455 |
+
+**VERDICT: keep NMS at the deployed settings.** Removing it entirely buys **+0.006** tight-pair
+recall on both sets while costing **−0.027 / −0.054 ap_total** and ~4 points of precision. The AP
+optimum (organic 0.70, 41 0.20–0.30) is within noise of 0.40 on 8 / 41 frames, so no change is
+warranted. Postprocessing and the ONNX path stay untouched.
+
+**What this proves, and it is the useful part:** the model is not emitting a second box for tight
+pairs *at all* — there is nothing for NMS to suppress. Combined with T (`NMS_KILLED` only 4.3% /
+2.5% of misses), the fix must be UPSTREAM of postprocessing. That is what phase U tests.
+
+Incidental: top-k duplicate queries (one query selected as BOTH classes, which per-class NMS cannot
+remove) are only 0.9% / 0.8% of selections — a non-issue.
+
+**Single-model ssl1 baseline established here** (`checkpoint.pth` = last epoch, so slightly below
+the recorded best-AP 0.586): organic ap_total **0.5683** / ap_high 0.7004; 41 ap_total **0.7441** /
+ap_high 0.8569. This is the control for phase U — all prior ensemble numbers are superseded for
+research purposes (user directive 2026-08-18: single model only until further notice).
+
+## U. Azimuthal peak clusters in the simulator (Step 3) — FROM-SCRATCH — **PRE-REGISTERED, LAUNCHED**
+
+**Motivation (mechanism established, not guessed).** Phases S/T showed the recall gap is a
+peak-SEPARATION failure along χ: 84.5% of missed peaks sit within 8 q-px of a peak the model DID
+detect, median χ-separation 3.9 px against ~8.5 px-tall boxes. T2 then ruled out postprocessing.
+That leaves the training data.
+
+**Root cause, located in `simulation.py`.** The stock simulator *structurally cannot* produce a
+tight azimuthal cluster — two independent mechanisms remove it:
+1. `add_peaks_on_rings` places peaks on a fixed `[0, 1/6, 2/6, 3/6]` grid of the ring's χ-extent,
+   gated to rings with `max_a_width >= 100` (≥200 px tall), so consecutive peaks are **≥33 px
+   apart**; it fires on only **10% of images** and caps at **4 peaks per ring**.
+2. `filter_nms` with `min_ring_seg_nms = 0.0` deletes *any* overlapping label pair, on boxes
+   inflated to ±3.5·`a_width` in χ.
+
+**Measured target (the spec).** Real labeled data, same ±8 q-px tolerance as the evaluation matcher:
+
+| | organic | 41 |
+|---|---|---|
+| peaks sharing a q-position | **85.9%** | 54.9% |
+| largest cluster | 11 peaks | 8 |
+| median χ-gap in a cluster | 49.5 px | 93.4 px |
+| gaps **< 5 px** | **12.5%** | 13.2% |
+| gaps < 33 px (below the simulator's floor) | 34.9% | 23.6% |
+| GT box χ-height | median 8.5 px | median 79.3 px |
+
+Box heights are already right (`max_a_width/40` yields 5–10 px vs a real median of 8.5), so only
+**spacing, frequency and count** change.
+
+**Design** — `use_peak_clusters`, opt-in, default off (`sim_config=None` ⇒ byte-identical to every
+prior run). `FastSimulation.add_peak_clusters` spawns same-q azimuthal siblings for a fraction of
+segment peaks, appended **after** the generation-time NMS exactly as `add_peaks_on_rings` already
+does — so no existing filtering behaviour changes. Sibling count from the measured cluster-size
+histogram (up to 7 extras vs the stock cap of 4); χ-offsets are a segmented cumulative sum so a
+cluster spreads along the ring rather than stacking. Seed probability is normalised by
+`cluster_extra_ratio` so the peak count is independent of `obj_num`.
+
+**Leakage discipline.** The χ-gap prior is a **parametric** two-component mixture (18% uniform
+1–7 px; lognormal median 55 px, σ 0.95) with constants rounded from **organic only** — not an
+empirical resample of eval labels. **41 is therefore an uncontaminated gate.** (45.h5 would have
+been the clean third set but is gone, and the user directed it be ignored on 2026-07-20.)
+
+**Control** = ssl1 under identical settings (T2): organic ap_total 0.5683 / 41 0.7441; tight-pair
+(<5 px) recall 0.352 / 0.449.
+
+**PRE-REGISTERED GATE.** AP over all peaks will barely move even if the lever works — the tight
+population is only ~12% of gaps — so AP alone is the wrong read:
+- **PRIMARY: same-q sibling recall by χ-gap bucket** (<5, 5–10, 10–20, 20–33, ≥33 px) at a
+  **matched operating point**, vs the control table above. Success = a material gain in the <5 and
+  5–10 px buckets.
+- **SECONDARY: organic/41 ap_total must not regress.**
+- Matched-operating-point comparison throughout (phase-P calibration lesson).
+- **41 carries the verdict** (uncontaminated); organic is secondary.
+
+**Pre-launch verification** (`diagnostics/verify_clusters.py`, hard gates; the training job is
+submitted `--dependency=afterok` so a failure cannot start the run): G1 the default path is
+bit-identical to pre-patch `simulation.py` under matched RNG seeds; G2 the synthetic χ-gap
+distribution matches the real one (p10/p25/p50/p75 within 2×, frac<5 px in [0.06, 0.25]);
+G3 clustering present with size ≥5; G4 box sanity and peaks/frame; G5 rendered signal actually
+appears inside the new boxes; G6 `SimulationDataset` smoke through the real config.
+Figure: `diagnostics/verify_clusters.png`.
+
+Files: `simulation.py` (gated additions only), `main.py` (one gated block),
+`config/DINO/DINO_4scale_swin_clusters.py`, `backbone_curation/ssl/run_detector_clusters.sbatch`
+(chained, completion-guarded), `diagnostics/verify_clusters.py`.
+Run: `detector_runs/dino_clusters1`, 500 ep, lr-drop 280, 512×1024.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
