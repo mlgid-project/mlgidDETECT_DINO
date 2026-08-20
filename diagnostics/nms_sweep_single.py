@@ -43,7 +43,10 @@ from util.postprocessing import box_cxcywh_to_xyxy
 from util.matchers import get_matcher
 from diagnostics.prominence_probe import build_model_from_ckpt, CKPT_A, CONFIG, DSETS, OUT
 
-CKPT = CKPT_A                 # dino_ssl1 — best SINGLE model. No ensemble (user directive).
+# SINGLE model only (user directive: no ensemble). Defaults to ssl1; override via env to
+# point the same sweep at another run's checkpoint (e.g. the phase-U clusters run).
+CKPT = os.environ.get('SWEEP_CKPT', CKPT_A)
+SWEEP_TAG = os.environ.get('SWEEP_TAG', 'ssl1')
 NUM_SELECT = 225              # must match util.postprocessing.onnx_to_xyxy
 SCORE_FLOOR = 0.1             # mirrors main.evaluate_giwaxs_ap / ensemble_eval AP path
 ST = 0.30                     # operating point for recall/precision, as in probes S and T
@@ -180,7 +183,7 @@ def main():
         print(f"\n########## {tag} ##########", flush=True)
         frames, dupfrac = collect(tag, path, model, a, device)
         gaps = np.concatenate([f['gap'] for f in frames])
-        print(f"\n{'='*112}\n{tag.upper()}  ssl1 single model, {len(frames)} frames, "
+        print(f"\n{'='*112}\n{tag.upper()}  {SWEEP_TAG} single model, {len(frames)} frames, "
               f"{len(gaps)} peaks   ({np.mean(np.isfinite(gaps)):.1%} have a same-q sibling)\n{'='*112}")
         hdr = (f"  {'setting':20s} {'ap_total':>9s} {'ap_high':>8s} {'recall':>7s} {'prec':>6s} "
                f"{'det/fr':>7s} | recall by chi-gap to nearest same-q peak")
@@ -207,8 +210,8 @@ def main():
                   f"tight-pair recall (<5px) {r['gap_0']-base['gap_0']:+.3f}")
         summary[tag] = dict(rows=rows, dup_frac=dupfrac,
                             sibling_frac=float(np.mean(np.isfinite(gaps))))
-    json.dump(summary, open(os.path.join(OUT, 'nms_sweep_single.json'), 'w'), indent=2, default=str)
-    print("\nwrote nms_sweep_single.json")
+    json.dump(summary, open(os.path.join(OUT, f'nms_sweep_{SWEEP_TAG}.json'), 'w'), indent=2, default=str)
+    print(f"\nwrote nms_sweep_{SWEEP_TAG}.json")
     print("PROBE DONE")
 
 
