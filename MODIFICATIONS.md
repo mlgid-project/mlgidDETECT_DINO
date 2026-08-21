@@ -829,7 +829,7 @@ the recorded best-AP 0.586): organic ap_total **0.5683** / ap_high 0.7004; 41 ap
 ap_high 0.8569. This is the control for phase U — all prior ensemble numbers are superseded for
 research purposes (user directive 2026-08-18: single model only until further notice).
 
-## U. Azimuthal peak clusters in the simulator (Step 3) — FROM-SCRATCH — **PRE-REGISTERED, LAUNCHED**
+## U. Azimuthal peak clusters in the simulator (Step 3) — FROM-SCRATCH — **DECLINED (9th lever negative)**
 
 **Motivation (mechanism established, not guessed).** Phases S/T showed the recall gap is a
 peak-SEPARATION failure along χ: 84.5% of missed peaks sit within 8 q-px of a peak the model DID
@@ -895,6 +895,85 @@ Files: `simulation.py` (gated additions only), `main.py` (one gated block),
 `config/DINO/DINO_4scale_swin_clusters.py`, `backbone_curation/ssl/run_detector_clusters.sbatch`
 (chained, completion-guarded), `diagnostics/verify_clusters.py`.
 Run: `detector_runs/dino_clusters1`, 500 ep, lr-drop 280, 512×1024.
+
+### VERDICT: NEGATIVE — declined (cancelled at ep446/500, 2026-08-21)
+
+**The pre-registered primary gate fails.** `diagnostics/clusters_gate.py` (job 2764300) compares
+ssl1 vs `dino_clusters1` at a **matched operating point** — sweeping the score threshold per model
+and comparing where the detection count (and separately the precision) matches.
+
+Organic, matched detection count (ssl1@0.30 = 65.2/fr ↔ clusters@0.50 = 64.1/fr):
+
+| χ-gap | n | ssl1 | clusters | Δ |
+|---|---|---|---|---|
+| **< 5 px** | 165 | 0.352 | 0.321 | **−0.030** |
+| **5–10 px** | 52 | 0.423 | 0.385 | **−0.038** |
+| 10–20 px | 59 | 0.390 | 0.458 | +0.068 |
+| 20–33 px | 92 | 0.620 | 0.576 | −0.043 |
+| ≥ 33 px | 358 | 0.612 | 0.567 | −0.045 |
+
+41 (the uncontaminated gate), matched at 44.9 ↔ 45.0/fr: `<5` **+0.028**, `5–10` **−0.080**,
+`10–20` 0.000, `20–33` +0.054, `≥33` −0.003. Opposite signs to organic, all within a handful of
+peaks (organic `<5` n=165 ⇒ −0.030 is ~5 peaks). **No effect on the target stratum.**
+At matched PRECISION organic is worse still: every bucket negative, `<5` −0.091.
+Secondary gate also fails: ap_total −0.024 organic / −0.040 on 41.
+
+**The trap this avoided.** At the *deployed* threshold the lever looked like a clear win — every
+χ-gap bucket up, `<5` +0.030, `10–20` +0.220. But the cluster model emits **99.9 det/frame vs
+ssl1's 65.2** at that threshold, with precision 0.635 vs 0.841. The lift appeared in EVERY stratum
+including `≥33 px`, which this lever cannot plausibly affect — the tell that it was a calibration
+artefact, not a real gain. Reading the fixed-threshold table would have recorded a false positive.
+This is the phase-P lesson holding under a case where it mattered.
+
+**What the model actually learned.** It emits 53% more detections but is no better at separating
+close pairs at equal volume. Training on tight pairs taught it *that more peaks exist*, not *how to
+resolve them*.
+
+**Status of the χ-resolution hypothesis — ELIMINATIVE, not positive.** Phase U rules out the
+training-data explanation ("the model never saw tight pairs"), which was the cheaper of the two
+candidates. It does NOT independently demonstrate that finer χ sampling would help. The remaining
+argument is architectural and a priori: `return_interm_indices = [1,2,3]` makes the finest feature
+level stride 8, so peaks 3.9 px apart fall inside one feature cell. Suggestive but weak supporting
+detail: on organic the only positive bucket is `10–20 px` (+0.068, n=59 ⇒ ~4 peaks) — 1–2.5 feature
+cells, i.e. resolvable — while `<5 px` (half a cell) is negative. Too small to lean on.
+
+**Do NOT launch a resolution run on this basis.** Nine levers have now been declined, several of
+them on a priori mechanism arguments that measurement later refuted (phase R most directly). The
+next step is the cheap discriminating test in phase V below, not another multi-day run.
+
+**Artefacts.** `diagnostics/clusters_gate.py` is the reusable matched-operating-point gate for the
+sibling strata — use it for every future lever aimed at peak separation. Run kept at
+`detector_runs/dino_clusters1` (ep446); snapshot at `tmp_diag/clusters_probe_ckpt.pth`.
+The simulator changes stay in-tree, gated off by default (`use_peak_clusters=False`), so the
+default path is unaffected — gate G1 proved bit-identity.
+
+**Two real bugs found while building this, both fixed and both pre-existing hazards:**
+1. `simulate_img` called `self.__init__()` with NO arguments on 50% of calls, resetting
+   `sim_config` to defaults and `device` to `'cuda'` — it would silently discard ANY configured
+   simulation on half of all images. Any future sim-config lever would have hit this.
+2. `img_from_labels` divides by `a_widths ** 2`, and `clamp_boxes` runs AFTER the `y1 < y2`
+   validity filter, so a box lying wholly outside the image clamps to ZERO height ⇒ `0/0` ⇒ NaN ⇒
+   `simulate_img` silently discards and regenerates the frame. Unfiltered, 31% of siblings landed
+   out of χ range and NaN'd 2 frames in 3, biasing survivors sparse. **This landmine is still live
+   for anyone who generates an out-of-range label.**
+
+## V. Synthetic separation ladder — the cheap test that should precede any χ-resolution run — NOT YET RUN
+
+Before spending 3 days on 512×1024 → 1024×1024, measure the architecture's actual resolution limit
+directly. Feed **synthetic** frames containing peak pairs at controlled χ-separations
+(2, 4, 6, 8, 12, 16, 24, 32 px) and measure, per separation, whether the model emits TWO boxes or
+one. No training; ~1 GPU-hour.
+
+Run it on **`dino_clusters1`**, which was trained on exactly this distribution — that is what makes
+it decisive:
+- limit ≈ 8 px (one feature cell) and clean above it → stride-limited ⇒ finer χ should move the
+  limit to ~4 px ⇒ the resolution lever is justified;
+- limit ≫ 8 px, unrelated to stride → something else binds; resolution will not fix it;
+- **resolves 4 px pairs fine in SYNTHETIC but not in real data** → the limit is not resolution at
+  all but the sim-to-real gap, and the resolution lever would be the 10th wasted run.
+
+The third outcome is the one that makes this worth running first, and no measurement so far can
+rule it out.
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
