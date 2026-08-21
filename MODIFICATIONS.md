@@ -957,7 +957,7 @@ default path is unaffected — gate G1 proved bit-identity.
    out of χ range and NaN'd 2 frames in 3, biasing survivors sparse. **This landmine is still live
    for anyone who generates an out-of-range label.**
 
-## V. Synthetic separation ladder — the cheap test that should precede any χ-resolution run — NOT YET RUN
+## V. Synthetic separation ladder — **RUN; KILLS BOTH RESOLUTION ROUTES** (2026-08-21)
 
 Before spending 3 days on 512×1024 → 1024×1024, measure the architecture's actual resolution limit
 directly. Feed **synthetic** frames containing peak pairs at controlled χ-separations
@@ -974,6 +974,64 @@ it decisive:
 
 The third outcome is the one that makes this worth running first, and no measurement so far can
 rule it out.
+
+### RESULT — the limit is ~16 px and NOTHING we control moves it
+
+`diagnostics/separation_ladder.py` (jobs 2764330, 2764332). Two peaks planted at a known χ-gap,
+8 pairs/frame × 20 frames × 10 rungs, rendered through the FULL appearance pipeline (patch
+`simulate_labels`, call the real `simulate_img`), box size = measured real organic GT medians
+(q-width 10.6 px, χ-height 8.5 px). One fixed image set for every model. Matched operating point =
+the threshold whose detection count is nearest the true planted-peak count.
+
+| χ-separation | ssl1 | clusters | 5scale (stride-4) |
+|---|---|---|---|
+| 4 px | 0.130 | 0.087 | 0.203 |
+| 8 px | 0.037 | 0.029 | 0.059 |
+| 12 px | 0.049 | **0.392** | 0.273 |
+| **16 px** | 0.662 | 0.654 | 0.579 |
+| 32 px | 0.761 | 0.694 | 0.716 |
+| 64 px | 0.702 | 0.718 | 0.580 |
+
+**RESOLUTION LIMIT (first rung ≥0.5 resolved): 16 px for ALL THREE MODELS.**
+
+**Below 16 px the failures are MERGES, not misses** (0.52–0.87 merged) — the model sees the feature
+and emits a single box. A pure resolution failure.
+
+**What this kills.**
+1. **The χ-resolution lever as scoped (512→1024) would NOT have worked.** Real gaps are 3.9 px
+   median; doubling makes them 7.8 px, still far below the 16 px wall. You would need **4×**
+   (χ=2048, ~4× the pixels, ~2 weeks) to reach it. Had we launched on the a priori stride argument
+   this would have been the 10th negative lever.
+2. **Feature stride is NOT the mechanism.** `dino_5scale_scratch` (`return_interm_indices=[0,1,2,3]`,
+   a STRIDE-4 level, same backbone init and recipe as ssl1, same 512×1024 grid) has the *same*
+   16 px limit — 4× the feature resolution changed nothing, and it is worse at large separations.
+   This re-examines a model previously declined on AP, which we now know cannot see this effect.
+3. **Training is not the mechanism** — clusters1 saw this exact distribution (phase U). Its only
+   gain is at 12 px (0.392 vs 0.049), i.e. right at the boundary: training helps you exploit
+   resolution you have, it cannot create resolution you lack.
+
+**Also eliminated:** NMS (two 8.5 px boxes at 8 px separation have IoU 0.03, far under the 0.4
+threshold — though NMS DOES explain the 2 px rung, IoU 0.62); and image information (at 8 px the
+rendered Gaussians, σ≈2.4 px, are 3.3σ apart and plainly separable in the pixels, yet 87% merge).
+
+**Sim-to-real is not the escape either:** converting to per-peak recall, synthetic 4 px gives ssl1
+0.49 vs real `<5 px` 0.352 — same ballpark, so the model behaves on synthetic tight pairs much as
+on real ones.
+
+**MEASUREMENT CAVEAT.** ssl1 gave 0.176 (job 2764330) then 0.130 (2764332) at 4 px: run-to-run
+noise ≈ ±0.05 at small separations, because `np.random` is not seeded per frame in the appearance
+pipeline (only `random` and `torch` are). The 16 px crossing is stable (0.664 / 0.662) so the LIMIT
+is solid, but small-separation deltas are not — in particular the 5-scale "gain" at 4 px
+(0.203 vs 0.130) is **within noise and is not claimed**. Fix the seeding before reusing this script
+for fine comparisons.
+
+**OPEN — the mechanism is now genuinely unknown.** Not training, not stride, not NMS, not image
+information. Something in the detection head collapses two clearly-separable peaks into one output.
+**Next discriminating measurement (small change to this script):** the `merged` category cannot
+distinguish (a) the model emitting ONE box from (b) it emitting TWO boxes both badly localised near
+the midpoint so only one is matched. These need opposite fixes — query/assignment capacity vs
+regression precision. Count raw detections near each pair BEFORE matching and record their
+positions. Same ~20 min. Do this before any further architectural lever.
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
