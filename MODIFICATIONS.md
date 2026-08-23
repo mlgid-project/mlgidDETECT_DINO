@@ -1159,6 +1159,61 @@ either ineffective or capped below the 3.9 px the data needs. Ten levers decline
 here should target *why the head refuses to emit a second query* below the wall, not the features
 feeding it.
 
+## W. Query-suppression probe — the second peak is **NEVER PROPOSED**, not suppressed (2026-08-23)
+
+`diagnostics/query_suppression_probe.py`, job 2776912, 2 min, existing checkpoints, no training.
+
+Phase V left one question: the head emits ONE box below the wall — is the second peak *scored down*
+(classification suppression) or *never put forward*? The leading hypothesis was DINO's contrastive
+denoising: with `dn_box_noise_scale = 0.4` (`dn_components.py:81-89`) negative DN queries sit
+0.2–0.4 × box-dimension from truth — **1.7–3.4 px** for an 8.5 px χ box, right where real second peaks
+live (median real χ-gap 3.9 px). If that were the mechanism a box would land on peak 2 and be scored
+as background.
+
+Because DINO is two-stage, both stages are readable — `out['interm_outputs']` is the encoder's
+proposal, `out['pred_logits']` the decoder's output. All 900 queries read raw: no top-k (deployed
+keeps 225), no NMS, no threshold, so a query at score 1e-4 is still visible.
+
+**ssl1 — the answer is (C), and it is not close:**
+
+| sep px | (A) suppressed | (B) dec absent | (C) enc absent | med score 2nd peak | med score 1st peak |
+|---|---|---|---|---|---|
+| 6 | 0.008 | 0.992 | 0.969 | 0.0050 | 0.0080 |
+| 8 | 0.022 | 0.978 | 0.948 | 0.0031 | 0.0077 |
+| 12 | 0.169 | 0.548 | 0.234 | 0.2144 | 0.1836 |
+| 16 | 0.007 | **0.000** | **0.000** | 0.7640 | 0.8990 |
+
+Below the wall **neither** peak carries a query. The scatter of every decoder query near a pair shows
+why: at 16 px the high-scoring queries form two clean columns at ±8 px; at 8 px they collapse into a
+single pile at **offset ≈ 0 — the midpoint** — with nothing at ±4. The encoder proposes *one object,
+centred between the two peaks*, and the decoder faithfully reports it.
+
+**So the DN lever is REFUTED before spending anything.** You cannot un-suppress a detection that was
+never proposed. Shrinking `dn_box_noise_scale` would have been a 3-day null. (Step 1's 12 h screening
+fine-tune is moot too.)
+
+**Nuance — clusters1 behaves differently, and it is informative.** At 4–8 px it splits ~(A) 0.33–0.48
+/ (C) 0.29–0.52: training on tight pairs *did* partly teach the encoder to propose the second peak,
+and those proposals localise. But their scores land at **0.07–0.11 against a 0.10 threshold** — right
+on the boundary. That is exactly why phase U looked like a win at the fixed threshold and vanished at
+a matched operating point: the recovered peaks are only recoverable by lowering the threshold, which
+costs precision elsewhere. Phase U's verdict stands, but we now know *why* it behaved that way.
+
+**Where this points.** The merge happens **at or before the encoder's objectness/proposal stage**, not
+in the decoder's learned duplicate suppression. Note this does not contradict phase V: stride-4
+features did not help, so it is not feature *resolution* — the encoder is handed adequate resolution
+(at stride 8 two peaks 8 px apart already occupy adjacent tokens; at stride 4, two tokens apart) and
+still produces a single objectness maximum at the midpoint.
+
+**Caveat.** The acceptance radius scales with separation (`R = max(1.5, 0.30·sep)`), so small rungs are
+judged with a tight radius and could in principle over-report "absent". The scatter defeats that
+concern — at 8 px the query pile sits ~4 px from each peak, outside any plausible R — but a fixed-R
+rerun would settle it if this line is pursued. Rungs below 6 px are flagged `[zones overlap]` and were
+not read: there the three zones cannot be made disjoint.
+
+**Status: DN declined without running it (11th lever).** Two levers have now been killed by cheap
+measurement in two days (window, DN) where each would have cost ~3 days to run.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
