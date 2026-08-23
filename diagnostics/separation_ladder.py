@@ -27,7 +27,19 @@ Reading the result:
                                       (compare against clusters_gate.py real <5px recall: ssl1 0.352,
                                       clusters 0.321 at matched count)
 
-GPU, ~20 min. See tmp_diag/run_separation_ladder.sbatch.
+RESULT (chi axis, anisotropic stimulus): all three models wall at 16 px, INCLUDING the stride-4
+5-scale model. Feature stride is therefore not the mechanism, and neither 512->1024 (which moves a
+real 3.9 px gap only to 7.8 px, still under the wall) nor stride-4 buys anything. Both chi-resolution
+routes are dead; the mechanism is still open.
+
+AXIS / ISO -- the anisotropy test. The only strongly anisotropic thing in the architecture is the
+Swin window: window_size_h=48 (chi) vs window_size_w=6 (q), 8:1, and window_partition confirms h
+indexes chi. If the window sets the wall, the q limit should be ~8x finer than the chi limit; if both
+axes wall together, the window is not the cause. Run it with LADDER_ISO=1 -- see the SIGMA block
+below for why the anisotropic stimulus makes the two axes incomparable.
+
+GPU, ~20 min per configuration. See tmp_diag/run_separation_ladder.sbatch (env: LADDER_AXIS=chi|q,
+LADDER_ISO=0|1, LADDER_NMS=1|0).
 """
 import os, sys, json, random
 import numpy as np
@@ -54,25 +66,67 @@ MODELS = [('ssl1', CKPT_A, CONFIG),
           ('clusters', '/mnt/lustre/work/schreiber/szb389/tmp_diag/clusters_probe_ckpt.pth', CONFIG),
           ('5scale_stride4', f'{_CUR}/detector_runs/dino_5scale_scratch/checkpoint.pth',
            os.path.join(_REPO, 'config/DINO/DINO_5scale_swin_ssl.py'))]
-SEPS = [2, 4, 6, 8, 12, 16, 24, 32, 48, 64]      # chi-separation rungs (px)
+SEPS = [2, 4, 6, 8, 12, 16, 24, 32, 48, 64]      # separation rungs (px)
+# AXIS: 'chi' separates the pair along chi (the failure axis in the real data); 'q' separates it
+# along q. The ONLY strongly anisotropic thing in the architecture is the Swin window --
+# window_size_h=48 (chi) vs window_size_w=6 (q), an 8:1 ratio, and window_partition confirms h
+# indexes chi. If the window sets the resolution limit, the q limit should be ~8x finer than the
+# chi limit. If both axes wall at the same separation, the window is NOT the cause.
+AXIS = os.environ.get('LADDER_AXIS', 'chi')
 N_IMG = 20                                        # frames per rung
 N_PAIR = 8                                        # pairs per frame (well separated in q)
-BOX_W, BOX_H = 10.6, 8.5                          # measured real organic GT medians
 INTENS = 30.0                                     # mid-range of seg_intensity_range (10, 50)
 THRESHOLDS = [round(0.05 * i, 2) for i in range(1, 19)]
 
+# ---------------------------------------------------------------------------------------------
+# STIMULUS SHAPE. The simulator's box<->Gaussian convention is ANISOTROPIC (simulation.py:816):
+#     sigma_q   = box_width  / w_coef     w_coef = 1.0
+#     sigma_chi = box_height / a_coef     a_coef = 3.5
+# so the real median box (10.6 x 8.5) renders a peak 10.6/2.43 = 4.4x BROADER along q than along
+# chi. Planting that box and separating the pair along q therefore presents a far HARDER stimulus
+# than separating it along chi, and the first q-axis ladder was confounded by exactly this: read in
+# raw pixels q looked worse than chi, read in units of the rendered sigma q looked ~2x better, so
+# the comparison decided nothing.
+#
+# LADDER_ISO=1 plants the box that renders an ISOTROPIC peak (sigma_q == sigma_chi == SIGMA), so
+# both axes carry an IDENTICAL stimulus and any surviving difference is the model. SIGMA is the real
+# chi width (8.5 / 3.5 = 2.43 px), which leaves the chi profile UNCHANGED from the anisotropic run
+# -- so the iso chi ladder doubles as a control: it should reproduce the 16 px chi wall.
+# Caveat: the resulting box (2.43 x 8.5) is out-of-distribution for the box REGRESSION target
+# (models were trained on ~10.6 x 8.5). That is acceptable here because the hypothesis under test --
+# the Swin window's 48(chi):6(q) anisotropy -- lives in the backbone, not the box head.
+ISO = os.environ.get('LADDER_ISO', '0') == '1'
+SIGMA = 8.5 / S.SimulationConfig.a_coef           # 2.43 px, the real chi Gaussian width
+if ISO:
+    BOX_W = SIGMA * S.SimulationConfig.w_coef     # 2.43
+    BOX_H = SIGMA * S.SimulationConfig.a_coef     # 8.5
+else:
+    BOX_W, BOX_H = 10.6, 8.5                      # measured real organic GT medians
+
+# NMS CONTROL. Class-aware NMS uses IoU 0.4 for segments and 0.1 for rings, and IoU depends on the
+# BOX geometry, which stays anisotropic (2.43 wide x 8.5 tall) even when the RENDER is isotropic.
+# Two boxes offset by d along an axis of extent e have IoU = (e-d)/(e+d), so at d=2 px the chi pair
+# sits at IoU 0.62 (suppressed) while the q pair sits at 0.10 (kept) -- an axis asymmetry that has
+# nothing to do with perception. It only bites at d<=3 px on chi, far below the 16 px wall, but
+# LADDER_NMS=0 removes it entirely (IoU thresholds -> 1.0) so the wall can be confirmed on raw
+# model output.
+NMS = os.environ.get('LADDER_NMS', '1') == '1'
+TAG = f"{AXIS}{'_iso' if ISO else ''}{'' if NMS else '_nonms'}"
+
 
 def plant(sep, rng):
-    """Two peaks at chi-separation `sep`, N_PAIR times, spread across q. Returns boxes (2N,4)."""
+    """Two peaks at separation `sep` along AXIS, N_PAIR times. Pairs are placed at distinct q AND
+    distinct chi so they cannot collide whichever axis carries the separation."""
     H, W = S.HEIGHT, S.WIDTH
-    qs = np.linspace(0.15 * W, 0.90 * W, N_PAIR) + rng.uniform(-12, 12, N_PAIR)
-    # keep the whole pair clear of the angle-limit bands at top/bottom
-    lo, hi = 0.22 * H, 0.78 * H
-    cs = rng.uniform(lo + sep / 2, hi - sep / 2, N_PAIR)
+    m = sep / 2 + 8
+    qs = np.linspace(0.15 * W + m, 0.90 * W - m, N_PAIR) + rng.uniform(-8, 8, N_PAIR)
+    lo, hi = 0.22 * H + m, 0.78 * H - m          # clear of the angle-limit bands
+    cs = np.linspace(lo, hi, N_PAIR) + rng.uniform(-6, 6, N_PAIR)
     boxes = []
     for q, c in zip(qs, cs):
-        for s in (-sep / 2, +sep / 2):
-            boxes.append([q - BOX_W / 2, c + s - BOX_H / 2, q + BOX_W / 2, c + s + BOX_H / 2])
+        for d in (-sep / 2, +sep / 2):
+            qq, cc = (q, c + d) if AXIS == 'chi' else (q + d, c)
+            boxes.append([qq - BOX_W / 2, cc - BOX_H / 2, qq + BOX_W / 2, cc + BOX_H / 2])
     return np.array(boxes, dtype=np.float32)
 
 
@@ -85,7 +139,10 @@ def make_images(dev):
         rng = np.random.RandomState(1234 + sep)
         frames = []
         for k in range(N_IMG):
-            random.seed(9000 + sep * 100 + k); torch.manual_seed(9000 + sep * 100 + k)
+            _sd = 9000 + sep * 100 + k
+            random.seed(_sd); torch.manual_seed(_sd); np.random.seed(_sd)   # np.random is
+            # used inside the appearance pipeline; without it the image set drifted between
+            # runs and small-separation rungs carried ~+-0.05 noise
             gt = torch.tensor(plant(sep, rng), device=dev)
             inten = torch.full((len(gt),), INTENS, device=dev)
             isr = torch.zeros(len(gt), dtype=torch.bool, device=dev)
@@ -124,6 +181,9 @@ def run_model(name, ckpt, cfg_file, data, dev):
     cfg.PREPROCESSING_POLAR_SHAPE = [512, 1024]
     cfg.POSTPROCESSING_SCORE = 0.05
     cfg.POSTPROCESSING_CLASSAWARE_NMS = True
+    if not NMS:                                   # IoU can never exceed 1.0 -> nothing suppressed
+        cfg.POSTPROCESSING_NMSIOU_RING = 1.0
+        cfg.POSTPROCESSING_NMSIOU_SEG = 1.0
     cache = {}
     with torch.no_grad():
         for sep, frames in data.items():
@@ -149,6 +209,56 @@ def run_model(name, ckpt, cfg_file, data, dev):
     del model
     torch.cuda.empty_cache()
     return cache
+
+
+def localisation(cache, thr):
+    """Separate the two failure modes the `merged` bucket conflates.
+
+    For each planted pair, count RAW detections in its neighbourhood BEFORE matching:
+      n_near == 1  -> the model genuinely emitted ONE box   => query/assignment capacity
+      n_near >= 2  -> it emitted two, so ask WHERE they are:
+                      their chi-separation ~ the true sep   => localisation is fine, matching failed
+                      their chi-separation << the true sep  => both piled near the midpoint
+                                                               => regression precision
+    These need opposite fixes, which is why the distinction matters.
+    """
+    out = {}
+    for sep, per in cache.items():
+        n1 = n2 = n0 = 0
+        dchi = []
+        for gt, pred, sc in per:
+            k = sc > thr
+            p, s_ = pred[k], sc[k]
+            if len(p):
+                pq = ((p[:, 0] + p[:, 2]) / 2).numpy()
+                pc = ((p[:, 1] + p[:, 3]) / 2).numpy()
+            for i in range(0, len(gt) - 1, 2):
+                gq = float((gt[i, 0] + gt[i, 2] + gt[i + 1, 0] + gt[i + 1, 2]) / 4)
+                gc_ = float((gt[i, 1] + gt[i, 3] + gt[i + 1, 1] + gt[i + 1, 3]) / 4)
+                if not len(p):
+                    n0 += 1; continue
+                if AXIS == 'chi':
+                    near = (np.abs(pq - gq) < 15) & (np.abs(pc - gc_) < sep / 2 + 25)
+                    along = pc
+                else:
+                    near = (np.abs(pc - gc_) < 15) & (np.abs(pq - gq) < sep / 2 + 25)
+                    along = pq
+                cnt = int(near.sum())
+                if cnt == 0:
+                    n0 += 1
+                elif cnt == 1:
+                    n1 += 1
+                else:
+                    n2 += 1
+                    idx = np.nonzero(near)[0]
+                    top = idx[np.argsort(-s_.numpy()[idx])[:2]]
+                    dchi.append(abs(float(along[top[0]] - along[top[1]])))
+        tot = n0 + n1 + n2
+        out[sep] = dict(none=n0 / tot if tot else float('nan'),
+                        one=n1 / tot if tot else float('nan'),
+                        two=n2 / tot if tot else float('nan'),
+                        med_dchi=float(np.median(dchi)) if dchi else float('nan'))
+    return out
 
 
 def score(cache, thr):
@@ -180,7 +290,10 @@ def score(cache, thr):
 
 def main():
     dev = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"device={dev}\nbuilding the fixed image set (identical for every model)", flush=True)
+    print(f"device={dev}  AXIS={AXIS}  ISO={ISO}  NMS={NMS}\n"
+          f"stimulus: box {BOX_W:.2f} x {BOX_H:.2f} px  ->  rendered sigma_q={BOX_W / S.SimulationConfig.w_coef:.2f} "
+          f"sigma_chi={BOX_H / S.SimulationConfig.a_coef:.2f} px\n"
+          f"building the fixed image set (identical for every model)", flush=True)
     data = make_images(dev)
 
     summary = {}
@@ -201,7 +314,16 @@ def main():
             bar = '#' * int(round(d['resolved'] * 30))
             print(f"  {sep:8d} {d['n']:6d} {d['resolved']:9.3f} {d['merged']:8.3f} "
                   f"{d['missed']:8.3f}  {bar}")
-        summary[name] = dict(thr=best, res={str(k): v for k, v in res.items()})
+        loc = localisation(cache, best)
+        print(f"\n  WHY pairs fail -- raw detections near the pair, BEFORE matching:")
+        print(f"  {'sep(px)':>8s} {'no det':>8s} {'ONE box':>9s} {'TWO+ boxes':>11s} "
+              f"{'median dchi of the 2':>21s} {'(true sep)':>11s}")
+        for sep in SEPS:
+            d = loc[sep]
+            print(f"  {sep:8d} {d['none']:8.3f} {d['one']:9.3f} {d['two']:11.3f} "
+                  f"{d['med_dchi']:21.1f} {sep:11d}")
+        summary[name] = dict(thr=best, res={str(k): v for k, v in res.items()},
+                             loc={str(k): v for k, v in loc.items()})
         del cache
 
     names = [m[0] for m in MODELS]
@@ -221,6 +343,21 @@ def main():
     for n in names:
         lim = next((s for s in SEPS if summary[n]['res'][str(s)]['resolved'] >= 0.5), None)
         print(f"    {n:18s} {'>64 px' if lim is None else str(lim) + ' px'}")
+    print("\n" + "=" * 88)
+    print("  DISCRIMINATOR: of pairs the model FAILED to resolve, did it emit ONE box or TWO?")
+    print(f"  {'sep(px)':>8s}" + "".join(f"{n + ' 1box/2box':>22s}" for n in names))
+    for sep in SEPS:
+        row = f"  {sep:8d}"
+        for n in names:
+            d = summary[n]['loc'][str(sep)]
+            row += f"{d['one']:>10.2f} /{d['two']:>10.2f}"
+        print(row)
+    print("\n  median chi-separation of the two detections when TWO were emitted:")
+    print(f"  {'sep(px)':>8s}" + "".join(f"{n:>18s}" for n in names))
+    for sep in SEPS:
+        print(f"  {sep:8d}" + "".join(
+            f"{summary[n]['loc'][str(sep)]['med_dchi']:18.1f}" for n in names))
+
     print("\n  Real-data reference (clusters_gate.py, matched count, chi-gap <5px):")
     print("    ssl1 0.352   clusters 0.321  -- if synthetic RESOLVED at 4px is far above these,")
     print("    the architecture is not the limit and a chi-resolution run would be wasted.")
@@ -232,14 +369,14 @@ def main():
     ax.axvline(8, ls=':', c='k', label='stride-8 cell'); ax.axvline(4, ls=':', c='0.6', label='stride-4 cell')
     ax.axhline(0.352, ls='--', c='gray', lw=1, label='real <5px recall (ssl1)')
     ax.set_xscale('log'); ax.set_xticks(SEPS); ax.set_xticklabels(SEPS)
-    ax.set_xlabel('planted chi-separation (px)'); ax.set_ylabel('fraction of pairs RESOLVED')
+    ax.set_xlabel(f'planted {AXIS}-separation (px)'); ax.set_ylabel('fraction of pairs RESOLVED')
     ax.set_ylim(-0.03, 1.03); ax.legend(fontsize=8)
-    ax.set_title('Phase V: synthetic separation ladder')
+    ax.set_title(f'Phase V: separation ladder ({TAG}, sigma_q={BOX_W:.2f} sigma_chi={SIGMA:.2f})')
     fig.tight_layout()
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'separation_ladder.png')
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'separation_ladder_{TAG}.png')
     fig.savefig(out, dpi=110, bbox_inches='tight')
     print(f"\nsaved {out}")
-    json.dump(summary, open(os.path.join(OUT, 'separation_ladder.json'), 'w'), indent=2, default=str)
+    json.dump(summary, open(os.path.join(OUT, f'separation_ladder_{TAG}.json'), 'w'), indent=2, default=str)
     print("PROBE DONE")
 
 

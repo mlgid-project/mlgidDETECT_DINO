@@ -1027,11 +1027,88 @@ for fine comparisons.
 
 **OPEN — the mechanism is now genuinely unknown.** Not training, not stride, not NMS, not image
 information. Something in the detection head collapses two clearly-separable peaks into one output.
-**Next discriminating measurement (small change to this script):** the `merged` category cannot
-distinguish (a) the model emitting ONE box from (b) it emitting TWO boxes both badly localised near
-the midpoint so only one is matched. These need opposite fixes — query/assignment capacity vs
-regression precision. Count raw detections near each pair BEFORE matching and record their
-positions. Same ~20 min. Do this before any further architectural lever.
+
+### V.1 Localisation discriminator — the failure is genuine perception (2026-08-22)
+
+The `merged` bucket conflated two failures needing opposite fixes: (a) the model emits **ONE** box
+(query/assignment capacity) vs (b) it emits **TWO** both piled near the midpoint, so the one-to-one
+matcher can only claim one (regression precision). `localisation()` counts raw detections in each
+pair's neighbourhood **before** matching and records their separation.
+
+**Verdict: (a).** At 8 px χ the split is **0.94 one-box / 0.02 two-box** — the model simply does not
+emit a second detection. And regression is *not* the weak link: above the wall the two boxes land at
+**31.9 vs a true 32** and **64.0 vs a true 64**, sub-pixel. Below 8 px, when two *are* emitted they
+sit **0.2 px apart** — stacked duplicates that survive only because class-aware NMS never compares
+them (one is scored ring, one segment, so they go through different IoU pools).
+
+So this is a real resolution failure, not a matcher artefact and not a regression-precision problem.
+Correction to an earlier framing of mine: I had said the two-box branch would show "this was never a
+resolution problem" — the discriminator showed the opposite. It **is** a resolution problem, just not
+one that stride or training moves.
+
+### V.2 q-axis ladder — CONFOUNDED, decides nothing (2026-08-22, superseded by V.3)
+
+The only strongly anisotropic thing in the architecture is the **Swin window**: `window_size_h = 48`
+(χ) vs `window_size_w = 6` (q), 8:1, and `window_partition` confirms `h` indexes χ. If the window sets
+the wall, the q limit should be ~8× finer than the χ limit. No pre-window-change checkpoint exists
+(all four have a 1045-row `relative_position_bias_table` = 48×6), so the free test is the q ladder.
+
+Raw result — RESOLUTION LIMIT on q: **ssl1 32 px, clusters 24 px, 5scale 24 px**, all *coarser* than
+χ's 16 px. Read literally that refutes the window. **It does not, because the stimulus was wrong.**
+
+`img_from_labels` (`simulation.py:816`) uses an **anisotropic box→Gaussian convention**:
+
+    sigma_q   = box_width  / w_coef     w_coef = 1.0
+    sigma_chi = box_height / a_coef     a_coef = 3.5
+
+so the real median box (10.6 × 8.5) renders a peak **4.4× broader along q** (σ_q = 10.6) than along
+χ (σ_χ = 2.43). The q-separated pairs were a much harder stimulus for reasons having nothing to do
+with the model. The two readings disagree in sign:
+
+| separation in units of the rendered σ | χ resolved | q resolved |
+|---|---|---|
+| ~3.0–3.3 σ | 0.037 (Δχ=8) | **0.778** (Δq=32) |
+| ~4.5–4.9 σ | 0.049 (Δχ=12) | **0.740** (Δq=48) |
+| ~6.0–6.6 σ | 0.662 (Δχ=16) | 0.677 (Δq=64) |
+
+In raw pixels q looks worse; in σ units q looks ~2× **better** (resolves at ~3σ where χ needs ~6.6σ).
+The conclusion depends entirely on the choice of normaliser, so **the experiment decides nothing** —
+the window hypothesis is neither confirmed nor refuted. Supporting signs the two ladders are not
+measuring the same thing: the q curve is shallow and gradual (0.233 at 2 px → 0.778 at 32 px) where
+the χ curve is a sharp step (0.037 at 8 px → 0.662 at 16 px), and the q 1box/2box split is balanced
+(≈0.47/0.41 at 2 px) where χ's is lopsided (0.94/0.02 at 8 px).
+
+A second, smaller confound: the evaluation matcher is q-based (`get_matcher('q', min_iou=0.1)` —
+costs on |Δq|, gates on IoU), so for χ-separated pairs the cost is degenerate and the IoU gate does
+the work, while for q-separated pairs the cost is informative. The axes are not matched in matcher
+difficulty either.
+
+### V.3 Isotropic-stimulus ladder — the corrected anisotropy test (LAUNCHED 2026-08-23)
+
+`LADDER_ISO=1` plants the box that renders an **isotropic** peak, σ_q = σ_χ = **2.43 px**
+(box 2.43 × 8.5 = SIGMA·w_coef × SIGMA·a_coef), so both axes carry an identical stimulus and any
+surviving difference is the model. SIGMA is the real χ width, which leaves the χ profile unchanged
+from V — so the iso-χ run doubles as a **control that must reproduce the 16 px wall**.
+
+`LADDER_NMS=0` additionally sets both class IoU thresholds to 1.0. The *boxes* stay anisotropic
+(2.43 wide × 8.5 tall) even when the render is isotropic, and two boxes offset by d along an axis of
+extent e have IoU = (e−d)/(e+d): at d = 2 px the χ pair sits at IoU 0.62 (suppressed) while the q
+pair sits at 0.10 (kept). That asymmetry only bites at d ≤ 3 px, far below the 16 px wall, but the
+NMS-off arm removes it so the wall can be confirmed on raw model output.
+
+Caveat carried into it: the 2.43 × 8.5 box is out-of-distribution for the box **regression** target
+(models were trained on ≈10.6 × 8.5). Acceptable, because the hypothesis under test — the Swin
+window's 48:6 anisotropy — lives in the backbone, not the box head.
+
+Jobs 2776881–2776884 = {χ, q} × {NMS on, off}, all three models, ~20 min each.
+
+- **q limit ≈ χ limit** → the limit is isotropic, the window is NOT the cause, and the mechanism is
+  something axis-independent in the detection head.
+- **q limit ≪ χ limit (≈8×)** → the elongated window is the wall, and it is a *training-only,
+  inference-identical* fix: retrain with a squarer window.
+
+**Do not start another architectural lever before this reads out.** Nine consecutive levers have been
+declined; the point of V.3 is to stop guessing.
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
