@@ -1100,15 +1100,64 @@ Caveat carried into it: the 2.43 × 8.5 box is out-of-distribution for the box *
 (models were trained on ≈10.6 × 8.5). Acceptable, because the hypothesis under test — the Swin
 window's 48:6 anisotropy — lives in the backbone, not the box head.
 
-Jobs 2776881–2776884 = {χ, q} × {NMS on, off}, all three models, ~20 min each.
+Jobs 2776881–2776884 = {χ, q} × {NMS on, off}, all three models, 2–2.5 min each.
 
-- **q limit ≈ χ limit** → the limit is isotropic, the window is NOT the cause, and the mechanism is
-  something axis-independent in the detection head.
-- **q limit ≪ χ limit (≈8×)** → the elongated window is the wall, and it is a *training-only,
-  inference-identical* fix: retrain with a squarer window.
+**CONTROL PASSES.** The iso-χ arm reproduces the wall — ssl1 0.000 at 8 px, 0.282 at 12, **0.986 at
+16** — and more cleanly than the anisotropic run: `missed` is 0.000 at every rung, so what is measured
+is purely resolution, not detection.
 
-**Do not start another architectural lever before this reads out.** Nine consecutive levers have been
-declined; the point of V.3 is to stop guessing.
+**RESULT: a real but SMALL anisotropy, ~1.5–2×, nowhere near the window's 8:1.**
+
+RESOLVED fraction, matched stimulus (σ_q = σ_χ = 2.43 px), NMS on = deployed:
+
+| sep px | χ ssl1 | χ clusters | χ 5scale | q ssl1 | q clusters | q 5scale |
+|---|---|---|---|---|---|---|
+| 6 | 0.000 | 0.016 | 0.000 | 0.177 | 0.162 | 0.008 |
+| 8 | 0.000 | 0.060 | 0.000 | **0.822** | **0.689** | **0.659** |
+| 12 | 0.282 | 0.984 | 0.863 | 1.000 | 1.000 | 1.000 |
+| 16 | **0.986** | 0.993 | 0.993 | 0.993 | 0.993 | 0.985 |
+
+RESOLUTION LIMIT (first rung ≥ 0.5):
+
+| arm | χ | q | ratio |
+|---|---|---|---|
+| NMS on (deployed) | 16 / 12 / 12 px | 8 / 8 / 8 px | ~1.5–2× |
+| NMS off (control) | 12 / 12 / 12 px | 8 / 12 / 8 px | ~1–1.5× |
+
+The direction matches the window (χ is the coarse axis, `window_size_h = 48`), but the magnitude is
+**1.5–2×, not 8×**. The discriminator agrees and is sharper than the RESOLVED column, which is the
+number to trust since it bypasses matching entirely: the one-box→two-box switch flips between 8 and
+16 px on χ (ssl1 at 12 px: 0.72/0.28) and between 6 and 8 px on q (ssl1 at 8 px: 0.06/0.94). Above the
+flip, localisation is sub-pixel on both axes (24.0/32.0/48.0/64.0 against true 24/32/48/64).
+
+### V.4 — the window lever is DECLINED WITHOUT RUNNING IT (2026-08-23)
+
+Not because the anisotropy is absent — it is real — but because **its ceiling is too low to matter.**
+
+1. The best case for a squarer window is that χ becomes as good as q: a wall at **8 px**.
+2. Real organic χ-gaps are **3.9 px median** (phase T), which is where recall is 0.352.
+3. **8 px is still 2× above 3.9 px.** A perfect window fix would not move the pairs that are actually
+   being missed.
+
+So a 3-day retrain buys, at absolute best, a wall that is still on the wrong side of the data. That is
+a quantitative decline, not a guess — and it is the second lever now declined by measurement instead
+of by a training run (cf. phase O).
+
+**Also killed by this run:** the window is not the *dominant* mechanism either. Something
+axis-independent sets a floor at ~8 px on both axes, and it is not stride (5scale matches ssl1 on both
+axes), not training (clusters matches ssl1), not NMS (the NMS-off arm shows the same walls), not
+regression (sub-pixel above the flip) and not image information (at 8 px two σ=2.43 Gaussians are
+3.3σ apart).
+
+**Read the NMS-off small-separation rungs with care:** they carry a spurious floor of ≈0.15–0.20
+RESOLVED at 2–8 px, because with suppression disabled two stacked near-duplicate boxes can both be
+claimed by the one-to-one matcher. That floor is an artefact; the ≥0.5 crossings are not affected.
+
+**Status: the mechanism remains open, but the resolution route as a whole is now closed** — stride,
+input resolution, training distribution and window anisotropy have each been measured and each is
+either ineffective or capped below the 3.9 px the data needs. Ten levers declined. Any further work
+here should target *why the head refuses to emit a second query* below the wall, not the features
+feeding it.
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
