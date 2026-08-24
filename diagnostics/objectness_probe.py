@@ -45,48 +45,42 @@ import diagnostics.separation_ladder as L
 from diagnostics.prominence_probe import build_model_from_ckpt, OUT
 
 H_IMG, W_IMG = 512, 1024
-STRIDES = [8, 16, 32, 64]
-SHAPES = [(H_IMG // s, W_IMG // s) for s in STRIDES]
-OFFS, _o = [], 0
-for _h, _w in SHAPES:
-    OFFS.append(_o); _o += _h * _w
-NTOK = _o
 
 
-IDXS = np.arange(NTOK)
-LVS = np.searchsorted(OFFS, IDXS, side='right') - 1
-CHIS = np.empty(NTOK); QS = np.empty(NTOK)
-for _li, (_hh, _ww) in enumerate(SHAPES):
-    _sl = slice(OFFS[_li], OFFS[_li] + _hh * _ww)
-    _rr = IDXS[_sl] - OFFS[_li]
-    CHIS[_sl] = (_rr // _ww + 0.5) * STRIDES[_li]
-    QS[_sl] = (_rr % _ww + 0.5) * STRIDES[_li]
-
-
-def token_xy(idx):
-    """token index -> (level, chi_px, q_px) at the token's centre."""
-    lvl = int(np.searchsorted(OFFS, idx, side='right') - 1)
-    r = idx - OFFS[lvl]
-    h, w = SHAPES[lvl]
-    s = STRIDES[lvl]
-    return lvl, (r // w + 0.5) * s, (r % w + 0.5) * s
+def layout_for(n_tokens):
+    """Pyramid layout implied by the token count: 4-scale is [8,16,32,64] = 10,880 tokens,
+    5-scale adds a stride-4 level = 43,648. Derived, not hardcoded, so both models work."""
+    for strides in ([8, 16, 32, 64], [4, 8, 16, 32, 64]):
+        shapes = [(H_IMG // s, W_IMG // s) for s in strides]
+        if sum(h * w for h, w in shapes) == n_tokens:
+            offs, o = [], 0
+            for h, w in shapes:
+                offs.append(o); o += h * w
+            return strides, shapes, offs
+    raise ValueError(f"no known pyramid layout with {n_tokens} tokens")
 
 
 def probe(name, ckpt, cfg_file, data, dev):
+    """For each planted pair ask, ON THE TOKEN GRID ITSELF:
+         can this level even represent two peaks here (do they fall in DIFFERENT token rows)?
+         if so, are BOTH of those tokens in the selected top-900, and where do they rank?
+       Working in token units rather than pixels avoids the confound in the first version, where a
+       +-4 px window at a stride of 8 px could not tell 'the token on peak 2' from 'the one token of
+       the merged blob'."""
     model, a = build_model_from_ckpt(cfg_file, ckpt, dev)
     rec = {}
 
     def hook(mod, inp, outp):
-        if inp[0].shape[1] > 5000:              # the UNSELECTED call, all ~10,880 tokens
+        if inp[0].shape[1] > 5000:              # the UNSELECTED call, every token
             rec['logits'] = outp.detach()
     hnd = model.transformer.enc_out_class_embed.register_forward_hook(hook)
 
-    lvl_all = np.zeros(len(STRIDES), dtype=np.int64)     # level mix of the whole top-900
+    lay = {}
+    lvl_all = None
     rows, profiles = {}, {}
     with torch.no_grad():
         for sep, frames in data.items():
-            R = max(4.0, 0.45 * sep)                     # px window around a peak, in chi
-            acc = dict(n=0, none=0, sel=0, rank=[], nmax=[], lvl=np.zeros(len(STRIDES), np.int64))
+            acc = None
             prof = []
             for img, gt in frames:
                 rec.clear()
@@ -95,90 +89,111 @@ def probe(name, ckpt, cfg_file, data, dev):
                     t = t[None, None]
                 elif t.dim() == 3:
                     t = t[None]
-                out = model(t.repeat(1, a.num_channels, 1, 1))
+                model(t.repeat(1, a.num_channels, 1, 1))
                 if 'logits' not in rec:
                     continue
-                sc = rec['logits'][0].sigmoid().max(-1).values.cpu().numpy()   # (NTOK,)
+                sc = rec['logits'][0].sigmoid().max(-1).values.cpu().numpy()
+                if not lay:
+                    st, sh, of = layout_for(len(sc))
+                    lay.update(strides=st, shapes=sh, offs=of, n=len(sc))
+                    lvl_all = np.zeros(len(st), np.int64)
+                    print(f"  pyramid: {len(sc)} tokens, strides {st}", flush=True)
+                st, sh, of = lay['strides'], lay['shapes'], lay['offs']
+                nlv = len(st)
+                if acc is None:
+                    acc = dict(n=0, distinct=np.zeros(nlv), both900=np.zeros(nlv),
+                               rank2=[[] for _ in range(nlv)])
                 order = np.argsort(-sc)
                 rank_of = np.empty(len(sc), np.int64)
                 rank_of[order] = np.arange(1, len(sc) + 1)
                 if lvl_all.sum() == 0:
+                    lv_of = np.searchsorted(of, np.arange(len(sc)), side='right') - 1
                     for i in order[:900]:
-                        lvl_all[token_xy(int(i))[0]] += 1
+                        lvl_all[lv_of[i]] += 1
 
-                lv0_h, lv0_w = SHAPES[0]
-                grid = sc[OFFS[0]:OFFS[0] + lv0_h * lv0_w].reshape(lv0_h, lv0_w)
                 for i in range(0, len(gt) - 1, 2):
                     gq = float((gt[i, 0] + gt[i, 2] + gt[i + 1, 0] + gt[i + 1, 2]) / 4)
                     pc = sorted(float((gt[j, 1] + gt[j, 3]) / 2) for j in (i, i + 1))
                     acc['n'] += 1
-                    col = int(np.clip(round(gq / STRIDES[0] - 0.5), 0, lv0_w - 1))
-                    lo = int(np.clip(round((pc[0] - 24) / STRIDES[0]), 0, lv0_h - 1))
-                    hi = int(np.clip(round((pc[1] + 24) / STRIDES[0]), 0, lv0_h - 1))
-                    seg = grid[lo:hi + 1, col]
-                    if len(seg) >= 3:                    # count interior local maxima
-                        acc['nmax'].append(int(((seg[1:-1] > seg[:-2]) &
-                                                (seg[1:-1] >= seg[2:])).sum()))
-                    if sep in (8, 16) and len(prof) < 60 and len(seg) >= 5:
-                        prof.append((np.arange(lo, hi + 1) * STRIDES[0] + 4 -
-                                     (pc[0] + pc[1]) / 2, seg.copy()))
-                    # best token near the SECOND peak, anywhere in the pyramid
-                    near = (np.abs(QS - gq) < 12) & (np.abs(CHIS - pc[1]) <= R)
-                    if not near.any():
-                        acc['none'] += 1
-                    else:
-                        j = np.flatnonzero(near)[np.argmax(sc[near])]
-                        acc['rank'].append(int(rank_of[j]))
-                        acc['lvl'][int(LVS[j])] += 1
-                        if rank_of[j] <= 900:
-                            acc['sel'] += 1
+                    for l in range(nlv):
+                        s_, (hh, ww) = st[l], sh[l]
+                        col = int(np.clip(round(gq / s_ - 0.5), 0, ww - 1))
+                        r1 = int(np.clip(round(pc[0] / s_ - 0.5), 0, hh - 1))
+                        r2 = int(np.clip(round(pc[1] / s_ - 0.5), 0, hh - 1))
+                        if r1 == r2:
+                            continue                      # grid cannot represent two peaks here
+                        acc['distinct'][l] += 1
+                        k1 = of[l] + r1 * ww + col
+                        k2 = of[l] + r2 * ww + col
+                        weak = max(int(rank_of[k1]), int(rank_of[k2]))
+                        acc['rank2'][l].append(weak)
+                        if weak <= 900:
+                            acc['both900'][l] += 1
+                    # objectness profile along chi at the finest level, for the figure
+                    if sep in (8, 16) and len(prof) < 40:
+                        s_, (hh, ww) = st[0], sh[0]
+                        col = int(np.clip(round(gq / s_ - 0.5), 0, ww - 1))
+                        lo = int(np.clip(round((pc[0] - 24) / s_), 0, hh - 1))
+                        hi = int(np.clip(round((pc[1] + 24) / s_), 0, hh - 1))
+                        grid = sc[of[0]:of[0] + hh * ww].reshape(hh, ww)
+                        seg = grid[lo:hi + 1, col]
+                        if len(seg) >= 4:
+                            prof.append((np.arange(lo, hi + 1) * s_ + s_ / 2 -
+                                         (pc[0] + pc[1]) / 2, seg.copy()))
             n = max(acc['n'], 1)
-            rows[sep] = dict(n=acc['n'], no_token=acc['none'] / n, selected=acc['sel'] / n,
-                             med_rank=float(np.median(acc['rank'])) if acc['rank'] else float('nan'),
-                             p25_rank=float(np.percentile(acc['rank'], 25)) if acc['rank'] else float('nan'),
-                             med_nmax=float(np.median(acc['nmax'])) if acc['nmax'] else float('nan'),
-                             frac_2max=float(np.mean(np.array(acc['nmax']) >= 2)) if acc['nmax'] else float('nan'),
-                             lvl=acc['lvl'].tolist())
+            rows[sep] = dict(
+                n=acc['n'], strides=lay['strides'],
+                distinct=(acc['distinct'] / n).tolist(),
+                both900=[(acc['both900'][l] / acc['distinct'][l]) if acc['distinct'][l] else float('nan')
+                         for l in range(len(lay['strides']))],
+                med_rank2=[float(np.median(acc['rank2'][l])) if acc['rank2'][l] else float('nan')
+                           for l in range(len(lay['strides']))])
             profiles[sep] = prof
             r = rows[sep]
-            print(f"  sep={sep:3d}  n={r['n']:4d}  2+ maxima {r['frac_2max']:.3f}  "
-                  f"median #maxima {r['med_nmax']:.1f}  |  no token {r['no_token']:.3f}  "
-                  f"in top-900 {r['selected']:.3f}  median rank {r['med_rank']:8.0f}  "
-                  f"(p25 {r['p25_rank']:.0f})", flush=True)
+            f = lambda v: "  ".join(f"{x:.2f}" if x == x else "  - " for x in v)
+            g = lambda v: "  ".join(f"{x:6.0f}" if x == x else "     -" for x in v)
+            print(f"  sep={sep:3d} n={r['n']:4d} | distinct rows {f(r['distinct'])} "
+                  f"| both in top-900 {f(r['both900'])} | median worse rank {g(r['med_rank2'])}",
+                  flush=True)
     hnd.remove()
     del model
     torch.cuda.empty_cache()
-    print(f"  level mix of the top-900: " +
-          "  ".join(f"stride{STRIDES[i]} {lvl_all[i]}" for i in range(len(STRIDES))))
-    return rows, profiles, lvl_all.tolist()
+    tot = max(int(lvl_all.sum()), 1)
+    print("  level mix of the selected top-900: " + "  ".join(
+        f"stride{lay['strides'][i]} {int(lvl_all[i])} ({100*lvl_all[i]/tot:.1f}%)"
+        for i in range(len(lay['strides']))), flush=True)
+    return rows, profiles, lvl_all.tolist(), lay['strides']
 
 
 def main():
     dev = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"device={dev}  tokens={NTOK}  shapes={SHAPES}", flush=True)
+    print(f"device={dev}  (pyramid layout derived per model)", flush=True)
     data = L.make_images(dev)
     summary = {}
     figdata = {}
     for name, ckpt, cfg_file in L.MODELS:
         print(f"\n########## {name} ##########", flush=True)
-        rows, prof, lvl = probe(name, ckpt, cfg_file, data, dev)
-        summary[name] = dict(rows={str(k): v for k, v in rows.items()}, top900_levels=lvl)
+        rows, prof, lvl, st = probe(name, ckpt, cfg_file, data, dev)
+        summary[name] = dict(rows={str(k): v for k, v in rows.items()},
+                             top900_levels=lvl, strides=st)
         figdata[name] = prof
 
     print("\n" + "=" * 96)
-    print("  VERDICT — is the second peak in the objectness map at all, and where does it rank?")
-    print(f"  {'sep':>5s} {'model':>16s} {'2+ maxima':>10s} {'no token':>9s} {'in top-900':>11s} {'median rank':>12s}")
-    for sep in L.SEPS:
-        for nm in summary:
+    print("  Can the token grid even SEPARATE the pair, and are both tokens selected?")
+    for nm in summary:
+        st = summary[nm]['strides']
+        print(f"\n  --- {nm}   (levels: {'  '.join('stride'+str(x) for x in st)})")
+        print(f"  {'sep':>5s}  {'pair in DISTINCT token rows':>30s}   {'both tokens in top-900':>26s}")
+        for sep in L.SEPS:
             r = summary[nm]['rows'][str(sep)]
-            print(f"  {sep:5d} {nm:>16s} {r['frac_2max']:10.3f} {r['no_token']:9.3f} "
-                  f"{r['selected']:11.3f} {r['med_rank']:12.0f}")
+            f = lambda v: " ".join(f"{x:6.2f}" if x == x else "     -" for x in v)
+            print(f"  {sep:5d}  {f(r['distinct']):>30s}   {f(r['both900']):>26s}")
     print("\n  level mix of the selected top-900 (where proposals actually come from):")
     for nm in summary:
-        lv = summary[nm]['top900_levels']
+        lv, st = summary[nm]['top900_levels'], summary[nm]['strides']
         tot = max(sum(lv), 1)
         print(f"    {nm:>16s}  " + "  ".join(
-            f"stride{STRIDES[i]} {lv[i]:4d} ({100*lv[i]/tot:4.1f}%)" for i in range(len(STRIDES))))
+            f"stride{st[i]} {lv[i]:4d} ({100*lv[i]/tot:4.1f}%)" for i in range(len(st))))
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.4))
     for ax, sep in zip(axes, (8, 16)):

@@ -1229,6 +1229,96 @@ not read: there the three zones cannot be made disjoint.
 **Status: DN declined without running it (11th lever).** Two levers have now been killed by cheap
 measurement in two days (window, DN) where each would have cost ~3 days to run.
 
+## X. Objectness + proposal-box probes — the merge is `enc_out_bbox_embed` (2026-08-23/24)
+
+Two free probes on existing checkpoints. Together they move the failure from "somewhere in stage 4"
+to a single MLP, and they **correct phase W**.
+
+### X.0 — what phase W actually measured (correction)
+
+`out['interm_outputs']` is built from `hs_enc`, i.e. `tgt_undetach`, the **already-gathered top-900**
+(`deformable_transformer.py:420`). The full objectness map over all tokens,
+`enc_outputs_class_unselected` (line 409), is never returned. So phase W's "(C) the encoder never
+proposes it" is really "**the second peak is not among the 900 selected**" — a weaker claim. The DN
+refutation is unaffected (nothing is scored down), but the mechanism was not established.
+
+### X.1 — neither the token grid nor the top-k selection is the limit (`diagnostics/objectness_probe.py`, job 2778786)
+
+Hooks `enc_out_class_embed` to capture the unselected map; asks on the TOKEN GRID whether the pair
+can be represented at all, and whether both tokens are selected.
+
+| ssl1, sep | pair in distinct stride-8 rows | **both tokens in top-900** |
+|---|---|---|
+| 8 px | 1.00 | **0.75** |
+| 12 px | 1.00 | 0.98 |
+| 16 px | 1.00 | 1.00 |
+
+At 8 px the peaks always land in different tokens and both are usually selected (clusters: 1.00).
+**So `num_queries` is a dead lever** — the second token is not out-ranked.
+
+Level mix of the selected 900 — where proposals actually come from:
+
+| model | levels |
+|---|---|
+| ssl1 | **stride8 790 (87.8%)**, stride16 106, stride32 2, stride64 2 |
+| clusters | stride8 485 (53.9%), stride16 201, stride32 195, stride64 19 |
+| 5scale | **stride4 619 (68.8%)**, stride8 51, stride16 165, stride32 20, stride64 45 |
+
+**A "stride-8 grid quantisation" story was floated and REFUTED by this same table.** It predicted the
+wall sits where the grid can first separate the pair (16 px = 2 stride-8 tokens). But the 5-scale
+model draws 69% of proposals from **stride 4**, where an 8 px pair is 2 tokens apart with a gap
+between them — and it still scores 0.000 resolved at 8 px. Recorded because it was a good-looking
+hypothesis that predicted the wall's *location*, and it is wrong.
+
+### X.2 — DIRECT confirmation: the proposal box head collapses the pair (`diagnostics/proposal_box_probe.py`, job 2778797)
+
+Monkeypatches `gen_encoder_output_proposals` for the per-token anchors and hooks `enc_out_bbox_embed`
+for the delta, then reads the actual proposal box of the two specific tokens.
+`box = sigmoid(MLP(memory) + anchor)`.
+
+ssl1, χ-separation of the two predicted boxes:
+
+| sep | d_true | d_anchor | **d_box** | err→peak1 | err→peak2 | both on peak |
+|---|---|---|---|---|---|---|
+| 4 | 4 | 8.0 | **0.47** | 2.41 | 1.96 | 0.662 |
+| 6 | 6 | 8.0 | **0.68** | 3.26 | 2.79 | 0.227 |
+| 8 | 8 | 8.0 | **0.77** | 4.08 | 3.67 | **0.000** |
+| 12 | 12 | 16.0 | 5.88 | 3.36 | 2.68 | 0.637 |
+| 16 | 16 | 16.0 | **15.48** | 0.37 | 0.33 | 0.993 |
+| 32 | 32 | 32.0 | 31.98 | 0.16 | 0.17 | 1.000 |
+
+**The head actively pulls the boxes together.** At 8 px the anchors are 8.0 px apart and the boxes
+come out **0.77 px** apart — each box is moved ~3.6 px *inward, against its own anchor*, landing both
+on the midpoint (per-peak errors 4.08 / 3.67 = half the separation). This excludes passive
+inheritance of the grid, which would have given `d_box ≈ d_anchor`. The switch is sharp and sits
+exactly at the wall: 0.77 at 8 px → 5.88 at 12 → 15.48 at 16 → exact to 0.2 px thereafter.
+
+5-scale does the same at stride 4 (anchors 4.0/8.0 px, `d_box` 1.36/1.76) — an independent second
+refutation of the grid story. clusters likewise (0.39 at 4 px, 1.84 at 8 px), and being *slightly*
+less collapsed at 8 px is consistent with phase U/W: it sometimes produced a marginal second proposal
+scoring 0.07–0.11 against a 0.10 threshold.
+
+Figure: `diagnostics/proposal_box.png`.
+
+### Where this leaves the problem
+
+The failure is one component: **`enc_out_bbox_embed`, the encoder's proposal box head.** Upstream is
+fine — the image resolves the pair (3.3σ at 8 px), the features resolve it, the grid separates it,
+the objectness selects both tokens. Downstream is fine — regression is sub-pixel once the boxes are
+distinct. One MLP takes two well-separated anchors and merges them.
+
+**Open, and NOT established:** why. The standing suspicion is the encoder's own auxiliary one-to-one
+loss — only one of the two proposals can claim a GT, the other is pushed to "no object", and the
+lowest-risk strategy may be for both to predict the same average box. That is a hypothesis. It
+predicts that a one-to-many auxiliary loss at the encoder would fix it, but note Co-DINO (phase L)
+added exactly a dense one-to-many encoder head and was declined on AP — so the naive version of that
+lever is already a documented negative.
+
+**Method note.** Two claims in this sequence were over-stated before being caught: phase W's "never
+proposed", and the stride-8 grid story. Both came from reading a mechanism into a measurement that
+did not isolate it. X.2 is a direct read of the model's own output, not an inference chained across
+two probes.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
