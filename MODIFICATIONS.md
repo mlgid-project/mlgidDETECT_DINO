@@ -1454,6 +1454,79 @@ proposed", and the stride-8 grid story. Both came from reading a mechanism into 
 did not isolate it. X.2 is a direct read of the model's own output, not an inference chained across
 two probes.
 
+### Z — head-only training: which part of the training signal loses the offset? (PRE-REGISTERED)
+
+`diagnostics/head_only_probe.py`, `tmp_diag/run_head_only.sbatch`. ssl1 only, ~25 min, no checkpoint
+written.
+
+Phase Y left exactly one question: the head is fed everything it needs and does not use it — why?
+Only four things touch `enc_out_bbox_embed`: the **features** (settled, they are fine), the **target
+parameterization**, the **loss**, and the **assignment** that decides which query is supervised by
+which peak. Rather than propose a fifth mechanism after four have been refuted, this probe measures
+which of those three survivors is responsible, by running arms that differ in exactly one of them on
+ONE cached feature set.
+
+The trunk is frozen and its features cached once, so only the box MLP moves. This is not a training
+run and produces no candidate model.
+
+| arm | what it is | differs from the previous arm in |
+|---|---|---|
+| **A** | `sigmoid(MLP(mem) + anchor)`, Hungarian-matched, `5·L1 + 2·GIoU` — byte-for-byte the `interm_outputs` loss that trains this head (dino.py:617-633) | — |
+| **B** | identical loss and parameterization, but each ladder token is supervised by **its own** peak | the ASSIGNMENT |
+| **C** | same MLP and features, predicts the signed χ-offset in **pixels** under plain L1 — no anchor, no sigmoid, no GIoU | the PARAMETERIZATION |
+| **D** | phase Y's ridge, recomputed here | CAPACITY (linear vs MLP) |
+| **D'** | ridge fitted to the head's OWN target — the logit-space delta over the anchor — read back out in px | isolates the anchor+sigmoid encoding from any optimizer |
+
+Every arm reports the same phase-Y metric on the same scale — median |predicted box χ-centre − its own
+peak| in px, on held-out FRAMES, per rung — so the numbers sit directly against the two that matter:
+**trained head 3.83 px, ridge 0.49 px, both at sep 8.**
+
+**Pre-registered readings.**
+- **A ≈ 0.5** → the objective is capable in isolation; the full run fails for a reason outside the
+  loss's design. Lever: reweight / curriculum / data mix, NOT a new loss form.
+- **A ≈ 3.8, B ≈ 0.5** → loss and parameterization are fine; the ASSIGNMENT is the fault.
+- **A ≈ B ≈ 3.8, C ≈ 0.5** → the anchor+sigmoid+GIoU target itself is what cannot be learned.
+- **C ≈ 3.8** → the MLP cannot do what ridge does. Unlikely — an MLP strictly contains a linear map —
+  and it would mean an optimization pathology, not a signal one.
+
+**The confound in arm A, and the sweep that removes it.** Arm A trains on the ladder, where rungs
+4/6/8 are half the frames — against **12.5%** of adjacent-peak gaps under 5 px in the real organic
+labels (and 17.7% in phase U's clusters diet). So a bare "A ≈ 0.5" would conflate *the objective is
+capable* with *the diet was generous*, and must not be read as the former alone. Arm A is therefore
+repeated at four close-pair diets — close-rung frame fractions **0.50 / 0.25 / 0.12 / 0.06**, which
+bracket both the real rate and phase U's — with the training-set SIZE held fixed so only the mix
+varies, and the lr inherited from arm A so the sweep stays single-variable.
+
+- **learns at 0.50, stops by 0.12** → rarity is sufficient to explain the full run, and the lever is
+  the data mix. Note this would sit awkwardly beside phase U, which raised the rate to 1.4× real in a
+  FULL run and moved the head only ~2.4×; the difference would then be the frozen trunk.
+- **still learns at 0.06** → rarity is NOT the explanation, and the fault is in training the head
+  jointly with everything else.
+
+**What arm C does and does not isolate.** C bundles three changes off B at once — no anchor, no
+sigmoid, no GIoU, one coordinate instead of four — so it is a capability check (can the MLP do what
+ridge does), not a clean single variable. The anchor+sigmoid encoding is isolated cleanly and without
+any optimizer by **D vs D'**, which are the same ridge differing only in target space. C's target is
+expressed in normalized units so its gradients share a scale with A and B and the one lr grid is fair
+to all three.
+
+**Controls.** Frame-level 60/20/20 split with phase Y's seed, so the rungs are directly comparable.
+Learning rate AND epoch are chosen on the VALIDATION slice only, never on test; the lr sweep spans
+three decades so a null result cannot be an lr artefact. The head is initialised exactly as the real
+one is (`MLP(256, 256, 4, 3)`, zero last layer, dino.py:133-139), so every arm starts from a fresh
+detector's state. `LADDER_ISO=1` keeps the stimulus identical to phase Y's.
+
+**Two extra columns, on the record as a check rather than a claim.** (i) The median **height** error
+per arm. X.3 showed the merged box SPANS the pair, which is mostly an error in the χ *extent*, and
+that coordinate sits far out in the sigmoid tail — anchor `h = 0.05·2^lvl` (utils.py:45) against a
+true 8.5/512 = 0.0166, where `dp/dlogit` is about 15× smaller than for the centre near mid-image.
+That is arithmetic off `gen_encoder_output_proposals`, not a mechanism; these columns are what would
+promote it to one, or kill it. (ii) For arm A, how often a peak's Hungarian match actually lands on
+that peak's **own** token, and how far away it lands when it does not — so an A-vs-B gap says *what*
+the assignment does wrong rather than only *that* it does.
+
+**Result:** pending.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
