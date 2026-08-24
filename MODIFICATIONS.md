@@ -1657,6 +1657,62 @@ ones, **with clusters ON**. That last detail is load-bearing: the base simulator
 0.029, below the diet sweep's tested floor of 0.06, so running it with clusters OFF would silently
 re-run the rarity test instead of the distribution test.
 
+### Z.2 (experiment 1) — the REAL TRAINING DISTRIBUTION is what teaches the merge (2026-08-24)
+
+`diagnostics/real_frame_head_probe.py`, `tmp_diag/run_realframe.sbatch`, job 2779999, 21 min.
+
+Fills the missing cell of the 2×2. Everything is held at phase Z's settings — frozen converged trunk,
+only `enc_out_bbox_embed` moves, the real `interm_outputs` loss, 180 training frames, the same ladder
+test slice and the same 60/20/20 seed — and exactly ONE thing changes: **where the training frames come
+from.**
+
+Median |χ-centre error| in px on the ladder test slice:
+
+**ISO=1 eval (2.43×8.5 boxes — phase Z's exact eval set):**
+
+| trained on | sep 4 | sep 6 | **sep 8** | sep 12 | sep 16 | sep 24 |
+|---|---|---|---|---|---|---|
+| real frames, clusters ON | 1.66 | 2.51 | **3.22** | 2.34 | 0.77 | 0.69 |
+| real frames, clusters OFF | 1.69 | 2.51 | **3.23** | 2.98 | 1.04 | 0.64 |
+| ladder frames (Z baseline) | 0.54 | 0.35 | **0.31** | 0.25 | 0.19 | 0.23 |
+
+**The real trained head is 3.83 px. Training this head on real frames gives 3.22 px. Training the
+identical head on ladder frames gives 0.31 px.** The merge is reproduced, from the distribution alone,
+with the trunk frozen at convergence and every competing loss term absent. **Condition 3 is the
+answer; conditions 1 and 2 — the joint-training trajectory — are not needed to produce the failure.**
+
+**Clusters ON vs OFF is a dead heat: 3.22 vs 3.23.** The two training sets differ by more than 10× in
+close-pair rate (measured here: `<5 px` **0.173** vs **0.015**, against real organic 0.125) and the
+result does not move. That is the third independent refutation of the rarity story, after phase U and
+phase Z's diet sweep. Close-pair scarcity is not a lever and should not be revisited.
+
+**The wide rungs rule out a domain-gap artefact.** A real-trained head tested on ladder stimuli faces a
+domain gap regardless — the ladder holds intensity at 30, carries 16 objects and no rings. That gap is
+directly visible and directly bounded: at sep 16/24 the real-trained head reaches 0.77/0.69 px against
+the ladder-trained head's 0.19/0.23, so the gap is worth about **0.5 px**. The close-pair error is
+**3.22 px**. A uniform domain gap would degrade every rung equally; instead the head is nearly fine
+when peaks are apart and fails only when they are close — precisely the real model's signature.
+
+**Box-shape control.** A second eval set at ISO=0 (10.6×8.5, real box shape, identical peak positions —
+`make_images` seeds per frame) gives real-ON **3.67** and real-OFF **3.75** at sep 8. The real arms are
+*in* distribution there and still merge, so the failure is not a box-shape artefact. Note the ladder
+baseline reads 2.55 on that eval set: it trained on 2.43-wide boxes and is out of distribution, so the
+ISO=0 block is interpretable for the real arms only and NOT a fair line for the baseline.
+
+**Sweep integrity.** For the clusters-ON arm all three learning rates selected the same checkpoint
+(1.61 px val at lr 1e-5), i.e. the higher rates never beat the lowest — the failure is not an lr
+artefact. The real arms also received MORE supervision than the baseline, not less: 59.3 and 43.6
+objects per frame against the ladder's 16, at equal frame count. The result is a failure despite the
+advantage.
+
+**What this changes.** For the first time the fault has a location that can be dialled: something about
+the real training distribution teaches this head to describe a close pair as one object. Candidates
+not yet separated — object density (~60/frame vs 16), class heterogeneity (rings alongside segments),
+intensity variation (10-50 vs a fixed 30), box-size variation. Each is now a cheap single-variable
+test with this machinery (~7 min per arm), building UP from the ladder case that works rather than
+ablating down from the case that fails. **No mechanism is claimed here** — six have been refuted in
+this investigation; this identifies where to look, not what is wrong.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
