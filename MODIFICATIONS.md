@@ -561,7 +561,7 @@ automatically. Full design record: `docs/PHYSICS_SIM_INVESTIGATION.md`.
     2701978/2701979 and `bank.npz` retained; no code reverted (all physics paths are opt-in and
     default off, so main is byte-identical at inference).
 
-## Q. Label-completeness diagnostic (Step 1) — the organic eval is LABEL-LIMITED (2026-08-05)
+## Q. Label-completeness diagnostic (Step 1) — **VERDICT RETRACTED; the eval is NOT label-limited** (2026-08-05, retracted 2026-08-23)
 New plan after the 7 declined levers: before spending another training lever, check whether the
 organic GATE itself is trustworthy. Prior hint ("Diagnostics & roadmap" KEY FINDING): the best
 single model's confident FPs sit ON rings. This quantifies it on the *deployed* model.
@@ -576,12 +576,27 @@ single model's confident FPs sit ON rings. This quantifies it on the *deployed* 
   HIGH-confidence (>0.5) FPs **0.74**; median FP q-dist to nearest GT peak **1.8px**; only 10% of
   FPs off-ring (>20px). Montage: on-ring FPs land on real arcs at unlabeled χ; off-ring FPs are the
   spurious tall segment-bars / low-q noise.
-- **Verdict: the organic eval is label-LIMITED, not model-limited.** True precision ~0.89 vs measured
-  0.76 → measured AP/precision is pessimistic. CONSEQUENCE for every future lever: a model that
-  detects MORE faint/high-q REAL peaks scores some as FPs (unlabeled) → raw AP can stay flat on a
-  genuine improvement. Judge on the faint/high-q recall probe (matched operating point, phase-P
-  calibration lesson) + the label-adjusted view, not AP alone. Pending expert confirmation of the
-  montage (Schreiber group). Diagnostic only; no training/inference change.
+- **VERDICT RETRACTED (2026-08-23).** The original conclusion — "the organic eval is label-LIMITED,
+  true precision ~0.89 vs measured 0.76" — is **WRONG**. It rested on the assumption that an
+  unmatched detection landing on a real ring is an unlabeled real peak. **The organic labels are
+  COMPLETE: there are no unlabeled peaks** (user, 2026-08-23; cf. the standing fact that the
+  hand-labelled peaks are correct and not over-segmented). The "label-adjusted precision 0.890" is
+  therefore meaningless and must not be quoted.
+- **What the measurement actually shows.** Precision on organic is genuinely **0.764**. The on-ring
+  unmatched detections are **real false positives**: the model fires at ring positions where no peak
+  exists. That makes them a MODEL problem, and a sizeable one — 0.60 of all FPs and **0.74 of the
+  high-confidence (>0.5) FPs** are of this kind, with a median q-distance of only **1.8 px** to the
+  nearest labeled peak.
+- **Reading it correctly:** the model puts boxes at very nearly the right *radial* position (1.8 px in
+  q) but at a χ where nothing is. Combined with the phase V/W finding that χ-separation is where the
+  model fails, this is consistent with a general weakness along χ — merging genuine close pairs in χ
+  *and* emitting spurious detections at wrong χ on a correct ring. **Not yet established:** the FP
+  χ-distance distribution was never measured, only the q-distance. That measurement is cheap and
+  should be made before the connection is claimed.
+- **CONSEQUENCE for every future lever:** the earlier guidance ("raw AP can stay flat on a genuine
+  improvement, so judge on the label-adjusted view") is void — AP and precision on organic mean what
+  they say. Keep the matched-operating-point discipline (phase-P lesson) for a different reason: score
+  distributions differ between models, not because the labels are incomplete.
 
 ## R. Higher input resolution 512×2048 (Step 2) — FROM-SCRATCH — **DECLINED (8th lever negative)**
 First Step-2 "representation sensitivity" lever (`docs/HIRES_INVESTIGATION.md`). Attack the faint/
