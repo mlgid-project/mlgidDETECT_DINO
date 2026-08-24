@@ -1446,8 +1446,17 @@ distinct. One MLP takes two well-separated anchors and merges them.
 **Settled by phase Y:** the encoder does NOT merge the pair. A straight-line fit on the exact vector the
 head reads recovers each token's offset to its own peak to 0.49 px where the trained head is off by
 3.83 px. The information is present and unused, so the remaining fault is in the TRAINING SIGNAL, not
-in perception. **Still open:** why the training signal fails to teach it — deliberately not guessed at,
-after four refuted mechanisms.
+in perception.
+
+**Narrowed by phase Z:** and not in the head's own training signal either. Trained ALONE on a frozen
+trunk, this exact head under this exact loss reaches **0.31 px** — better than ridge, 12× better than
+itself in the real run — and it still reaches 0.48 px when close pairs are thinned to the real
+organic rate. Loss form, anchor+sigmoid encoding, Hungarian assignment, MLP capacity and close-pair
+rarity are each now measured and cleared. **Still open:** the three things phase Z held fixed — the
+frozen (and converged) trunk, the absence of every competing loss term, and the ladder's simplified
+frames. The failure is created by the CONDITIONS of joint training or by the real training
+distribution, not by anything intrinsic to the head or its objective. Five mechanisms have now been
+proposed and refuted in this investigation; a sixth is not offered here.
 
 **Method note.** Two claims in this sequence were over-stated before being caught: phase W's "never
 proposed", and the stride-8 grid story. Both came from reading a mechanism into a measurement that
@@ -1525,7 +1534,75 @@ promote it to one, or kill it. (ii) For arm A, how often a peak's Hungarian matc
 that peak's **own** token, and how far away it lands when it does not — so an A-vs-B gap says *what*
 the assignment does wrong rather than only *that* it does.
 
-**Result:** pending.
+**RESULT (job 2779790, 16 min, ssl1).** Median |χ-centre error| in px at the ladder tokens, on
+held-out frames. Reference: the real trained head is **3.83 px** at sep 8, phase Y's ridge **0.49**.
+
+| arm | sep 4 | sep 6 | **sep 8** | sep 12 | sep 16 | sep 24 |
+|---|---|---|---|---|---|---|
+| **A** detection loss | 0.54 | 0.35 | **0.31** | 0.25 | 0.19 | 0.23 |
+| **B** oracle assignment | 0.74 | 0.41 | **0.31** | 0.28 | 0.21 | 0.26 |
+| **C** direct offset | 0.70 | 0.33 | **0.23** | 0.24 | 0.19 | 0.18 |
+| **D** ridge px | 1.30 | 0.68 | **0.49** | 0.38 | 0.30 | 0.28 |
+| **D'** ridge logit | 1.34 | 0.68 | **0.50** | 0.43 | 0.33 | 0.30 |
+
+**Every pre-registered branch that blamed the head's own training signal is refuted.** Arm A — the
+real `interm_outputs` loss, byte-for-byte, with nothing else competing — reaches **0.31 px** where the
+same head in the real run is off by 3.83. That is 12× better than the trained head and better than
+ridge itself. Reading each contrast:
+
+- **A ≈ B (0.31 / 0.31)** → the **assignment costs nothing**. Handing every token its own peak for
+  free changes the result not at all.
+- **B ≈ C (0.31 / 0.23)** → the **parameterization costs nothing**. Stripping the anchor, the sigmoid
+  and the GIoU term does not help; if anything the box form is slightly the better target.
+- **C ≥ D (0.23 / 0.49)** → **capacity is not the issue** in either direction: the MLP does not fail
+  to reach the linear fit, it beats it.
+- **D ≈ D' (0.49 / 0.50)** → **the anchor+sigmoid encoding costs nothing.** This kills the sigmoid-tail
+  arithmetic pre-registered above as a check: `dp/dlogit` really is ~15× smaller for the height
+  coordinate, and it makes **no measurable difference** to what a fit can recover. Arm A's height
+  error confirms it from the other side — **0.05-0.07 px at every rung**, essentially exact. The
+  merged box that SPANS the pair (X.3) is not reproduced here at all.
+
+D landing on 0.49 at sep 8 reproduces phase Y's 0.49 exactly, through an independently written code
+path — the two probes agree.
+
+**The diet sweep refutes rarity too.** sep-8 test error against the close-frame fraction:
+
+| f | 0.50 | 0.25 | **0.12** (≈ real) | 0.06 |
+|---|---|---|---|---|
+| sep-8 px | 0.34 | 0.40 | **0.48** | 0.57 |
+
+Thinning the close-pair diet 8× degrades the head by a factor of 1.7, from 0.34 to 0.57 px. At the
+real organic rate it is **0.48 px** — still eight times better than the trained head. Scarcity of
+close pairs is **not** why the real head merges them. This agrees with phase U from the opposite
+direction: U added close pairs to a full run and gained little; Z removes them from an isolated head
+and loses little. "More close pairs" is now dead from both ends.
+
+**Assignment, measured directly.** A peak's Hungarian match lands on that peak's own token 0.68-0.91
+of the time (0.77 at sep 8), and when it misses, the matched query's token sits ~1.65 px away. So the
+assignment IS imperfect — and arm B shows that imperfection is harmless. A mechanism can be real and
+still not be the cause; this is the fifth candidate, and it died before being proposed.
+
+**What this leaves — stated as what was held fixed, not as a guess.** The probe differs from the real
+run in exactly three ways, and the fault must live in one of them:
+
+1. **The trunk was frozen, and frozen at convergence.** Arm A reads ssl1's finished features. In the
+   real run the head learns against a trunk that starts from SSL init and moves under it.
+2. **Only the box terms were optimized.** The class head was frozen, so `loss_ce`, the DN losses, the
+   six decoder aux losses and the Co-DINO aux head were all absent. Arm A had no competition.
+3. **The frames are ladder frames.** Two-peak pairs, segments only, constant intensity 30, ISO box
+   shape — not the heterogeneity of real simulated GIWAXS. The diet sweep varied the close/far MIX
+   within that, not the realism of the frames themselves.
+
+(1) and (2) are the joint-training conditions; (3) is a distribution difference. Nothing else remains:
+features, loss form, encoding, assignment, capacity and close-pair rarity are now each measured and
+cleared. **No mechanism is proposed here** — five have now been refuted in this investigation, and the
+next step should separate (1)/(2) from (3) by measurement, not by argument.
+
+**Caveats.** 96.1% of ladder tokens fall inside the top-900 and the remaining 3.9% are excluded, so
+the arms describe selected tokens only (which is also what the real head regresses). The sep-4 rung is
+weak in every arm, as in phase Y, because both peaks share one token 0.54 of the time. lr and epoch
+were chosen on validation only; all three lrs gave the same verdict for A, B and C, so no result here
+turns on the sweep.
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
