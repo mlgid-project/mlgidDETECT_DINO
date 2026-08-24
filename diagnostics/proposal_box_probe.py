@@ -67,7 +67,7 @@ def probe(name, ckpt, cfg_file, data, dev):
     lay, rows = {}, {}
     with torch.no_grad():
         for sep, frames in data.items():
-            acc = dict(n=0, d_box=[], d_anc=[], err1=[], err2=[], both=0)
+            acc = dict(n=0, d_box=[], d_anc=[], err1=[], err2=[], both=0, h=[], span=[])
             for img, gt in frames:
                 rec.clear()
                 t = img.to(dev)
@@ -82,6 +82,7 @@ def probe(name, ckpt, cfg_file, data, dev):
                 box = (rec['delta'][0] + anc).sigmoid()      # (N,4) cxcywh in [0,1]
                 anc_s = anc.sigmoid()
                 chi_box = (box[:, 1] * H_IMG).cpu().numpy()  # y = chi
+                h_box = (box[:, 3] * H_IMG).cpu().numpy()    # chi EXTENT of the predicted box
                 chi_anc = (anc_s[:, 1] * H_IMG).cpu().numpy()
                 if not lay:
                     st, sh, of = layout_for(box.shape[0])
@@ -105,17 +106,21 @@ def probe(name, ckpt, cfg_file, data, dev):
                     e1 = abs(float(chi_box[k1]) - pc[0])
                     e2 = abs(float(chi_box[k2]) - pc[1])
                     acc['err1'].append(e1); acc['err2'].append(e2)
+                    acc['h'].append(0.5 * (float(h_box[k1]) + float(h_box[k2])))
+                    # chi extent actually spanned by the pair, outer edge to outer edge
+                    acc['span'].append(sep + L.BOX_H)
                     if max(e1, e2) <= max(3.0, 0.35 * sep):
                         acc['both'] += 1
             n = max(acc['n'], 1)
             med = lambda v: float(np.median(v)) if v else float('nan')
             rows[sep] = dict(n=acc['n'], d_box=med(acc['d_box']), d_anc=med(acc['d_anc']),
                              err1=med(acc['err1']), err2=med(acc['err2']),
-                             both_on_peak=acc['both'] / n)
+                             both_on_peak=acc['both'] / n,
+                             h_pred=med(acc['h']), h_single=L.BOX_H, h_span=med(acc['span']))
             r = rows[sep]
-            print(f"  sep={sep:3d} n={r['n']:4d} | d_true {sep:3d}  d_anchor {r['d_anc']:5.1f}  "
-                  f"d_box {r['d_box']:6.2f} | err peak1 {r['err1']:5.2f}  peak2 {r['err2']:5.2f} "
-                  f"| both on peak {r['both_on_peak']:.3f}", flush=True)
+            print(f"  sep={sep:3d} n={r['n']:4d} | d_anchor {r['d_anc']:5.1f} d_box {r['d_box']:6.2f} "
+                  f"| err {r['err1']:5.2f}/{r['err2']:5.2f} | box chi-height {r['h_pred']:6.2f}  "
+                  f"(one peak {r['h_single']:.1f}, pair spans {r['h_span']:.1f})", flush=True)
     hnd.remove()
     DT.gen_encoder_output_proposals = _orig_gen
     del model
@@ -140,6 +145,16 @@ def main():
             r = summary[nm][str(sep)]
             print(f"  {sep:5d} {nm:>16s} {sep:7d} {r['d_anc']:9.1f} {r['d_box']:8.2f} "
                   f"{r['both_on_peak']:13.3f}")
+
+    print("\n" + "=" * 92)
+    print("  BOX SIZE TEST — does the merged box describe ONE peak, or a blob spanning BOTH?")
+    print("    h ~ one-peak height   -> single-object hypothesis at the midpoint (unstable matching)")
+    print("    h ~ pair span         -> the head deliberately describes one merged object")
+    print(f"  {'sep':>5s} {'model':>16s} {'pred chi-height':>16s} {'one peak':>9s} {'pair span':>10s}")
+    for sep in L.SEPS:
+        for nm in summary:
+            r = summary[nm][str(sep)]
+            print(f"  {sep:5d} {nm:>16s} {r['h_pred']:16.2f} {r['h_single']:9.1f} {r['h_span']:10.1f}")
 
     fig, ax = plt.subplots(figsize=(7.4, 5))
     for nm, c in zip(summary, ('tab:blue', 'tab:red', 'tab:green')):

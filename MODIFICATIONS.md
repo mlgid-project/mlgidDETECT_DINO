@@ -972,6 +972,17 @@ default path is unaffected — gate G1 proved bit-identity.
    out of χ range and NaN'd 2 frames in 3, biasing survivors sparse. **This landmine is still live
    for anyone who generates an out-of-range label.**
 
+**EXONERATED AS A FAIR TEST (2026-08-24, phase X.3).** A recurring worry about this verdict was that
+the lever might have been under-dosed — that the simulator never really produced close pairs. Measured
+directly: with clusters ON the training χ-gap distribution reaches `<5 px` **0.177** vs real **0.125**
+(base simulator: 0.029). Phase U slightly OVERSHOT the real rate. The negative verdict therefore stands
+as a genuine test of "train on close pairs", and the conclusion is stronger than first written: the
+model saw close pairs at 1.4× the real rate and still merges them (phase X.2/X.3 measure clusters1's
+proposal boxes at 1.84 px apart for a true 8 px gap — 2.4× better than ssl1's 0.77, still far wrong).
+Training exposure is necessary but NOT sufficient. Related: relaxing the simulator's NMS is a no-op —
+the base generator places peaks independently at random and simply never creates close pairs, so
+`add_peak_clusters` is the only mechanism that produces them (see phase X.3).
+
 ## V. Synthetic separation ladder — **RUN; KILLS BOTH RESOLUTION ROUTES** (2026-08-21)
 
 Before spending 3 days on 512×1024 → 1024×1024, measure the architecture's actual resolution limit
@@ -1229,7 +1240,7 @@ not read: there the three zones cannot be made disjoint.
 **Status: DN declined without running it (11th lever).** Two levers have now been killed by cheap
 measurement in two days (window, DN) where each would have cost ~3 days to run.
 
-## X. Objectness + proposal-box probes — the merge is `enc_out_bbox_embed` (2026-08-23/24)
+## X. Objectness + proposal-box probes — the head describes the close pair as ONE elongated object (2026-08-23/24)
 
 Two free probes on existing checkpoints. Together they move the failure from "somewhere in stage 4"
 to a single MLP, and they **correct phase W**.
@@ -1300,6 +1311,78 @@ scoring 0.07–0.11 against a 0.10 threshold.
 
 Figure: `diagnostics/proposal_box.png`.
 
+### X.3 — the merged box SPANS both peaks; phase U is exonerated; `min_nms` was a dead knob (2026-08-24)
+
+**Box-size test** (`diagnostics/proposal_box_probe.py`, job 2778844). X.2 measured only the box
+*centre*. The height discriminates two very different failures, pre-registered before the run:
+`h ≈ 8.5 px` (one peak) → a single-object hypothesis at the midpoint, i.e. unstable Hungarian
+assignment averaging the target; `h ≈ the pair span` → the head deliberately describes one merged
+elongated object.
+
+ssl1, χ-height of the predicted proposal box:
+
+| sep | predicted h | one peak | pair spans |
+|---|---|---|---|
+| 2 | 10.90 | 8.5 | 10.5 |
+| 4 | 11.47 | 8.5 | 12.5 |
+| 6 | 13.85 | 8.5 | 14.5 |
+| **8** | **15.45** | 8.5 | **16.5** |
+| 12 | 14.58 | 8.5 | 20.5 |
+| **16** | **10.05** | **8.5** | 24.5 |
+| 32 | 9.33 | 8.5 | 40.5 |
+
+**The box tracks the pair span below the wall and snaps back to single-peak height above it.** All
+three models. So the head is not confused and not averaging: it perceives one elongated object and
+describes it accurately. **The unstable-matching hypothesis is REFUTED** — that predicted a
+single-peak-sized box at the midpoint.
+
+**Simulator χ-gap distribution measured** (CPU, minutes). Base simulator vs phase U vs real organic,
+gap to the nearest same-q sibling (`QTOL = 8 px`, the clusters_gate definition):
+
+| | median gap | <5 px | <10 px | <33 px |
+|---|---|---|---|---|
+| base simulator | 85–93 px | 0.029 | 0.045 | 0.135 |
+| **phase U clusters ON** | 40.9 px | **0.177** | 0.250 | 0.442 |
+| real organic | **3.9 px** | **0.125** | 0.180 | 0.349 |
+
+**PHASE U IS EXONERATED as a fair test.** It did reach — in fact slightly overshot — the real
+close-pair rate. So "the model was never shown close pairs" is NOT why it merges them: clusters1 saw
+them at 1.4× the real rate and still collapses (`d_box` 1.84 px at a true 8 px vs ssl1's 0.77 — better
+by ~2.4×, nowhere near correct). **Training exposure is necessary but demonstrably not sufficient.**
+
+**A wrong claim of mine, retracted.** I asserted that `filter_nms(min_nms=0.001)` on 2.5σ×3.5σ boxes
+is what strips close pairs from the training data, and recommended relaxing it. Measured: relaxing the
+threshold **changes nothing**.
+
+| effective IoU threshold | segs/frame | median gap | <5 px |
+|---|---|---|---|
+| 0.001 (current) | 62 | 85.4 | 0.029 |
+| 0.3 | 58 | 85.6 | 0.029 |
+| 0.7 | 62 | 84.7 | 0.029 |
+| both filters lenient (0.7 / 0.9) | 66 | 86.7 | 0.031 |
+
+`filter_nms` *does* drop 49.5% of peaks, so it is doing heavy work — but not on close pairs. The
+simulator places peaks **independently at random** over 512×1024; with ~62 segments, two landing at the
+same q within a few px of χ is simply rare. They are never generated, so a lenient filter has nothing
+to spare. Real close pairs are the same lattice spacing at different crystallite orientations —
+physically correlated at identical q, which the base generator does not model. **`add_peak_clusters`
+(phase U) is the structurally correct mechanism, and the only one that produces them at all.**
+A "lenient NMS" training run would have been a null.
+
+**BUG FIXED — `min_nms` was a dead config knob.** `simulation.py:358` called
+
+```python
+filter_nms(pos, widths, a_pos, a_widths, sc.min_nms)          # five positional args
+```
+
+against `def filter_nms(pos, widths, a_pos, a_widths, is_ring, min_nms=0.001)`. `sc.min_nms` landed in
+the **`is_ring` slot, which the function body never uses**, and the threshold silently fell back to its
+default. Verified empirically: config values 0.001 and 0.9 give byte-identical distributions. Now
+passed by keyword, and `is_ring` documented as unused. **Behaviourally a no-op today** (config ==
+default == 0.001; pre/post-fix simulator signature identical over 25 seeded frames, 809 boxes,
+md5 `c048383e…`), but the knob is live, so a future config change will actually take effect instead of
+silently doing nothing.
+
 ### Where this leaves the problem
 
 The failure is one component: **`enc_out_bbox_embed`, the encoder's proposal box head.** Upstream is
@@ -1307,12 +1390,12 @@ fine — the image resolves the pair (3.3σ at 8 px), the features resolve it, t
 the objectness selects both tokens. Downstream is fine — regression is sub-pixel once the boxes are
 distinct. One MLP takes two well-separated anchors and merges them.
 
-**Open, and NOT established:** why. The standing suspicion is the encoder's own auxiliary one-to-one
-loss — only one of the two proposals can claim a GT, the other is pushed to "no object", and the
-lowest-risk strategy may be for both to predict the same average box. That is a hypothesis. It
-predicts that a one-to-many auxiliary loss at the encoder would fix it, but note Co-DINO (phase L)
-added exactly a dense one-to-many encoder head and was declined on AP — so the naive version of that
-lever is already a documented negative.
+**Open, and NOT established:** why. X.3 refuted the unstable-matching hypothesis (the box spans the
+pair, it is not an averaged single-peak box) and exonerated the training-data explanation (phase U hit
+the real close-pair rate and the merge persists). What remains is that the **encoder representation
+itself groups the pair into one object**, and the box head faithfully reports it — which would explain
+why more training examples move the needle only ~2.4× rather than fixing it. That is a hypothesis and
+has NOT been measured.
 
 **Method note.** Two claims in this sequence were over-stated before being caught: phase W's "never
 proposed", and the stride-8 grid story. Both came from reading a mechanism into a measurement that

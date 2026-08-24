@@ -355,7 +355,12 @@ class FastSimulation(object):
             )
             if is_segment:
                 a_widths = torch.maximum(a_widths, widths * (torch.rand_like(widths) + 1.0))
-            pos, widths, a_pos, a_widths, _ = filter_nms(pos, widths, a_pos, a_widths, sc.min_nms)
+            # NOTE: this used to be called with five positional args, which put `sc.min_nms`
+            # into the (unused) `is_ring` slot and left the threshold at its DEFAULT — so
+            # `min_nms` was a dead config knob. Byte-identical today (config == default 0.001),
+            # but the knob is now live. See MODIFICATIONS.md phase X.3.
+            pos, widths, a_pos, a_widths, _ = filter_nms(
+                pos, widths, a_pos, a_widths, is_ring=None, min_nms=sc.min_nms)
             intensities = gen_intensities(pos, widths, a_pos, a_widths, intensity_range)
             return pos, widths, a_pos, a_widths, intensities
 
@@ -1162,6 +1167,11 @@ def flip_boxes(boxes, ax, shape):
 
 
 def filter_nms(pos, widths, a_pos, a_widths, is_ring, min_nms: float = 0.001):
+    """Greedy NMS over peaks, on boxes inflated to 2.5 sigma in q and 3.5 sigma in chi.
+
+    `is_ring` is accepted for call-signature compatibility and is NOT used — pass the
+    threshold by keyword (`min_nms=...`) or it will silently fall back to the default.
+    """
     idx_boxes = torch.stack(
         [
             pos - widths * 2.5,
