@@ -1604,6 +1604,59 @@ weak in every arm, as in phase Y, because both peaks share one token 0.54 of the
 were chosen on validation only; all three lrs gave the same verdict for A, B and C, so no result here
 turns on the sweep.
 
+### Z.1 — lock-in check: the head was already stuck at epoch 279 (2026-08-24)
+
+`diagnostics/lockin_probe.py`, `tmp_diag/run_lockin.sbatch`, job 2779900, ~6 min.
+
+Phase Z left three differences from the real run, two of which are the conditions of joint training.
+The joint-training story has a testable signature: if the head learns "one wide box covers both" early,
+while the features genuinely cannot separate a close pair, then the information AVAILABLE to it should
+keep improving over training while the information USED stays flat. This measures both, at the only two
+time points that exist on disk — `checkpoint0279.pth` (epoch 279, just before the lr drop at 280,
+organic AP 0.542) and `checkpoint.pth` (epoch 436, the end of the run, organic AP 0.561). One fixed
+image set for both.
+
+AVAILABLE = ridge on the exact 256-dim vector the box head reads. USED = the trained head's own error
+on the same tokens. Median |error| in px:
+
+| sep | USED @279 | AVAILABLE @279 | USED @436 | AVAILABLE @436 | Δ USED | Δ AVAILABLE |
+|---|---|---|---|---|---|---|
+| 4 | 2.26 | 1.19 | 2.05 | 1.21 | −0.21 | +0.02 |
+| 6 | 3.18 | 0.67 | 3.00 | 0.63 | −0.18 | −0.04 |
+| **8** | **3.94** | **0.47** | **3.83** | **0.49** | **−0.11** | **+0.02** |
+| 12 | 3.05 | 0.39 | 3.03 | 0.37 | −0.02 | −0.02 |
+| 16 | 0.38 | 0.31 | 0.33 | 0.30 | −0.05 | −0.01 |
+| 24 | 0.41 | 0.31 | 0.20 | 0.29 | −0.21 | −0.02 |
+
+**This is the pre-registered "both flat" outcome, and it is genuinely ambiguous about timing.** The
+information was already fully available at epoch 279 (ridge 0.47, indistinguishable from the final
+0.49) and the head was already stuck at 3.94. Whatever locked it in happened BEFORE epoch 279, and
+these two checkpoints cannot date it — nothing earlier was ever written (`save_checkpoint_interval =
+1000`, run ended at 436). **Do not write this up as dating the lock-in.**
+
+Three things it does establish:
+
+- **"Train longer" is dead as a lever.** The last 157 epochs — a third of the run, and including the
+  lr drop at 280, which is normally the single largest step-change in a detection run — moved the
+  sep-8 error from 3.94 to 3.83. That is 3%. The head is not slowly converging toward the right
+  answer; it has stopped.
+- **The head is not weak, it is specifically close-pair-blind.** At sep 24 it reaches 0.20 px and
+  BEATS ridge's 0.29; at sep 16 it matches it. So the same head that out-performs a straight-line fit
+  on separated peaks is 8× worse than that fit at 6-8 px, with the information equally available in
+  both regimes. This is not a regression-quality problem anywhere on the ladder.
+- **The features reached final quality by epoch 279 at the latest.** Ridge is flat to ±0.04 px across
+  the window at every rung.
+
+**A contrast worth recording:** organic AP rose 0.542 → 0.561 over exactly this window, so the model
+as a whole was still improving. Whatever those 157 epochs bought, it was not close-pair resolution.
+
+**Where this leaves the design.** Z.1 has done what two checkpoints can do. The remaining separation —
+condition 1 (joint-training trajectory) vs condition 3 (the real training distribution) — needs
+experiment 1: phase Z's head-only training with the frames swapped from the ladder to real simulated
+ones, **with clusters ON**. That last detail is load-bearing: the base simulator gives `<5 px` gaps at
+0.029, below the diet sweep's tested floor of 0.06, so running it with clusters OFF would silently
+re-run the rarity test instead of the distribution test.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
