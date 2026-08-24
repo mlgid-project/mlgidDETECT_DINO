@@ -1383,6 +1383,59 @@ default == 0.001; pre/post-fix simulator signature identical over 25 seeded fram
 md5 `c048383e…`), but the knob is live, so a future config change will actually take effect instead of
 silently doing nothing.
 
+### Y — linear read-out probe: the offset IS in the feature, the head just doesn't use it (2026-08-24)
+
+`diagnostics/linear_readout_probe.py`, job 2778855, 3 min, existing checkpoints.
+
+X.3 left two possibilities needing opposite responses: (a) the 256-number feature the box head reads
+does not contain the offset, so the encoder merged the pair before the head saw it — unfixable from the
+head; or (b) the offset is present and the head does not use it — a training problem.
+
+**Method.** The box head is `MLP(output_memory[i])` for a SINGLE token, so the probe uses that exact
+vector. Target = the signed χ-offset from the token centre to ITS OWN nearest planted peak, i.e.
+precisely what the head is supposed to output. Model = ridge regression, closed form (no sklearn on
+this env) — a straight-line fit, no capacity to memorise. Every frame carries exactly two peaks at
+every rung, so total flux is constant and the fit cannot cheat on brightness or object count.
+
+**Median |error| in px, ssl1:**
+
+| sep | **trained head** | **ridge (enc out)** | ridge (pre-encoder) | shuffled ctrl | target spread |
+|---|---|---|---|---|---|
+| 4 | 2.05 | 1.21 | 1.25 | 2.09 | 1.92 |
+| 6 | 3.00 | **0.63** | 0.97 | 1.72 | 1.86 |
+| **8** | **3.83** | **0.49** | 0.67 | 1.93 | 1.93 |
+| 12 | 3.03 | **0.37** | 0.49 | 1.67 | 1.97 |
+| 16 | 0.33 | 0.30 | 0.48 | 1.95 | 1.99 |
+| 24 | 0.20 | 0.29 | 0.53 | 2.28 | 2.32 |
+
+**Answer: (b).** At 8 px the trained head is off by 3.83 px (it points at the midpoint); a straight line
+on the identical vector is off by **0.49 px** — ~8× better. Same result for clusters (3.16 → 0.54) and
+5scale (4.47 → 0.41).
+
+**Controls hold.** Shuffled labels give 1.93 against a target spread of 1.93 — exactly chance, so the
+fit is not an artefact. Train/validation/test split is by FRAME (60/20/20); splitting by token would
+leak, since tokens from one image are correlated. λ chosen on the validation slice only.
+
+**No stage destroys the information.** It is already in the projected backbone features (0.67 px at
+8 px) and the encoder *improves* it (0.49 px). So the representation hypothesis from X.2/X.3 is
+**REFUTED** — the encoder does not merge the pair. Everything the head needs is in the vector it
+receives, and it discards it.
+
+**Caveat on the 4 px row.** There, both peaks often fall in the SAME token (distinct rows only 0.54 of
+the time, phase X.1), and identical features with different targets are unlearnable by anything. The
+weak 1.21 is a property of the grid, not the probe, and does not affect the 6–12 px rows where the
+failure lives.
+
+**Why this matters.** For eleven levers the answer was always "the model cannot". Here it demonstrably
+**can** and does not. The ceiling is not perceptual, so a training-side intervention has something real
+to aim at — the first time in this sequence that has been true.
+
+**Deliberately NOT claimed:** why training fails to teach the head to use the information. Four
+mechanisms have been proposed and refuted in this investigation (proposal selection, stride/grid
+quantisation, unstable Hungarian matching, representational merging); a fifth guess is worth little.
+Note also that phase U supplied close pairs at 1.4× the real rate and moved the head only ~2.4×, so the
+training signal is not simply short of examples.
+
 ### Where this leaves the problem
 
 The failure is one component: **`enc_out_bbox_embed`, the encoder's proposal box head.** Upstream is
@@ -1390,12 +1443,11 @@ fine — the image resolves the pair (3.3σ at 8 px), the features resolve it, t
 the objectness selects both tokens. Downstream is fine — regression is sub-pixel once the boxes are
 distinct. One MLP takes two well-separated anchors and merges them.
 
-**Open, and NOT established:** why. X.3 refuted the unstable-matching hypothesis (the box spans the
-pair, it is not an averaged single-peak box) and exonerated the training-data explanation (phase U hit
-the real close-pair rate and the merge persists). What remains is that the **encoder representation
-itself groups the pair into one object**, and the box head faithfully reports it — which would explain
-why more training examples move the needle only ~2.4× rather than fixing it. That is a hypothesis and
-has NOT been measured.
+**Settled by phase Y:** the encoder does NOT merge the pair. A straight-line fit on the exact vector the
+head reads recovers each token's offset to its own peak to 0.49 px where the trained head is off by
+3.83 px. The information is present and unused, so the remaining fault is in the TRAINING SIGNAL, not
+in perception. **Still open:** why the training signal fails to teach it — deliberately not guessed at,
+after four refuted mechanisms.
 
 **Method note.** Two claims in this sequence were over-stated before being caught: phase W's "never
 proposed", and the stride-8 grid story. Both came from reading a mechanism into a measurement that
