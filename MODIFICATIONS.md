@@ -1842,6 +1842,67 @@ every one of them looked this reasonable beforehand. Two arms:
 Arm 2 is the one worth having: unlike everything else tested, it is a change that could go into a real
 training run tomorrow.
 
+### Z.6 — gap distribution is NOT the cause; widening helps only ABOVE the failure (2026-08-24)
+
+`diagnostics/gap_distribution_probe.py`, `tmp_diag/run_gapdist.sbatch`, job 2781036, 37 min.
+Anchors: real 3.22, ladder 0.31, deployed head 3.83, same test slice throughout.
+
+**ARM 1 — is the sibling gap distribution the cause? REFUTED.** Ladder frames with pair separations
+redrawn from the real simulator's `_sample_chi_gaps`, against a control from the same function drawing
+from the 4-24 px rungs. Everything else — planting geometry, box shape, intensity, frame count,
+filtering — identical.
+
+| gap source | `<5px` | 5-10px | median | sep 4 | sep 6 | **sep 8** | sep 12 | sep 16 | sep 24 |
+|---|---|---|---|---|---|---|---|---|---|
+| real gaps | 0.271 | 0.080 | 29.7 | 0.81 | 0.63 | **0.54** | 0.42 | 0.24 | 0.26 |
+| ladder gaps | 0.180 | 0.320 | 10.0 | 0.62 | 0.36 | **0.27** | 0.28 | 0.16 | 0.26 |
+
+A 4× difference in the resolvable band (0.080 vs 0.320) costs **2×** (0.27 → 0.54), against the ~10×
+needed to reach 3.22. Clean pairs teach resolution even when their separations are drawn from the real
+distribution. **The gap distribution is not the cause.** That is the eighth mechanism refuted.
+
+**ARM 2 — is widening `cluster_tight_gap_px` a lever? Real, and it misses the failure.**
+
+| tight range | `<5px` | 5-10px | sep 4 | sep 6 | **sep 8** | sep 12 | sep 16 | sep 24 |
+|---|---|---|---|---|---|---|---|---|
+| (1, 6) shipped | 0.173 | 0.074 | 1.66 | 2.51 | **3.22** | 2.34 | 0.77 | 0.69 |
+| (4, 12) | 0.062 | 0.132 | 1.87 | 2.74 | **3.05** | 1.22 | 0.44 | 0.43 |
+| (6, 20) | 0.034 | 0.090 | 1.97 | 2.49 | **3.08** | 0.95 | 0.33 | 0.39 |
+
+Widening buys a lot at 12 px and above — **sep 12: 2.34 → 0.95 (−59%)**, sep 16 0.77 → 0.33, sep 24
+0.69 → 0.39 — and **nothing at 4-8 px**: sep 8 moves 3.22 → 3.05 → 3.08, about 5% and non-monotone,
+i.e. noise. The lever shifts the boundary of the broken region from ~12 px down to ~10 px and stops.
+It does not touch the regime the deployed model actually fails in. Not a fix.
+
+### A CONFOUND that runs through Z.2 onward and must be checked before anything else
+
+Every arm that WORKS in this sequence (ladder 0.31, ladder+context 0.41, ladder with real gaps 0.54)
+was trained and tested on **ISO=1** stimuli: box 2.43 × 8.5, which renders a ROUND peak
+(σ_q = σ_χ = 2.43 px). Every arm that FAILS was trained on real frames, whose boxes are ~10.6 × 8.5 and
+render a peak **4.4× wider in q than in χ** — two close peaks are then two parallel streaks, not two
+round blobs.
+
+Z.2's own ISO=0 control already hinted at this and it was under-read at the time: on real-shaped
+stimuli the ladder-trained head gives **2.55** at sep 8, not 0.31, against the real-trained head's
+3.67. A 1.4× gap, not 10×. It was written off as the ladder head being out of distribution — which is
+true, it trained on thin boxes and was tested on wide ones — but that explanation was never tested
+against the alternative: that the isotropic stimulus is simply an easier problem, and much of the
+"ladder works / real fails" contrast is the STIMULUS rather than the training distribution.
+
+Note phase V is consistent with the worry: with real box shapes it found a χ wall at 16 px, where
+phase Y/Z with ISO shapes found the offset decodable and learnable at 8 px.
+
+**The test, before any further distribution work:** train on ladder frames built at **ISO=0** (real box
+shape) and test at ISO=0.
+- ~0.3 → the stimulus is innocent, the distribution story survives at real box shape, and Z.2-Z.6 stand.
+- ~2.5 → a large part of the ladder/real contrast is the stimulus, and **Z.2's conclusion needs
+  restating**: not "real frames teach merging" but "round blobs are separable and real anisotropic
+  peaks largely are not".
+
+This is the same class of error as the q-axis ladder confound (MODIFICATIONS.md V), where an
+anisotropic σ convention made two axes incomparable and the first reading was wrong. It should be
+resolved before another property of the distribution is tested.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
