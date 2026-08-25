@@ -2039,6 +2039,11 @@ visible to a user, few enough to adjudicate by eye, and the one FP sub-populatio
 
 ### AA.2 / AA.3 — BOTH gates + the simulated training distribution (2026-08-25)
 
+> **PARTLY WRONG — see AA.4 / AA.5 below.** The ring count for 41 was a probe bug (0.0/frame;
+> the true figure is 16.9), which invalidates this section's COMPOSITION table and its
+> "too many rings" verdict, and contaminated the 41 recall strata. Corrected numbers are in
+> AA.4 / AA.5. The DETECTION, STRUCTURE and FALSE-POSITIVE findings here stand.
+
 `diagnostics/onring_dose_probe.py`, `diagnostics/both_gates_probe.py`, jobs 2781880 / 2781888.
 Single model ssl1, score>0.3, deployed postprocessing. Prompted by the user's hypothesis that the
 simulator rarely shows the model a peak sitting on a ring, so it cannot tell one from a bright stretch
@@ -2056,7 +2061,7 @@ Precision reproduces the recorded `nms_sweep_single` row exactly on both gates. 
 matched GT. **The recorded recall values remain authoritative**; the strata below are what this run is
 for.
 
-**COMPOSITION — the finding**
+**COMPOSITION — the finding** — ***SUPERSEDED BY AA.4: the 41 ring row is wrong.***
 
 | set | segments/frame | rings/frame | ring:segment |
 |---|---|---|---|
@@ -2084,7 +2089,7 @@ The deployed training config produces same-radius pairs under 5 px at **0.015** 
 closes it (0.163). That is phase U's lever, which was AP-negative; this is the first time the size of
 the gap it closes has been quantified against both gates.
 
-**RECALL BY χ-GAP — the close-pair deficit is real on BOTH gates**
+**RECALL BY χ-GAP — the close-pair deficit is real on BOTH gates** — ***41 row SUPERSEDED BY AA.5 (rings contaminated it).***
 
 | gate | 0-5 | 5-10 | 10-20 | 20-33 | 33+ |
 |---|---|---|---|---|---|
@@ -2128,6 +2133,92 @@ intensity.
 gates happen to be oriented films with few or no rings. Cutting ring frequency to match them optimises
 for these two datasets and may cost generalisation to powder samples — a judgement call about scope,
 not a measurement.
+
+### AA.4 / AA.5 — ring counts corrected, and the strata redone without rings (2026-08-25)
+
+`diagnostics/ring_count_fix.py` (job 2781895), `diagnostics/strata_segonly_probe.py` (job 2781911).
+
+**The bug, and the user's catch.** AA.3 reported 41.h5 as **0.0 rings/frame**. The user rejected that
+immediately — the perovskite set has many rings — and suggested the right cause: they may not be
+*stored* as rings, but they span the entire non-NaN frame. Both halves were right.
+`util/labeleddataset.py:138-145` (`create_boxes`) copies boxes / radii / widths / angles /
+angles_std / confidences / intensities / img_nr onto `polar_labels` and **never `is_ring`**. 41.h5
+loads through `H5GIWAXSDataset`, so the field was empty, AA.3's length check failed, and the code
+**silently defaulted to all-False instead of raising**. That silent default is the whole error.
+
+Worse for the flag route: reading `reciprocal_labels.is_ring` directly still gives **0.0** for 41 —
+the file marks no ROI as `type==1`. **41's rings are stored as ordinary peaks.** Only geometry finds
+them.
+
+**Corrected counts.** Ring = box covering >= 70% of the valid χ span measured from the image at that
+box's radius. No flag involved, so it works where the flag is empty (41) and where the flag disagrees
+with the geometry (the simulator: 14.8 flagged vs 7.9 actually spanning — about half its "rings" are
+partial arcs).
+
+| set | frames | objects | FLAG rings/fr | **SPAN rings/fr** | segs/fr | **ring:segment** |
+|---|---|---|---|---|---|---|
+| organic | 8 | 817 | 3.0 | **3.5** | 98.6 | **0.035** |
+| 41 (perovskite) | 41 | 1680 | 0.0 *(unusable)* | **16.9** | 24.0 | **0.704** |
+| sim, clusters OFF | 200 | 9248 | 14.8 | **7.9** | 38.3 | **0.206** |
+| sim, clusters ON | 200 | 12465 | 14.8 | **7.9** | 54.4 | 0.145 |
+
+Box χ-extent percentiles confirm the classification independently rather than resting on the 70%
+threshold: 41's p75 is **416 px against a valid span of 485**, so a quarter of its objects cover 86%
+of the frame. Organic's p50 is 8.5 px — it really is almost all small segments.
+
+**AA.3's "the simulator makes far too many rings" verdict is RETRACTED.** Corrected, the simulator has
+**6× too many** rings for organic (0.206 vs 0.035) and **3.4× too few** for 41 (0.206 vs 0.704). It
+sits between two gates at opposite extremes and there is no single direction to move it — cutting the
+ring rate would help organic and hurt 41. That also disposes of the peak-on-ring lever as originally
+framed.
+
+**AA.5 — recall with rings separated.** The SPAN criterion, single model ssl1, score>0.3:
+
+| gate | segments | rings | **segment recall** | ring recall | all recall | precision |
+|---|---|---|---|---|---|---|
+| organic | 789 | 28 | **0.529** | 0.786 | **0.537** | 0.856 |
+| 41 | 986 | 694 | **0.713** | 0.856 | **0.772** | 0.719 |
+
+`all recall` reproduces the recorded 0.537 / 0.772 **exactly** — AA.3's 0.522 / 0.713 was a counting
+error in that probe, now resolved. Precision reads ~0.015 high here (0.856 / 0.719 vs the recorded
+0.841 / 0.705) because this probe skips FPs on frames with no segments; **the recorded precision
+stays authoritative.** Note rings are the EASY class on both gates — 0.786 / 0.856 against 0.529 /
+0.713 for segments.
+
+**Segment recall by χ-gap to the nearest same-radius SEGMENT** (rings excluded from both the gap
+statistic and the strata):
+
+| gate | 0-5 | 5-10 | 10-20 | 20-33 | 33+ |
+|---|---|---|---|---|---|
+| organic | **0.356** (163) | 0.423 (52) | 0.390 (59) | 0.620 (92) | 0.612 (358) |
+| 41 | **0.393** (117) | 0.400 (5) | 0.524 (21) | 0.485 (33) | **0.800** (576) |
+
+**The contamination worry was largely unfounded and is recorded as such.** 41's wide-gap baseline
+moved 0.802 → 0.800. What did change is the close bucket: **0.449 → 0.393**, on n=117 rather than
+n=176, because a third of AA.3's "tight pairs" on 41 were rings.
+
+Corrected close-pair prize: **organic +0.051**, **41 +0.028** overall recall (+0.053 / +0.048 on
+segment recall). Both gates still have their worst stratum under 5 px, and 41's relative deficit is
+LARGER than AA.3 reported. **The close-pair target was real on both gates — that survives.**
+
+**False positives against segments only:**
+
+| gate | FP | on-ring | q med | χ med | χ<10px | high-conf χ |
+|---|---|---|---|---|---|---|
+| organic | 74 | 0.622 | 1.6 | 21.2 | 0.407 | **9.4** |
+| 41 | 507 | 0.235 | 17.6 | **74.4** | 0.164 | **74.0** |
+
+Unchanged and stark: organic's errors sit near real segments and its confident errors sit nearest;
+**41's sit a median 74 px away, only 24% on-ring, and confidence does not bring them closer.** 41 also
+emits **507** FPs against organic's 74. "Confident mistakes cluster beside real peaks" is
+ORGANIC-ONLY; 41's precision problem is bulk over-detection far from anything labelled, and it is the
+larger of the two by count.
+
+**METHOD NOTE — the failure mode to avoid repeating.** The AA.3 error was not a wrong threshold or a
+bad criterion; it was a **silent fallback**. `is_ring` missing → default all-False → 0 rings → a
+confident verdict built on it. Any probe that reads an optional label field must report WHICH source
+it used and refuse to proceed when the lengths disagree, as `ring_count_fix.py` now does. Two
+independent criteria (flag and geometry) printed side by side would also have caught it immediately.
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
