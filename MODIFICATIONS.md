@@ -1772,6 +1772,76 @@ build-UP direction that Z.3 did not run: start from ladder frames and add real o
 planted pairs, so the pairs stay but stop being the whole task, and see whether the error climbs to
 3.2 as the paired fraction falls.
 
+### Z.4 / Z.5 — dilution REFUTED; re-weighting real but insufficient (2026-08-24)
+
+`diagnostics/pair_focus_probe.py`, `tmp_diag/run_pairfocus.sbatch`, job 2780653, 60 min.
+Anchors throughout: **real 3.22**, **ladder 0.31**, deployed head 3.83, all on the same test slice.
+
+**Z.4 — pair dilution. REFUTED.** Ladder frames with real unpaired context added around the planted
+pairs; the 16 planted objects are identical across arms, so close-pair supervision is constant in
+absolute terms and only the context grows.
+
+| obj/frame | paired-within-24px | sep 4 | sep 6 | **sep 8** | sep 12 | sep 16 | sep 24 |
+|---|---|---|---|---|---|---|---|
+| 14.8 | 0.767 | 0.24 | 0.18 | **0.19** | 0.18 | 0.56 | 1.19 |
+| 26.6 | 0.454 | 0.51 | 0.37 | **0.26** | 0.32 | 0.65 | 1.02 |
+| 43.7 | 0.361 | 0.60 | 0.42 | **0.40** | 0.36 | 0.62 | 0.93 |
+| 63.2 | 0.363 | 0.58 | 0.34 | **0.41** | 0.32 | 0.36 | 0.81 |
+
+Burying the pairs in four times as much context costs a factor of **2** (0.19 → 0.41), against the
+factor of ~10 the hypothesis needed. **"Close-pair resolution is only learned when it dominates the
+training signal" is wrong.** Sixteen clean ladder pairs teach the skill regardless of what surrounds
+them.
+
+*Two limits, stated rather than buried.* (i) The sweep reached paired-24px **0.36**, not real frames'
+**0.137**: the 120-object target realised only 63 objects/frame once context peaks near a planted pair
+were dropped and detector gaps applied. So the last stretch to real composition is an extrapolation —
+though the curve is flattening (0.19 / 0.26 / 0.40 / 0.41), not accelerating toward 3.22. (ii) The
+14.8-object arm is NOT byte-identical to phase Z's ladder arm: it skips `make_images`' detector-mask
+pair filtering, so some planted pairs sit in dead regions. It reads better at the close rungs
+(0.19 vs 0.31) and worse at the wide ones (1.19 vs 0.23) as a result.
+
+**Z.5 — close-pair loss weight on real frames. A real effect, and not enough.**
+
+| weight | sep 4 | sep 6 | **sep 8** | sep 12 | sep 16 | sep 24 |
+|---|---|---|---|---|---|---|
+| 1 (baseline) | 1.66 | 2.51 | **3.22** | 2.34 | 0.77 | 0.69 |
+| 3 | 1.59 | 2.35 | **3.27** | 2.13 | 0.71 | 0.66 |
+| 10 | 1.68 | 2.26 | **2.79** | 1.50 | 0.60 | 0.49 |
+| 30 | 1.61 | 2.08 | **2.61** | 1.13 | 0.64 | 0.66 |
+
+Thirtyfold re-weighting buys **19%** at sep 8 (3.22 → 2.61) and **52%** at sep 12 (2.34 → 1.13),
+monotone from w=10 up, with the wide rungs flat (0.77 → 0.64) so it is not a domain shift. The loss is
+normalised by the SUM OF WEIGHTS, not the box count, so this is genuine gradient re-allocation and not
+a disguised learning-rate change. Real, directional, and nowhere near 0.31 — **not enough to justify a
+full training run on its own.**
+
+### What survives, and the specific next test
+
+Z.4 rules out share-of-the-frame, so what is left is the **NATURE of the pairs**. Ladder pairs are
+identical twins at 4-24 px, spread across the resolution limit. The real simulator's siblings come
+from `_sample_chi_gaps` (simulation.py:499-508), and its parameters are worth reading against the
+failure:
+
+    cluster_tight_frac   = 0.32          32% of sibling gaps drawn from...
+    cluster_tight_gap_px = (1.0, 6.0)    ...1-6 px, i.e. 0.4-2.5 sigma at sigma_chi = 2.43 px
+    cluster_broad_lognorm= (4.007, 0.95) the other 68%, median 55 px
+
+Measured on the generated frames this session: `<5 px` **0.173**, `<10 px` **0.247** — so only **0.074**
+of gaps land in 5-10 px. The training distribution is concentrated *below* the resolution limit and
+*far above* it, with a hole at exactly the separations where resolving is both possible and needed.
+The 8 px case the deployed model fails on sits in that hole.
+
+**Pre-registered test, and NOT a claim** — seven mechanisms have been refuted in this investigation and
+every one of them looked this reasonable beforehand. Two arms:
+1. Ladder pairs re-drawn from the REAL gap distribution (1-6 px tight / 55 px broad) instead of
+   4-24 px. If that reproduces ~3.2, the gap distribution is confirmed as the cause.
+2. Real frames with `cluster_tight_gap_px` widened to roughly (4, 12). If the merge weakens, this is a
+   **data-side lever on a config knob that already exists** — the first actionable one in the sequence.
+
+Arm 2 is the one worth having: unlike everything else tested, it is a change that could go into a real
+training run tomorrow.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
