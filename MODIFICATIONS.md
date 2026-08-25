@@ -1452,11 +1452,20 @@ in perception.
 trunk, this exact head under this exact loss reaches **0.31 px** — better than ridge, 12× better than
 itself in the real run — and it still reaches 0.48 px when close pairs are thinned to the real
 organic rate. Loss form, anchor+sigmoid encoding, Hungarian assignment, MLP capacity and close-pair
-rarity are each now measured and cleared. **Still open:** the three things phase Z held fixed — the
-frozen (and converged) trunk, the absence of every competing loss term, and the ladder's simplified
-frames. The failure is created by the CONDITIONS of joint training or by the real training
-distribution, not by anything intrinsic to the head or its objective. Five mechanisms have now been
-proposed and refuted in this investigation; a sixth is not offered here.
+rarity are each now measured and cleared.
+
+**Localised by phase Z.2:** the real TRAINING DISTRIBUTION. Training the identical head on real
+simulated frames reproduces the merge (3.22 px vs the deployed head's 3.83) with the trunk frozen at
+convergence and every competing loss term absent, so the joint-training trajectory is not needed to
+cause it. Z.1 had already killed "train longer" — 157 epochs including the lr drop bought 3%.
+
+**And then nothing in that distribution would own it.** Z.3: not brightness variation, rings, object
+count or crowding. Z.4: not pairs being outnumbered — four times the context costs 2×, not 10×. Z.6:
+not the sibling gap distribution. Z.7 closed the last measurement doubt: at real box shape the
+ladder-trained head reaches 0.38 px against the real-trained head's 3.44, so the contrast is not a
+stimulus artefact and is if anything stronger there.
+
+**LINE CLOSED — see "Close-pair investigation: closing verdict" below.**
 
 **Method note.** Two claims in this sequence were over-stated before being caught: phase W's "never
 proposed", and the stride-8 grid story. Both came from reading a mechanism into a measurement that
@@ -1979,6 +1988,54 @@ solid.
 all of it in the `<5 px` bucket (165 peaks at recall 0.352 against 0.61 for well-separated peaks),
 which is exactly the regime where no lever in Z.5/Z.6 moved anything. Precision is a genuinely
 separate target that has never had the phase X-Z treatment.
+
+## Close-pair investigation (phases V-AA): CLOSING VERDICT — 2026-08-25
+
+**Status: CLOSED as understood-but-not-fixable with anything found. Do not reopen without a new
+measurement, and do not re-test anything in the refuted list.**
+
+**What is established.** The deployed detector merges peaks that sit close in χ. The fault is one
+module, `enc_out_bbox_embed`. It is not perception (phase Y: a straight line on the head's own input
+recovers the offset to 0.49 px where the head is off 3.83). It is not the head's own training signal
+(phase Z: trained alone on a frozen trunk under the real loss it reaches 0.31 px, and 0.38 px at real
+box shape). It is caused by the real training distribution (Z.2), and no property of that distribution
+tested so far accounts for it.
+
+**NINE mechanisms proposed and refuted by measurement.** Do not propose a tenth without a measurement
+first; the record on reasoning ahead of measurement in this investigation is 0 for 9.
+1. proposal selection / top-900 out-ranking — both tokens are selected (W, X.1; 96-98% in every later probe)
+2. stride-8 grid quantisation — the 5-scale model draws 69% of proposals from stride 4 and still fails (X.1)
+3. unstable Hungarian matching — the merged box SPANS the pair (X.3), and oracle assignment changes nothing (Z)
+4. representational merging in the encoder — refuted by phase Y
+5. sigmoid-tail gradient attenuation on the height coordinate — refuted by Z's D vs D' (0.49 vs 0.50)
+6. close-pair rarity — refuted FOUR ways: phase U, Z's diet sweep, Z.2's clusters ON/OFF dead heat, Z.6 arm 1
+7. the head being outnumbered in the frame — refuted by Z.4 (4× context costs 2×)
+8. the sibling gap distribution — refuted by Z.6 arm 1 (0.54 vs 0.27)
+9. the anisotropic stimulus being intrinsically harder — refuted by Z.7 (0.38 at real box shape)
+
+**Two levers that are real and insufficient.** Close-pair loss re-weighting at 30× buys 19% at 8 px
+and 52% at 12 px (Z.5). Widening `cluster_tight_gap_px` to (4,12) buys 59% at 12 px and nothing at
+4-8 px (Z.6). **Every lever found helps above 10 px and none helps below it.**
+
+**Why that is not worth a training run.** Organic recall by χ-gap (single model ssl1, score>0.3):
+`<5 px` 0.352 (n=165), `5-10` 0.423 (n=52), `10-20` 0.390 (n=59), `20-33` 0.620 (n=92), `≥33` 0.612
+(n=358). The deficit worth having is the 165 peaks under 5 px — about **+0.06 recall** if lifted to the
+0.61 that well-separated peaks reach. The 5-20 px band where both levers work is 111 peaks, worth
+about **+0.02** — inside the noise band of past runs, and every proxy-validated lever in this project
+has failed the real gate (phase U most clearly).
+
+**And the prize does not double.** Phase AA: the precision deficit is largely a separate axis. Only
+~24% of false positives are both on-ring and within 10 px in χ; removing all of them moves precision
+0.841 → ~0.87.
+
+**Everything above was measured on a FROZEN TRUNK with only the box terms active.** That proxy has
+never been converted to the organic gate. Any future attempt to revive this line must budget for that
+conversion failing, as it has every previous time.
+
+**RECOMMENDED NEXT AXIS: precision.** Single model ssl1 on organic is recall 0.537 / precision 0.841 /
+ap_total 0.568. The 83 false positives have never had the phase X-Z treatment. The natural entry point
+is the high-confidence subset (n=39, median χ-distance 9.7 px, 0.51 within 10 px) — the errors most
+visible to a user, few enough to adjudicate by eye, and the one FP sub-population that shows structure.
 
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
