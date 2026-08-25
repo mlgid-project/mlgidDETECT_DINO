@@ -2037,6 +2037,98 @@ ap_total 0.568. The 83 false positives have never had the phase X-Z treatment. T
 is the high-confidence subset (n=39, median χ-distance 9.7 px, 0.51 within 10 px) — the errors most
 visible to a user, few enough to adjudicate by eye, and the one FP sub-population that shows structure.
 
+### AA.2 / AA.3 — BOTH gates + the simulated training distribution (2026-08-25)
+
+`diagnostics/onring_dose_probe.py`, `diagnostics/both_gates_probe.py`, jobs 2781880 / 2781888.
+Single model ssl1, score>0.3, deployed postprocessing. Prompted by the user's hypothesis that the
+simulator rarely shows the model a peak sitting on a ring, so it cannot tell one from a bright stretch
+of ring — and by the fair objection that the whole V-AA sequence reported organic only.
+
+**DETECTION**
+
+| gate | frames | GT | TP | FP | recall | precision | FP on-ring |
+|---|---|---|---|---|---|---|---|
+| organic | 8 | 817 | 439 | 83 | 0.522 | **0.841** | **0.590** |
+| 41 (perovskite) | 41 | 1680 | 1297 | 543 | 0.713 | **0.705** | **0.344** |
+
+Precision reproduces the recorded `nms_sweep_single` row exactly on both gates. Recall runs ~2-6% low
+(0.522 vs 0.537; 0.713 vs 0.772) because `get_matcher('q')` is not 1:1 and this probe counts unique
+matched GT. **The recorded recall values remain authoritative**; the strata below are what this run is
+for.
+
+**COMPOSITION — the finding**
+
+| set | segments/frame | rings/frame | ring:segment |
+|---|---|---|---|
+| organic | 99.1 | 3.0 | 0.030 |
+| **41 (perovskite)** | 41.0 | **0.0** | **0.000** |
+| sim, clusters OFF (ssl1 config) | 29.7 | 15.6 | **0.523** |
+| sim, clusters ON | 44.7 | 15.6 | 0.348 |
+
+**The simulator trains on frames where a THIRD of all objects are rings. 41 contains ZERO labelled
+rings and organic contains 3 per frame (3%).** The ring:segment ratio is off by 17× against organic and
+is undefined-vs-zero against 41. The model spends a large share of its training signal on a class that
+barely exists in either evaluation set. This is not a subtle mismatch and it had never been measured.
+
+**STRUCTURE — share of objects sharing a radius (<8 px in q) with another**
+
+| set | has neighbour | median gap | `<5px` | `<10px` |
+|---|---|---|---|---|
+| organic | 0.889 | 32.0 | 0.227 | 0.299 |
+| 41 | 0.565 | 74.8 | 0.185 | 0.212 |
+| sim, clusters OFF | 0.532 | 87.8 | **0.015** | 0.032 |
+| sim, clusters ON | 0.676 | 41.6 | 0.163 | 0.243 |
+
+The deployed training config produces same-radius pairs under 5 px at **0.015** against **0.227**
+(organic) and **0.185** (41) — an order of magnitude too few, on BOTH gates. `use_peak_clusters=True`
+closes it (0.163). That is phase U's lever, which was AP-negative; this is the first time the size of
+the gap it closes has been quantified against both gates.
+
+**RECALL BY χ-GAP — the close-pair deficit is real on BOTH gates**
+
+| gate | 0-5 | 5-10 | 10-20 | 20-33 | 33+ |
+|---|---|---|---|---|---|
+| organic | **0.352** (165) | 0.423 (52) | 0.390 (59) | 0.620 (92) | 0.612 (358) |
+| 41 | **0.449** (176) | 0.680 (25) | 0.690 (42) | 0.536 (56) | 0.802 (651) |
+
+Both gates have their worst stratum at `<5 px`, against a well-separated baseline of 0.61 (organic)
+and 0.80 (41). Closing it is worth about **+0.05 recall on organic and +0.04 on 41**. The close-pair
+line's premise was therefore sound on both gates — it is the *levers* that failed, not the target.
+
+**FALSE POSITIVES — the two gates behave DIFFERENTLY**
+
+| gate | q-dist med | χ-dist med | χ<10px | on-ring χ med | hi-conf χ med |
+|---|---|---|---|---|---|
+| organic | 1.9 | 22.8 | 0.387 | 22.8 | **9.7** |
+| 41 | 5.8 | **74.8** | 0.181 | 74.6 | **72.9** |
+
+On organic the FPs sit near real peaks and the CONFIDENT ones sit nearest (9.7 px). **On 41 none of
+that holds**: FPs are a median 74.8 px away, only 34% are on-ring against organic's 59%, and the
+high-confidence subset is no closer (72.9 px). So "the model's confident errors cluster beside real
+peaks" is an ORGANIC-ONLY phenomenon and must not be generalised. 41 also carries 543 FPs against
+organic's 83.
+
+**THE PEAK-ON-RING DOSE.** `add_peaks_on_rings` declines on 90% of frames by its first line
+(`random.random() > .1`); `max_a_width < 100` then excludes every ring under ~200 px of χ extent, and
+a `randint(0, 4)` draw zeroes a quarter of the rest. It returns peaks on **4.0% of frames**
+(4.7% of segments' worth), of which only about **1% of segments** survive into the final labels with
+unshifted centres — the remainder are dropped by `filter_peaks_detector_gap` or shifted by
+`clamp_boxes`. So the effective dose is somewhere in **1-4.7% of segments**, and the exact figure is
+not pinned down.
+
+**VERDICT ON THE HYPOTHESIS: redirected, not confirmed.** The dose really is low, but neither eval set
+has meaningful labelled rings (41: zero; organic: 3/frame), so "peaks on rings" is not a category the
+gates can reward. The larger and better-supported mismatch is the reverse one: **the simulator makes
+far too many RINGS**, 15.6 per frame against 3.0 and 0.0. A criterion error in AA.2 is corrected here —
+"on-ring" in the phase-Q FP analysis never meant "inside an annotated ring box" (which returns 0.00%
+on real organic and is uninformative); it means same radius as a real peak with high integrated
+intensity.
+
+**Trade-off to weigh before acting:** rings are physically real in powder-like samples. Both current
+gates happen to be oriented films with few or no rings. Cutting ring frequency to match them optimises
+for these two datasets and may cost generalisation to powder samples — a judgement call about scope,
+not a measurement.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
