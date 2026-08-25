@@ -1713,6 +1713,65 @@ test with this machinery (~7 min per arm), building UP from the ladder case that
 ablating down from the case that fails. **No mechanism is claimed here** — six have been refuted in
 this investigation; this identifies where to look, not what is wrong.
 
+### Z.3 — NONE of the four candidate properties explains it; the list was wrong (2026-08-24)
+
+`diagnostics/distribution_ablation_probe.py`, `tmp_diag/run_ablation.sbatch`, job 2780029, 56 min.
+
+Z.2 localised the merge to the real training distribution. This neutralises one property of that
+distribution at a time and retrains, everything else held at Z.2's settings and every arm scored on
+the same unmodified ladder test slice. Anchors: **real 3.22**, **ladder 0.31**, deployed head 3.83.
+
+| training frames | obj/frame | `<5px` | sep 4 | sep 6 | **sep 8** | sep 12 | sep 16 | sep 24 |
+|---|---|---|---|---|---|---|---|---|
+| real | 59.3 | 0.173 | 1.66 | 2.51 | **3.22** | 2.34 | 0.77 | 0.69 |
+| fixed intensity | 59.3 | 0.173 | 1.74 | 2.50 | **3.20** | 2.19 | 0.82 | 0.63 |
+| fixed box size | 59.3 | 0.173 | 4.73 | 6.04 | **6.12** | 3.52 | 3.75 | 3.32 |
+| no rings | 53.4 | 0.177 | 1.80 | 2.58 | **3.35** | 1.96 | 0.49 | 0.48 |
+| count-matched control | 45.7 | 0.180 | 1.99 | 2.61 | **3.21** | 2.23 | 0.78 | 0.68 |
+| density → ~12 | 11.7 | 0.334 | 1.76 | 2.69 | **3.35** | 2.76 | 0.70 | 0.58 |
+| **all four at once** | 11.5 | 0.302 | 1.57 | 1.99 | **2.52** | 2.46 | 1.77 | 1.42 |
+| ladder | 16.0 | — | 0.54 | 0.35 | **0.31** | 0.25 | 0.19 | 0.23 |
+
+**Verdict: the property list was wrong.** Brightness variation (3.20), rings (3.35), object count
+(3.21 count-matched), and crowding (3.35) each move the sep-8 error by less than 0.15 px against a
+2.9 px effect. All four at once reaches 2.52 — and that arm's wide rungs degrade in step (1.77/1.42
+against the baseline's 0.77/0.69), which is the uniform signature of a domain gap, not a close-pair
+fix. Nothing here recovers the ladder's 0.31.
+
+**The nulls are real nulls, not a dead pipeline.** `fixed box size` is an unintended positive control:
+it moved the result hard, to 6.12. So the ablation machinery demonstrably bites, and the four flat
+arms are flat because the properties do not matter. Note its damage is uniform across rungs
+(3.32-6.12), so it is a domain-gap effect from training on one box size and testing on another —
+worse generalisation, not more merging.
+
+**A reading error to avoid in this run's raw output:** the ladder row printed `<5px` = 1.000, which
+was the dict default rather than a measurement (the ladder set was never passed through the gap
+statistic). Fixed in the script; the cell is dashed above rather than quoted.
+
+### What Z.3 actually changes — a reframing that must now be tested, not assumed
+
+Z.2's conclusion was "the real distribution teaches the merge". Z.3 finds no property of it that does.
+That makes a second reading live, and it points the opposite way:
+
+**Every ladder frame consists 100% of paired objects at controlled separations — at every diet
+setting phase Z ever ran.** The diet sweep varied WHICH separations appeared (0.50 → 0.06 of frames
+from the close rungs), never whether an object had a partner at all; the "far" rungs are still pairs,
+just wider ones. So the axis that has never been varied is not the rate of close pairs but whether
+the training task is ABOUT pairs.
+
+If that is what matters, then it is not that real data contains something poisonous — it is that
+close-pair resolution is a skill the head only acquires when it dominates the training signal.
+**That would make the lever a loss-side one (weighting, or a dedicated auxiliary objective), not a
+data-side one**, and it would mean Z.2's framing needs softening: the ladder teaches un-merging
+rather than the real frames teaching merging.
+
+This is stated as the next MEASUREMENT, not as a conclusion. Six mechanisms have been refuted in this
+investigation and a seventh has just been refuted four ways over in this section; the record here is
+that reasoning ahead of measurement has been wrong every time it has been tried. The test is the
+build-UP direction that Z.3 did not run: start from ladder frames and add real objects AROUND the
+planted pairs, so the pairs stay but stop being the whole task, and see whether the error climbs to
+3.2 as the paired fraction falls.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
