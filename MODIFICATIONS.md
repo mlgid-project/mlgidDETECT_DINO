@@ -1903,6 +1903,83 @@ This is the same class of error as the q-axis ladder confound (MODIFICATIONS.md 
 anisotropic σ convention made two axes incomparable and the first reading was wrong. It should be
 resolved before another property of the distribution is tested.
 
+### Z.7 — the shape control: the stimulus is INNOCENT, Z.2-Z.6 stand (2026-08-25)
+
+`diagnostics/iso_shape_probe.py`, job 2781790, 18 min. Closes the loose end flagged in Z.6.
+
+Every arm that works in this sequence was trained and tested on ISO=1 stimuli (round peaks); every
+arm that fails trained on real frames (peaks 4.4× wider in q). Z.2 recorded the ladder-trained head
+at 0.31 on ISO=1 and **2.55** on ISO=0, unexplained. Three training sets × two eval sets, planted peak
+positions identical (`make_images` seeds per frame, so the two ISO settings differ only in box size),
+lr and epoch selected per eval domain on that domain's validation slice.
+
+Median |χ-centre error| px:
+
+| trained on | **ISO=1 test, sep 8** | **ISO=0 test, sep 8** |
+|---|---|---|
+| ladder ISO=1 | **0.31** | 1.35 |
+| ladder ISO=0 | 0.80 | **0.38** |
+| real frames | 3.22 | 3.44 |
+
+**Train and test on real box shape and the head reaches 0.38 px** — statistically the same as 0.31 on
+round peaks. The anisotropic stimulus is not harder, exactly as the arithmetic said it should not be
+(σ_χ = box_h/a_coef = 8.5/3.5 = 2.43 px in BOTH cases, so the profile along the separation axis is
+identical; only the q extent and the regressed box width differ).
+
+Z.2's 2.55 was therefore the train/test box-width mismatch, as originally supposed. Here the same
+mismatch costs 1.35 (ISO1→ISO0) and 0.80 (ISO0→ISO1) under a fairer per-domain selection — moderate,
+symmetric, and fully sufficient to explain it.
+
+**Consequences.** (i) **Z.2 through Z.6 stand as written**, and phase Y does not need re-measuring at
+real box shape. (ii) The core contrast is if anything STRONGER at real box shape: ladder-trained 0.38
+vs real-trained 3.44, a factor of **9**. (iii) The correction issued in Z.6 — that "round blobs vs
+parallel streaks" was the wrong framing because the χ profile is identical — is confirmed by
+measurement, not just by arithmetic.
+
+### AA — the χ-distance of false positives: mostly a SEPARATE axis (2026-08-25)
+
+`diagnostics/fp_chi_probe.py`, job 2781790. **Single model ssl1**, organic, score>0.3. Open since
+phase Q: the on-ring FPs were characterised only by q-distance (median 1.8 px), never by χ-distance —
+the number that decides whether the precision deficit and the close-pair recall deficit are the same
+weakness.
+
+Reproduced first, as a consistency check on the recorded `nms_sweep_single` row: TP 439 against 817
+GT = **recall 0.537**, FP 83 = **precision 0.841**, ap_total on record 0.5683. All three agree.
+(Note the **0.764** on record elsewhere is the ENSEMBLE's precision from `label_completeness.py`; the
+ensemble pools two models' detections, finds more peaks and makes more errors. Under the standing
+single-model constraint, 0.841 is the applicable figure.)
+
+χ-distance to the nearest GT peak at the same q (<8 px):
+
+| | n | median | within 10 px |
+|---|---|---|---|
+| on-ring FPs | 49 | 22.8 px | 0.41 |
+| off-ring FPs | 13 | 27.6 px | 0.31 |
+| **high-confidence FPs (>0.5)** | 39 | **9.7 px** | **0.51** |
+| *GT-to-GT χ gap (reference)* | 726 | *32.0 px* | *0.30* |
+
+**Answer: mostly a separate axis.** On-ring FPs sit closer to real peaks than real peaks sit to each
+other (22.8 vs 32.0 px median; 0.41 vs 0.30 within 10 px) but only modestly, and the median is well
+outside the close-pair regime. About **24%** of all FPs are both on-ring and within 10 px in χ;
+removing every one would move precision 0.841 → ~0.87. The other three quarters have no close-pair
+explanation.
+
+**One real sub-population:** the high-confidence FPs ARE shifted — median 9.7 px, 0.51 within 10 px.
+The model's *confident* errors cluster beside real peaks even though its errors overall do not.
+
+Control behaves: measured against the nearest GT peak at ANY q the median collapses to 1.1 px with
+0.90 within 10 px, so the same-q restriction is doing real work and the numbers are not an artefact of
+dense peaks.
+
+**CAVEAT:** 8 frames, 83 FPs, 39 of them high-confidence. The broad conclusion is safe because the
+effect would have to be large to matter; the high-confidence sub-population at n=39 is suggestive, not
+solid.
+
+**Consequence for the close-pair line:** the prize does NOT double. It stays at roughly +0.06 recall,
+all of it in the `<5 px` bucket (165 peaks at recall 0.352 against 0.61 for well-separated peaks),
+which is exactly the regime where no lever in Z.5/Z.6 moved anything. Precision is a genuinely
+separate target that has never had the phase X-Z treatment.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
