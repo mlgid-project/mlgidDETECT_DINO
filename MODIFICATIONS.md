@@ -2220,6 +2220,179 @@ confident verdict built on it. Any probe that reads an optional label field must
 it used and refuse to proceed when the lengths disagree, as `ring_count_fix.py` now does. Two
 independent criteria (flag and geometry) printed side by side would also have caught it immediately.
 
+### AB — what the false positives ARE, on both gates (`diagnostics/fp_anatomy_probe.py`, job 2781962, 2026-08-25)
+
+AA.5 left two uncharacterised precision problems: organic emits 74–83 unmatched detections sitting a
+median ~21 px in χ from the nearest real segment, with the CONFIDENT ones nearest (9.4 px); 41 emits
+**507–543**, sitting a median **74 px** away, with confidence making no difference at all. Nobody had
+asked what those detections are. Four candidate anatomies, each with a measurement that separates it.
+
+Single model ssl1, score > 0.3, deployed postprocessing, matcher `q` at IoU 0.1. Rings by the AA.4
+geometric criterion, because 41's `is_ring` flag is empty (see the AA.4 method note).
+
+**1. Are they on rings?** — the user's hypothesis: the simulator never shows a proper peak sitting on
+a ring, so the model guesses that a section of a ring is a peak.
+
+| gate | FP | inside a ring box | at a ring radius | at a segment radius |
+|---|---|---|---|---|
+| organic | 83 | **0.036** | **0.036** | 0.711 |
+| 41 | 543 | 0.252 | 0.278 | 0.337 |
+
+**REFUTED on organic.** Three of 83 false positives are anywhere near a labelled ring. Fifty-nine sit
+at the radius of a real *segment* — right radius, wrong angle, which is the phase-Q picture and has
+nothing to do with rings. (The 0.59–0.62 "on-ring" numbers in AA.3/AA.5 use the phase-Q definition,
+"same radius as a real peak"; they are consistent with 0.036 here, they just measure a different
+thing. The two must not be quoted interchangeably.)
+
+**PARTLY ALIVE on 41**: a quarter of its FPs fall inside a labelled ring's box and 28% share a ring's
+radius. But 0.278 + 0.337 = 0.615, so **at least 38% of 41's false positives sit at a radius carrying
+no labelled object of any kind** — unexplained by any of the four anatomies tested here.
+
+**2. Are they ring fragments?** organic: 89.2% predicted *segment*, 10.8% ring. 41: 70.0% / 30.0%,
+and those ring-class FPs carry near-full-span boxes (p75 117 px, p90 478 px) — consistent with 41
+missing ~100 of its 694 rings while emitting extra ring-shaped boxes that match nothing.
+
+**3. Are they duplicates?** Distance from each FP to the nearest already-MATCHED detection: organic
+median 31.7 px with only 25.3% within 20 px; 41 median 31.7 px with 31.5% within 20 px. **Two thirds
+of the false positives are new claims, not double-reports.** Duplicate suppression is not the lever.
+
+**4. Are they localised?** organic FP score median 0.50 vs TP 0.79 (41: 0.49 vs 0.86) — moving the
+threshold 0.3 → 0.5 would remove about half the FPs and about a fifth of the TPs on organic; a real
+trade, not a free win. organic FP q-position p10 = 98, p25 = 195 against TP p10 = 285, p25 = 408:
+**a quarter of organic's false positives sit below q = 195 px, a low-q band holding under a tenth of
+the true peaks.**
+
+**THE UNEXPECTED RESULT — box heights in χ (px):**
+
+| set | p10 | p25 | p50 | p75 | p90 |
+|---|---|---|---|---|---|
+| organic — GT segments | 2.2 | 4.0 | **8.1** | 14.9 | 28.0 |
+| organic — TP boxes | 10.5 | 14.0 | **20.7** | 42.9 | 68.6 |
+| organic — FP boxes | 9.4 | 15.6 | 26.2 | 51.6 | 161.8 |
+| 41 — GT segments | 9.0 | 15.3 | **34.1** | 72.9 | 118.4 |
+| 41 — TP boxes | 18.0 | 32.6 | **70.3** | 455.9 | 484.1 |
+
+**The model's boxes are 2.6× too tall on organic and 2.1× too tall on 41 — for the detections that
+count as CORRECT.** This is not a false-positive defect, it is every box. The deployed matcher's IoU
+floor of 0.1 is loose enough that an inflated box still scores as a hit, so the defect never appears
+in recall or precision and is visible only in a size measurement. It matters twice: an inflated box
+is a poor starting point for peak fitting, and two peaks 5 px apart get boxes overlapping enough for
+duplicate suppression to delete one — the exact shape of the `<5 px` recall hole that phases V–AA
+could not close. **Followed up in phase AC.**
+
+### AC / AC.1 — the boxes are too tall because the SIMULATOR CANNOT MAKE ORGANIC-SHAPED PEAKS (`diagnostics/box_size_probe.py` job 2782668, `diagnostics/aspect_probe.py` job 2782687, 2026-08-25)
+
+AB found the model's boxes are 2.6× too tall in χ on organic *for the detections that count as
+correct*. AC asks where that comes from and splits it into two causes with different fixes:
+CONVENTION (sim and real draw boxes at different multiples of the same peak width — fix is one
+constant) or PHYSICS (the simulated peaks really are the wrong shape — fix is the sampler).
+
+**Estimator self-check first.** The simulator's own convention, read from `simulation.py:489-492`
+and `821-822` (`a_coef=3.5`, `w_coef=1.0`): `box_h = 3.5·σ_χ` and `box_w = 1.0·σ_q`, so for a
+Gaussian (FWHM = 2.355σ) it must measure `box_h/FWHM_χ = 1.486` and `box_w/FWHM_q = 0.425`. The probe
+measured **1.10 and 0.39** on simulated frames — the q estimator is 8% low, the χ estimator 26% low
+(log + histogram equalisation lifts the wings, and χ neighbours contaminate the profile). That
+calibration is what makes the organic and 41 numbers, whose labelling convention nobody has written
+down, readable.
+
+**1. Segment box size, rings excluded (px, p50):**
+
+| set | segments | box h (χ) | box w (q) | FWHM_χ | FWHM_q |
+|---|---|---|---|---|---|
+| organic | 789 | **8.15** | **10.59** | **9.0** | **16.0** |
+| 41 | 986 | 34.10 | 4.66 | 23.0 | 6.0 |
+| sim clusters OFF | 6283 | 27.16 | 2.44 | 25.0 | 6.5 |
+| sim clusters ON | 9500 | 27.02 | 2.43 | 24.0 | 6.0 |
+
+**The simulator reproduces 41 and misses organic completely.** Its segments are 3.3× taller in χ and
+4.3× narrower in q than organic's. The measured FWHMs say the same thing about the *rendered
+intensity*, independent of any boxing convention: **real organic peaks are compact spots, wider in q
+(16 px) than in χ (9 px); 41's and the simulator's are arcs, ~4× taller in χ than wide in q.**
+
+Coverage, not just centring: organic box_w p10 = 5.29 against sim box_w p90 = 4.81 — **over 90% of
+organic's labelled segments are wider in q than 90% of everything the simulator produces.**
+
+**2. Convention is SECOND-ORDER; physics is first-order.** `box_h/FWHM_χ` = organic 0.73, 41 1.16,
+sim 1.10; `box_w/FWHM_q` = organic 0.65, 41 0.63, sim 0.39. Applying the calibration above, organic
+boxes are ≈ ±1.17σ in χ and ±0.85σ in q against the sim's ±1.75σ and ±0.5σ — factors of 1.5 and 1.7,
+against a peak-shape mismatch of ~2.7× in each axis and an aspect mismatch of 13×. **Do not touch
+`a_coef` / `w_coef` first.**
+
+**AC.1 — the mechanism, one line of code.** `simulation.py:204`:
+
+```python
+if is_segment:
+    a_widths = torch.maximum(a_widths, widths * (torch.rand_like(widths) + 1.0))
+```
+
+Every simulated segment is forced to `σ_χ ≥ σ_q · U(1,2)`, and with `a_coef/w_coef = 3.5` the box
+aspect `box_h/box_w = 3.5·σ_χ/σ_q` has a **hard floor of 3.5 and a typical value of 5.25. A simulated
+segment can never be wider in q than it is tall in χ.** Counted:
+
+| set | segments | wider than tall | below the sim floor 3.5 | aspect p10 | p50 | p90 |
+|---|---|---|---|---|---|---|
+| organic | 789 | **0.645** | **0.905** | 0.22 | **0.68** | 3.32 |
+| 41 | 986 | 0.011 | 0.198 | 2.33 | 7.84 | 29.02 |
+| sim clusters OFF | 6283 | 0.004 | 0.027 | 4.59 | 9.23 | 24.10 |
+| sim clusters ON | 9500 | 0.002 | 0.030 | 4.57 | 9.52 | 24.77 |
+
+**90.5% of organic's labelled peaks have a shape the simulator emits 2.7% of the time, and 64.5%
+have one it emits 0.4% of the time.** 41 sits inside the simulated distribution (p50 7.84 vs 9.23) —
+which is why 41 is the stronger gate and always has been.
+
+**3. Per-matched-pair pred/GT size — the defect is organic-segment-specific:**
+
+| gate | pred_h/gt_h segments | pred_h/gt_h rings | pred_w/gt_w segments |
+|---|---|---|---|
+| organic | **2.55** (p10 1.27, p90 5.80) | 0.93 | **0.58** |
+| 41 | 1.08 | 1.00 | 0.80 |
+
+On 41 the model is calibrated. On organic it draws every segment ~2.6× too tall and ~0.6× too narrow
+— an aspect error of 4.4×, i.e. the boxes are the wrong shape, not merely the wrong size. Rings are
+fine on both gates. **This is not a head defect, it is a train/eval distribution gap.**
+
+**4. Matched-pair IoU, and why a post-hoc shrink is the WRONG fix.** Deployed matched IoU p50:
+organic **0.27**, 41 0.49 — organic's matches barely clear the 0.1 floor. Shrinking predicted boxes
+in χ by a single global factor, each pair centre-aligned so size is isolated from position:
+
+| gate | shrink | IoU med | ≥0.1 | ≥0.3 | ≥0.5 |
+|---|---|---|---|---|---|
+| organic | 1.00 | 0.286 | 1.000 | 0.435 | 0.123 |
+| organic | 0.50 | **0.387** | 0.993 | **0.754** | 0.237 |
+| 41 | 1.00 | **0.519** | 1.000 | **0.870** | 0.546 |
+| 41 | 0.50 | 0.323 | 0.972 | 0.559 | 0.146 |
+
+Halving organic's box heights raises median IoU 35% and nearly doubles the ≥0.3 share while losing
+0.7% of matches — and it **wrecks 41** (≥0.5 share 0.546 → 0.146). A global patch cannot serve both.
+The fix has to be in the training distribution, which is training-only and leaves inference and the
+ONNX export byte-identical.
+
+**PRE-REGISTERED PLAN (cheap verification before any training run).** Replace the aspect floor at
+`simulation.py:204` with an aspect draw spanning both regimes, and widen `width_central` (currently
+`(1., 5.)`) so `box_w` can reach organic's p90 ≈ 20 px. Then **re-run `aspect_probe.py` and
+`box_size_probe.py` blocks 1-2 on the modified simulator and require the simulated segment aspect
+distribution to cover organic's p10-p90 (0.22-3.32) AND 41's (2.33-29.0) before spending a training
+run** — ~10 min per iteration, no GPU-days. Gate afterwards: organic `ap_total` (now 0.5683) and 41
+`ap_total` (now 0.7441), from scratch, plus the health metric `pred_h/gt_h` p50 moving 2.55 → ~1.0 on
+organic while staying ~1.0 on 41. **Widen, do not shift**: 41 currently benefits from the present
+distribution and must not regress.
+
+**HYPOTHESIS, NOT YET A RESULT.** If organic peaks are compact spots and the model draws boxes 2.6×
+too tall, two organic peaks 5 px apart in χ get heavily overlapping boxes and duplicate suppression
+deletes one — a candidate for the `<5 px` recall hole that phases V-AA left unexplained after
+refuting nine mechanisms. Phases Z.3/Z.7 do not contradict this (they trained on the simulator and
+tested on simulator-derived ladders, so a train/eval *distribution* gap on the real gate was outside
+what they could see), but nothing here proves it. It is a prediction the retrain would test, not a
+reason to expect the retrain to work.
+
+**CAVEATS.** The FWHM estimator reads through different intensity pipelines on the two sides
+(`apply_log`/`apply_he`/kernel/normalize for sim vs `contrast_correction` for real); the self-check
+above bounds that at 8% in q and 26% in χ. Organic is 3× more crowded than the simulator (98.6 vs
+31.4 segments/frame), so χ-profile contamination inflates organic's measured FWHM_χ — which would
+make organic's peaks *more* compact than measured, strengthening the conclusion rather than
+weakening it. Whether organic's q-broadening is physical or partly a polar-conversion artefact has
+not been checked.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
