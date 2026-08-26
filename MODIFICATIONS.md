@@ -2393,6 +2393,132 @@ make organic's peaks *more* compact than measured, strengthening the conclusion 
 weakening it. Whether organic's q-broadening is physical or partly a polar-conversion artefact has
 not been checked.
 
+### AC.2 / AC.3 — the chi convention, measured properly, and where it comes from (jobs 2782724 / 2782730, 2026-08-26)
+
+AC set the q convention from data but could not settle chi: organic read `box_h/FWHM_chi` 0.73 and 41
+read 1.16. AC.2 replaces the half-max walk with a **2D Gaussian + planar background fitted per peak,
+neighbours masked out**, and fits the real gates on `raw_polar_image` — the physical peak, before log
+and equalisation — so the real-side sigma needs no calibration. The simulator needs no fit either:
+`sigma = box_h/a_coef` by construction, so its convention is exactly +-1.75 sigma in chi, +-0.50 in q.
+
+**Estimator self-check:** fitting the simulator's CLAHE image recovered k_chi 1.55 against a truth of
+1.75 and k_q 0.43 against 0.50 — 11% and 14% low, against the FWHM walk's 26% and 8%.
+
+**Crowding was NOT the confound (my hypothesis, refuted).** Median k with neighbours masked vs not:
+organic 0.92/0.91, 41 1.71/1.74, sim 1.55/1.55. Masking changes nothing.
+
+| set | k_chi | k_q | anisotropy | fitted sigma_chi | sigma_q | peak aspect |
+|---|---|---|---|---|---|---|
+| organic | **0.92** | **1.05** | 0.88 | 3.11 | 4.67 | **0.67** |
+| 41 | 1.71 | 0.88 | 1.94 | 7.82 | 2.50 | 3.13 |
+| simulator (exact) | 1.75 | 0.50 | 3.50 | 7.76 | 2.44 | 3.18 |
+
+**Organic's boxes are +-1 sigma in both directions — the box IS the peak's shape.** And the simulator
+reproduces 41's physical peak to within 2% while missing organic's by 4.7x in aspect. **It is a
+perovskite simulator**, which is why 41 has always been the stronger gate.
+
+**Correction to AC:** from the FWHM numbers I split the box-aspect gap 70% physics / 30% convention.
+With fitted sigmas it is closer to **even — physics 4.75x, convention 4.0x**. Organic's convention is
+isotropic (0.88), not the 1.4 the calibration suggested, so the simulator's 3.5 is a bigger outlier
+than AC stated.
+
+**AC.3 — dataset-driven, not shape-driven.** If both pipelines simply boxed arcs generously and spots
+tightly, the convention would be a function of the peak and one simulator rule would serve both
+gates. Binning peaks by their own fitted aspect and comparing k_chi ACROSS gates within each bin:
+
+| aspect bin | organic k_chi | 41 k_chi | ratio |
+|---|---|---|---|
+| 0.5-1 | 0.92 (n 160) | 1.82 (n 30) | 2.0x |
+| 1-2 | 0.84 (n 93) | 1.79 (n 157) | 2.1x |
+| 2-4 | 0.92 (n 66) | 1.97 (n 213) | 2.1x |
+| 4-8 | 0.81 (n 23) | 1.69 (n 180) | 2.1x |
+
+**At matched peak shape, 41's chi boxes are 2.1x organic's in every overlapping bin.** Organic's
+k_chi is flat near 0.9 across all shapes and all sizes; the control binned by absolute sigma_chi
+shows the same ~2x offset (0.95/1.72, 0.89/1.78, 0.87/1.89), so it is not a minimum-box-size effect.
+**No single `a_coef` can satisfy both gates.** In q the gates broadly agree (organic ~1.0, 41 0.76 ->
+0.93 rising with aspect) and the simulator's 0.50 is too tight for both.
+
+### AC.4 / AC.5 — what the convention COSTS, and the joint optimum (jobs 2782735 / 2782742, 2026-08-26)
+
+Rather than argue the `a_coef` trade-off, price it: rescale the CURRENT model's predicted boxes about
+their own centres and re-run the deployed evaluation (same `Evaluator` as `--eval`, deployed NMS
+seg 0.40 / ring 0.10, deployed score floor). Scaling happens before NMS, so it also captures shorter
+boxes overlapping less.
+
+**AC.4, chi alone — the gate is nearly indifferent.** `ap_total` moves 0.006 on organic and 0.006 on
+41 across the whole 0.70-1.20x span. **Matching organic's own measured convention (k_chi 0.92,
+a_coef 1.85, scale 0.53) COSTS -0.0118 organic and -0.0100 on 41** — the appealing "make the box
+equal the peak's shape" is not what the evaluation rewards, because the matcher's IoU floor of 0.1
+makes tightness nearly irrelevant while shrinking breaks the predictions that were already correct
+(organic `pred_h/gt_h` p10 is 1.27) and breaks rings, which were right on both gates.
+
+**But box height controls the close-pair bucket.** Organic recall by chi-gap across the chi sweep:
+
+| chi scale | <5 px | 5-10 | 10-20 | 20-33 | >=33 |
+|---|---|---|---|---|---|
+| 1.50 | **0.218** | 0.346 | 0.373 | 0.587 | 0.589 |
+| 1.00 | 0.352 | 0.423 | 0.390 | 0.620 | 0.612 |
+| 0.53 | **0.394** | 0.462 | 0.373 | 0.587 | 0.601 |
+
+The `<5 px` bucket swings **0.218 -> 0.394** while `>=33 px` moves 0.023 — **an 8x difference in
+sensitivity.** This is the first positive evidence for the merging mechanism after nine refutations
+in phases V-AA: tall boxes overlap and duplicate suppression deletes one of a close pair. A global
+squeeze cannot cash it (it loses more elsewhere than it gains); a retrained model that learns the
+size PER PEAK could.
+
+**AC.5, chi x q jointly — there IS a free win, and it is positive on BOTH gates.** Sum of `ap_total`
+minus deployed, over the 5x5 grid, peaks at **chi x0.85, q x1.30 => `a_coef` 2.98, `w_coef` 1.30**:
+
+| gate | deployed | at (0.85, 1.30) | delta |
+|---|---|---|---|
+| organic | 0.5683 | **0.5810** | **+0.0127** |
+| 41 | 0.7441 | **0.7498** | **+0.0057** |
+
+`<5 px` recall also rises (organic 0.352 -> 0.382, 41 0.449 -> 0.472). The node matching organic's
+labels exactly (chi x0.53, q x2.10) is well outside this optimum, confirming AC.4. **CAVEAT:** these
+are global rescales of a model trained at k_chi 1.75 / k_q 0.50, so they price the KNOB, not a
+retrain; organic is 8 frames, and +0.0127 there should not be read as significant on its own — 41's
++0.0057 on 41 frames / 1680 objects is the more trustworthy half. **NOT acted on**: `a_coef` and
+`w_coef` are a separate variable from the peak-shape fix and are left at 3.5 / 1.0 in the run below.
+
+### RUN `dino_qaspect1` — segment aspect, from scratch (submitted 2026-08-26, job 2782747)
+
+**The single variable is the SHAPE of simulated segments.** `simulate_labels` forced
+`a_widths = maximum(a_widths, widths * U(1,2))` on every segment, i.e. `sigma_chi >= sigma_q*U(1,2)`,
+so a simulated segment could never be wider in q than tall in chi. A `seg_q_elongated_frac` share is
+now drawn q-ELONGATED with a log-uniform aspect over `seg_q_aspect_range`; the rest take the old line
+unchanged, so the arc regime 41 needs is preserved. `main.py` builds a `SimulationConfig` when the
+fraction is set, as it already did for clusters. **`frac = 0` keeps the old RNG path exactly** — the
+pre-flight (job 2782746) reproduced AC.1's published sim numbers (p50 9.40 vs 9.23, wider-than-tall
+0.005 vs 0.004) and is recorded as PASS.
+
+`a_coef` / `w_coef` deliberately NOT changed (AC.4/AC.5 above): peak shape only, one variable.
+
+Pre-flight distribution, segment box aspect `box_h/box_w`:
+
+| arm | wider than tall | below 3.5 | p10 | p50 | p90 |
+|---|---|---|---|---|---|
+| `frac = 0.0` | 0.005 | 0.024 | 4.75 | 9.40 | 25.29 |
+| **`frac = 0.35`** | **0.111** | **0.326** | **0.95** | 6.09 | 22.45 |
+| organic labels | 0.645 | 0.905 | 0.22 | 0.68 | 3.32 |
+| 41 labels | 0.011 | 0.198 | 2.33 | 7.84 | 29.02 |
+
+The simulator now REACHES organic's shapes (p10 4.75 -> 0.95; share below the old structural floor
+2.4% -> 32.6%) while keeping 41's range. It does not match organic's FREQUENCY of them (11% vs 65%),
+because `a_coef` still multiplies every box's aspect. **Accepted deliberately** — per the user, the
+model is meant to learn what peaks look like, not to memorise a peak-frequency prior, so coverage is
+the requirement and frequency matching is not.
+
+Config `config/DINO/DINO_4scale_swin_qaspect.py`, `_base_ = DINO_4scale_swin_ssl.py`. Resolved-config
+diff against ssl1: **2 keys of 115**, both the new variable. Same SimMIM backbone init, random
+detector head, lr 1e-05, lr_backbone 1e-05, epochs 500, lr_drop 280, batch 2, num_queries 900, same
+eval files and interval.
+
+**GATE (pre-registered):** PRIMARY = organic and 41 `ap_total` must not regress (0.5683 / 0.7441).
+SECONDARY = organic `pred_h/gt_h` p50 on segments moves 2.55 toward 1.0 while 41 stays near 1.08
+(`diagnostics/box_size_probe.py` block 3), and `<5 px` chi-gap recall rises from 0.352 / 0.449.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|

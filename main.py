@@ -70,14 +70,21 @@ class SimulationDataset(torch.utils.data.Dataset):
         # below 5 px). Probes S/T showed 84.5% of missed peaks sit within 8 q-px of a DETECTED peak,
         # i.e. the stock simulator never shows the configuration that dominates the errors.
         # Off unless use_peak_clusters => sim_config=None => byte-identical to every prior run.
+        # Segment aspect (training-only; MODIFICATIONS.md AC/AC.1): a share of segments drawn
+        # q-ELONGATED. Without it simulate_labels floors sigma_chi at sigma_q*U(1,2), so the
+        # simulator makes only arcs and cannot produce organic's compact spots at all.
+        # Off (frac 0) unless seg_q_elongated_frac is set => byte-identical to every prior run.
         _sim_config = None
-        if getattr(args, 'use_peak_clusters', False):
+        _q_asp = float(getattr(args, 'seg_q_elongated_frac', 0.0) or 0.0)
+        if getattr(args, 'use_peak_clusters', False) or _q_asp > 0:
             from simulation import SimulationConfig
             _sim_config = SimulationConfig()
-            _sim_config.use_peak_clusters = True
+            if getattr(args, 'use_peak_clusters', False):
+                _sim_config.use_peak_clusters = True
             for _k in ('cluster_extra_ratio', 'cluster_tight_frac', 'cluster_tight_gap_px',
                        'cluster_broad_lognorm', 'cluster_size_p', 'cluster_q_jitter_px',
-                       'cluster_int_range', 'cluster_awidth_range', 'cluster_width_range'):
+                       'cluster_int_range', 'cluster_awidth_range', 'cluster_width_range',
+                       'seg_q_elongated_frac', 'seg_q_aspect_range'):
                 if hasattr(args, _k):
                     setattr(_sim_config, _k, getattr(args, _k))
         self.simulation = FastSimulation(sim_config=_sim_config, device=self.device)

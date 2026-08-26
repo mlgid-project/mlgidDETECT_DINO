@@ -174,6 +174,12 @@ class SimulationConfig():
     poisson_range: tuple = (50, .78*WIDTH)
     a_coef: float = 3.5
     w_coef: float = 1#1.5
+    # --- segment aspect (MODIFICATIONS.md AC/AC.1; training-only) ----------------------------
+    # A share of segments is drawn q-ELONGATED (sigma_chi < sigma_q). Without this the floor in
+    # simulate_labels forces sigma_chi >= sigma_q * U(1,2) on every segment, so the simulator can
+    # only make arcs -- 90.5% of organic's labelled peaks have a shape it emits 2.7% of the time.
+    seg_q_elongated_frac: float = 0.0     # 0 => untouched, byte-identical to prior runs
+    seg_q_aspect_range: tuple = (0.15, 1.2)   # log-uniform sigma_chi/sigma_q for those segments
     add_hot_pixels: bool = False
     hot_pixels_range: tuple = (-2., 3.)
     hot_pixels_p: float = 0.001
@@ -354,7 +360,22 @@ class FastSimulation(object):
                 sc.a_pos, a_width_c, a_width_std, self.device
             )
             if is_segment:
-                a_widths = torch.maximum(a_widths, widths * (torch.rand_like(widths) + 1.0))
+                if getattr(sc, 'seg_q_elongated_frac', 0.0) > 0:
+                    # The line in the else-branch floors sigma_chi at sigma_q * U(1,2), so no
+                    # segment can ever be wider in q than in chi -- 90.5% of organic's labelled
+                    # peaks have a shape the simulator emits 2.7% of the time (MODIFICATIONS.md
+                    # AC/AC.1). A `seg_q_elongated_frac` share is drawn q-ELONGATED instead, with a
+                    # log-uniform aspect over `seg_q_aspect_range`; the rest keep the old formula
+                    # unchanged, so the arc regime that 41 needs is preserved.
+                    lo, hi = sc.seg_q_aspect_range
+                    aspect = lo * (hi / lo) ** torch.rand_like(widths)
+                    q_elong = torch.rand_like(widths) < sc.seg_q_elongated_frac
+                    a_widths = torch.where(
+                        q_elong,
+                        widths * aspect,
+                        torch.maximum(a_widths, widths * (torch.rand_like(widths) + 1.0)))
+                else:
+                    a_widths = torch.maximum(a_widths, widths * (torch.rand_like(widths) + 1.0))
             # NOTE: this used to be called with five positional args, which put `sc.min_nms`
             # into the (unused) `is_ring` slot and left the threshold at its DEFAULT — so
             # `min_nms` was a dead config knob. Byte-identical today (config == default 0.001),
