@@ -2519,6 +2519,54 @@ eval files and interval.
 SECONDARY = organic `pred_h/gt_h` p50 on segments moves 2.55 toward 1.0 while 41 stays near 1.08
 (`diagnostics/box_size_probe.py` block 3), and `<5 px` chi-gap recall rises from 0.352 / 0.449.
 
+### AD — CORAL / domain adaptation: DECLINED without a training run (`diagnostics/domain_gap_probe.py`, job 2791635, 2026-08-28)
+
+Proposal: add a CORAL term aligning the second-order feature statistics of simulated and real frames.
+Unsupervised on the real side, training-only, no inference change. Measured before building.
+
+**METHOD NOTE the user corrected me on, and it now applies to every composition claim:** the
+simulator is BRACKETED by the two gates, not uniformly wrong. segments/frame sim 38.3, organic 98.6,
+41 24.0; ring:segment 0.206 / 0.035 / 0.704; same-radius neighbour 0.532 / 0.889 / 0.565; peak aspect
+3.18 / 0.67 / 3.13. On aspect and same-radius structure the simulator sits essentially ON TOP of 41.
+Any verdict quoting organic alone is wrong.
+
+Features are the `input_proj` outputs (256-d, four levels, the tensors entering the transformer and
+the natural site for a CORAL term). Tokens split PEAK vs BACKGROUND, since aligning peak-dominated
+statistics means asking the network to make a 38-peak frame look like a 99-peak one, whose cheapest
+solution is to blur peaks into background. **Control = organic vs 41, two real sets** — anything
+below that is not a sim2real gap.
+
+**1. Separability is saturated and therefore uninformative.** Held-out Fisher AUC is ~1.000 for every
+pair INCLUDING organic vs 41. A linear discriminant separates any two sources perfectly, so it is
+reading per-dataset idiosyncrasy, not a domain gap.
+
+**2. CORAL distance — the simulator is already closer to 41 than the gates are to each other.**
+
+| peak tokens | L0 | L1 | L2 | L3 |
+|---|---|---|---|---|
+| sim vs organic | 0.00285 | 0.00964 | 0.00506 | 0.00092 |
+| **sim vs 41** | **0.00149** | **0.00236** | **0.00041** | **0.00026** |
+| *organic vs 41 (control)* | *0.00366* | *0.00808* | *0.00468* | *0.00090* |
+
+sim-vs-41 is 2-11x SMALLER than the real-real control at every level, and sim-vs-organic is
+essentially EQUAL to it. On background tokens the only isolated gap is **level 0**, where the two
+real sets agree (0.00042) and the simulator sits ~15x out (0.0061 / 0.0066); L1-L3 are at or below
+control.
+
+**3. The gap that does exist is FIRST-order, which CORAL does not touch.** Mean distances run 10-40x
+the CORAL distances (peak L1: mean 0.442 vs CORAL 0.0096; background L0: control mean 0.0028 vs
+sim ~0.11).
+
+**VERDICT — DECLINED.** Three independent reasons, no training run spent: the second-order sim/real
+distance is inside real-vs-real variation and BELOW it for 41; the one isolated gap is fine-scale
+background, exactly what `style_match` and `struct_noise` targeted and both were declined; and that
+gap is first-order dominated while CORAL corrects second moments.
+
+**CAVEATS.** organic is 8 frames. More importantly the features come from **ssl1, trained on
+simulated data**, so its representation is sim-adapted and may understate the gap; the neutral
+instrument is the `simmim1` backbone, SSL-trained on the 68k real corpus and never fine-tuned on sim.
+That rerun is one checkpoint swap and is the only identified way this verdict could be overturned.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
