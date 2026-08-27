@@ -2567,6 +2567,39 @@ simulated data**, so its representation is sim-adapted and may understate the ga
 instrument is the `simmim1` backbone, SSL-trained on the 68k real corpus and never fine-tuned on sim.
 That rerun is one checkpoint swap and is the only identified way this verdict could be overturned.
 
+### AD.2 — the same gap at the ENCODER OUTPUT: AD's one loose end closes (`diagnostics/encoder_gap_probe.py`, job 2791682, 2026-08-28)
+
+User's suggestion, and it is the better measurement. AD looked at `input_proj`, BEFORE the
+transformer. The encoder's output memory is what `enc_out_bbox_embed` scores to pick the 900 decoder
+queries, so a difference there changes detections, whereas a difference at `input_proj` can simply be
+absorbed by six encoder layers. Token->level reconstructed from the 512x1024 grid at strides
+8/16/32/64 (8192+2048+512+128 = 10880, matching the known query pool). Everything else is AD's.
+
+**Verdict line — sim vs 41 against the organic vs 41 real-real control:**
+
+| tokens | L0 | L1 | L2 | L3 |
+|---|---|---|---|---|
+| peak | below, 0.60x | below, **0.16x** | below, 0.25x | below, 0.53x |
+| background | below, 0.72x | below, 0.62x | above, 1.30x | above, 1.28x |
+
+Below control in 6 of 8 cells; the two exceptions are 1.3x, marginal. sim-vs-organic runs 1.06-1.27x
+the control — slightly further out than the gates are from each other, same order.
+
+**AD's ONE loose end is gone.** At `input_proj`, background L0 was the single place with an isolated
+gap: the two real sets agreed at 0.00042 while the simulator sat ~15x out. **At the encoder output
+that comparison is 0.00169 against a control of 0.00234 — BELOW it.** Six encoder layers normalise
+the fine-scale texture difference away before the detection head sees it, which is precisely the case
+where an alignment loss has nothing left to do.
+
+Unchanged from AD: separability saturated (0.98-1.00 every pair INCLUDING the control, so
+uninformative), and mean distances 10-45x the CORAL distances, so the residual difference is
+first-order while CORAL corrects second moments.
+
+**CORAL stays DECLINED, now measured at the point that actually matters.** The `simmim1`
+real-trained-ruler cross-check (AD.1) was written and died on an import error
+(`build_model_main` is not exported from `models`); superseded by this and not pursued. The file was
+removed rather than left broken in the tree.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|
