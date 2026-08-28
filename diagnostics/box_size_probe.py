@@ -269,10 +269,15 @@ def prow(label, d, key):
 
 
 def main():
+    # BOXSIZE_CKPT / BOXSIZE_TAG / BOXSIZE_OUT let the same probe be pointed at another
+    # checkpoint (e.g. dino_qaspect1) without touching the ssl1 default.
+    ckpt = os.environ.get('BOXSIZE_CKPT', CKPT_A)
+    tag = os.environ.get('BOXSIZE_TAG', 'ssl1')
     dev = 'cuda' if torch.cuda.is_available() else 'cpu'
     print("###### phase AC: box height vs peak width ######", flush=True)
-    print(f"device={dev}  SINGLE MODEL ssl1  PAD={PAD}", flush=True)
-    model, a = build_model_from_ckpt(CONFIG, CKPT_A, dev)
+    print(f"device={dev}  SINGLE MODEL {tag}  PAD={PAD}", flush=True)
+    print(f"checkpoint: {ckpt}", flush=True)
+    model, a = build_model_from_ckpt(CONFIG, ckpt, dev)
     model.eval()
 
     real, match = [], []
@@ -342,8 +347,9 @@ def main():
                   f"{s['ge30']:8.3f}{s['ge50']:8.3f}")
     print("  (block 4 aligns each pair at its centre, so it isolates SIZE from position error)")
 
-    json.dump(dict(sets=rows, match=match),
-              open('/mnt/lustre/work/schreiber/szb389/tmp_diag/box_size.json', 'w'),
+    json.dump(dict(sets=rows, match=match, ckpt=ckpt, tag=tag),
+              open(os.environ.get('BOXSIZE_OUT',
+                   '/mnt/lustre/work/schreiber/szb389/tmp_diag/box_size.json'), 'w'),
               indent=2, default=str)
     print("\nPROBE DONE")
 

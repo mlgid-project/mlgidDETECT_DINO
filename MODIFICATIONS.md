@@ -2600,6 +2600,134 @@ real-trained-ruler cross-check (AD.1) was written and died on an import error
 (`build_model_main` is not exported from `models`); superseded by this and not pursued. The file was
 removed rather than left broken in the tree.
 
+### AE — `dino_qaspect1` VERDICT, and the box CONVENTION priced properly (jobs 2795922 / 2796061 / 2796084 / 2796088, 2026-08-28)
+
+**AE.0 — `dino_qaspect1` (job 2782747) is NEGATIVE on both gates.** At epoch 302 of a run that will
+reach ~477, `seg_q_elongated_frac = 0.35` vs ssl1 at matched epochs:
+
+| window | organic | 41 |
+|---|---|---|
+| last 5 evals (294-302) | 0.5522 vs 0.5567 = **-0.0045** | 0.7391 vs 0.7485 = **-0.0094** |
+| last 10 evals | 0.5523 vs 0.5549 = -0.0027 | 0.7396 vs 0.7472 = -0.0076 |
+| all 152 matched | +0.0121, positive 101/152 | -0.0081, positive 57/152 |
+| best in window <=302 | 0.5821 @198 vs **0.5860** @238 | 0.7465 @270 vs **0.7620** @258 |
+
+The +0.0121 organic mean over the whole run was **front-loaded convergence speed, given back**: over
+the last 40 evals the two curves coincide (+0.0003). On 41 it is one-sided, 9 of the last 10 epochs
+below ssl1 with the one positive being +0.0008. Run left to finish for the record, not killed.
+
+**AE.1 — the SECONDARY gate moved, but only ~15% (`box_size_probe.py` on `checkpoint0279.pth`, job
+2795922).** `pred_h/gt_h` on matched segments:
+
+| gate / model | p10 | p25 | **p50** | p75 | p90 |
+|---|---|---|---|---|---|
+| organic ssl1 | 1.27 | 1.84 | **2.55** | 3.88 | 5.80 |
+| organic qaspect1@279 | 1.12 | 1.60 | **2.18** | 3.36 | 5.28 |
+| 41 ssl1 | 0.55 | 0.76 | **1.08** | 1.50 | 2.15 |
+| 41 qaspect1@279 | 0.56 | 0.78 | **1.11** | 1.46 | 1.99 |
+
+Right direction on every percentile, 41 correctly unmoved, rings unmoved (0.93->0.94 / 1.00->1.01).
+But matched pairs FELL on both gates (organic 439->424, 41 1297->1247, -3.4% / -3.9%): fewer
+detections, each fitting slightly better. And a global 0.5x chi-shrink STILL buys qaspect1 the same
+headroom it bought ssl1 (organic median IoU 0.302->0.383, >=0.3 0.505->0.745; ssl1 0.286->0.387,
+0.435->0.754), so the geometry was not actually fixed.
+
+**AE.2 — WHY peak-shape randomisation cannot fix this, and what can.** The model is NOT locked to one
+box format. Combining block 1 (human box aspect) with block 3 (its over/undershoot per axis):
+
+| | human box aspect | model emits | convention predicts 3.5 x (sigma_chi/sigma_q) |
+|---|---|---|---|
+| organic | 8.15/10.59 = **0.77** | **2.94** | 3.5 x 0.67 = 2.35 |
+| 41 | 34.10/4.66 = **7.32** | **9.79** | 3.5 x 3.13 = 10.96 |
+
+The model varies its output aspect by 3.3x between the two gates and lands within 25% of "measure the
+peak, then apply the simulator's convention" on both. It measures correctly; the error is the
+MULTIPLIER. And `a_coef`/`w_coef` cancel between box construction and rendering, so no amount of
+peak-shape randomisation changes the multiplier the model learns -- which is exactly why qaspect1
+stalled at 15%. Randomising the CONVENTION per peak would be worse still: the box would stop being a
+function of the image and the loss-optimal output becomes the conditional mean.
+
+Block 2 splits the problem cleanly and the two axes behave differently:
+
+| box / FWHM (p50) | organic | 41 | sim |
+|---|---|---|---|
+| in **q** | 0.65 | 0.63 | **0.39** |
+| in **chi** | 0.73 | 1.16 | **1.10** |
+
+**In q the two real gates AGREE and the simulator is wrong by 1.6x.** **In chi they DISAGREE by 1.6x**
+and the simulator sits on 41 -- no constant serves both; that half is an annotation conflict, not a
+modelling failure. Caveat: the estimator self-check (sim predicts 1.486 / 0.425, measures 1.10 /
+0.39) says chi reads ~26% low and q ~8% low, so the q column is trustworthy as-is and chi's ABSOLUTE
+values are not -- but the organic:41 ratio of 0.63 is immune to a common bias.
+
+**AE.3 — fine grid around AC.5's optimum, with an error bar (`box_scale_finegrid_probe.py`, job
+2796061).** 7x8 nodes, chi 0.70-1.00 x q 0.85-1.60, extended BELOW q 1.0 because AC.5's optimum sat
+one node above its grid edge. Sum of `ap_total` over both gates, delta vs deployed:
+
+| chi \ q | 0.85 | 1.00 | 1.10 | 1.20 | 1.30 | 1.40 | 1.50 | 1.60 |
+|---|---|---|---|---|---|---|---|---|
+| 1.00 | -0.0014 | +0.0000 | -0.0042 | +0.0021 | +0.0018 | +0.0064 | +0.0021 | +0.0013 |
+| 0.95 | +0.0011 | +0.0042 | +0.0011 | +0.0090 | +0.0093 | +0.0089 | +0.0062 | +0.0042 |
+| 0.90 | +0.0008 | +0.0046 | +0.0099 | +0.0136 | +0.0104 | +0.0150 | +0.0112 | +0.0097 |
+| 0.85 | -0.0043 | +0.0056 | +0.0074 | +0.0159 | +0.0184 | +0.0130 | +0.0120 | +0.0122 |
+| 0.80 | -0.0069 | +0.0058 | +0.0094 | +0.0177 | **+0.0190** | +0.0160 | **+0.0195** | +0.0144 |
+| 0.75 | -0.0127 | -0.0041 | +0.0004 | +0.0091 | +0.0104 | +0.0116 | +0.0108 | +0.0130 |
+| 0.70 | -0.0154 | -0.0019 | +0.0022 | +0.0015 | +0.0073 | +0.0082 | +0.0085 | +0.0071 |
+
+Jackknife (leave-one-frame-out) at the argmax chi 0.80 / q 1.50: organic +0.0148 +-0.0117 (+1.27
+sigma), 41 +0.0047 +-0.0055 (+0.86 sigma), sum +0.0195 +-0.0129 (**+1.51 sigma**). **The plateau
+within 1 SE covers 30 of 56 nodes** -- NO SINGLE NODE IS SIGNIFICANT. What is not noise is the shape:
+q 0.85 is negative in 6 of 7 chi rows and every row improves toward ~1.3, and both gates independently
+prefer chi < 1 and q > 1. That the q direction also agrees with the INDEPENDENT FWHM measurement above
+(both real gates at ~0.64 against the simulator's 0.39) is the real evidence.
+
+**Chosen: `a_coef` 2.80, `w_coef` 1.30** (chi 0.80 / q 1.30, sum +0.0190). Statistically tied with the
+argmax (+0.0195, difference 0.0005 against SE 0.0129) and picked over it because it is at or beside
+the maximum on BOTH gates read separately -- organic 0.5812 (grid max 0.5831) and 41 **0.7502** (grid
+max 0.7503) -- whereas the argmax trades 41 down to 0.7488. 41 is the more trustworthy gate: 41 frames
+/ 1680 objects vs organic's 8 frames.
+
+**AE.4 — pre-flight: is this ONE variable? (jobs 2796084 / 2796088).** Nearly, and the residual is
+measured rather than assumed. THREE things read the BOX rather than the widths and therefore do not
+cancel: `filter_peaks_detector_gap` (a wider box touches a gap more often), the 1.6 px minimum extent
+in `filter_dark_area` (a shorter box can fall through), and `clamp_boxes` feeding sigma back into
+`img_from_labels` (a different set of edge peaks gets clipped). Same seeds, 300 frames, at 2.80/1.30:
+
+| | old (3.50, 1.00) | new (2.80, 1.30) |
+|---|---|---|
+| segments / frame | 29.720 | 29.527 (**-0.65%**) |
+| rings / frame | 15.550 | 15.510 |
+| ring:segment | 0.5232 | 0.5253 (+0.4%) |
+| frames with identical object count | — | **247/300 = 0.823** |
+| box height ratio (expected 0.800) | — | 0.802-0.813 across p10-p90 |
+| box width ratio (expected 1.300) | — | **1.3000 at every percentile** |
+| rendered image mean abs(dI)/std(I) | — | **0.00031** (median 0.00002) |
+
+So it is a relabelling plus a 0.65% segment loss and a ~1% excess in the chi ratio (the smallest boxes
+filtered out). Reported with the run, not hidden.
+
+### RUN `dino_boxconv1` — box convention, from scratch (submitted 2026-08-28, job 2796121)
+
+`config/DINO/DINO_4scale_swin_boxconv.py`, `_base_ = DINO_4scale_swin_ssl.py`; resolved-config diff vs
+ssl1 is **ONE added key of 114**, nothing changed or removed: `box_coef_override = (2.80, 1.30)`.
+`main.py` builds a `SimulationConfig` and sets `a_coef`/`w_coef` from it, as it already did for
+clusters and `seg_q_elongated_frac`; **`box_coef_override = None` keeps every prior run's RNG path
+byte-identical**. `seg_q_elongated_frac` stays at its 0.0 default -- peak SHAPE (qaspect1, negative)
+and box CONVENTION are separate variables and this run changes the convention only.
+
+**GATE (pre-registered).** PRIMARY = organic and 41 `ap_total` must not regress vs ssl1 at matched
+epochs, BOTH reported (ssl1: 0.5683 / 0.7441 deployed; best 0.5860 @238 / 0.7620 @258). SECONDARY =
+organic `pred_h/gt_h` p50 on segments moves below 2.55 while 41 stays near 1.08
+(`diagnostics/box_size_probe.py` block 3, now env-overridable via `BOXSIZE_CKPT`), and <5 px chi-gap
+recall rises from 0.352 / 0.449.
+
+**STANDING CAVEAT, pre-registered.** AE.3 prices a global rescale of a model TRAINED at k_chi 1.75 /
+k_q 0.50. A model trained at 2.80/1.30 learns the size per peak instead of taking a uniform squeeze,
+so +0.0190 says WHERE to put the coefficients, not what the retrain will score. AC.4 separately showed
+that matching organic's measured convention EXACTLY (`a_coef` 1.85) COSTS -0.0118 organic / -0.0100 on
+41, because the matcher's IoU floor of 0.1 does not reward tightness -- so this run deliberately
+targets the AP optimum, landing only partway toward the real labels on both axes.
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|

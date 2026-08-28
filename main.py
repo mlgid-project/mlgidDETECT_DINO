@@ -76,7 +76,10 @@ class SimulationDataset(torch.utils.data.Dataset):
         # Off (frac 0) unless seg_q_elongated_frac is set => byte-identical to every prior run.
         _sim_config = None
         _q_asp = float(getattr(args, 'seg_q_elongated_frac', 0.0) or 0.0)
-        if getattr(args, 'use_peak_clusters', False) or _q_asp > 0:
+        # box_coef_override: (a_coef, w_coef) label convention (MODIFICATIONS.md AE). None => the
+        # SimulationConfig defaults 3.5 / 1.0, i.e. every prior run's RNG path untouched.
+        _coefs = getattr(args, 'box_coef_override', None)
+        if getattr(args, 'use_peak_clusters', False) or _q_asp > 0 or _coefs:
             from simulation import SimulationConfig
             _sim_config = SimulationConfig()
             if getattr(args, 'use_peak_clusters', False):
@@ -87,6 +90,11 @@ class SimulationDataset(torch.utils.data.Dataset):
                        'seg_q_elongated_frac', 'seg_q_aspect_range'):
                 if hasattr(args, _k):
                     setattr(_sim_config, _k, getattr(args, _k))
+            if _coefs:
+                _sim_config.a_coef = float(_coefs[0])
+                _sim_config.w_coef = float(_coefs[1])
+                print(f"[sim] box convention overridden: a_coef={_sim_config.a_coef} "
+                      f"w_coef={_sim_config.w_coef}", flush=True)
         self.simulation = FastSimulation(sim_config=_sim_config, device=self.device)
         # Style-transfer input matching (training-only; docs/STYLE_TRANSFER_INVESTIGATION.md):
         # match synthetic pixel intensities onto a real-corpus reference so faint peaks look
