@@ -122,6 +122,88 @@ the real lever for the organic set is #3 Path B, fine-tuning on real labeled dat
 
 ---
 
+## Box label convention — `a_coef` 3.5 / `w_coef` 1.0 → **2.80 / 1.30** (2026-09-01)
+Goal: fix what a ground-truth box MEANS — how many sigma out its edge sits. `simulation.py` builds a
+box as `pos ± widths*w_coef`, `a_pos ± a_widths*a_coef` (`_boxes_from_positions`) and recovers sigma
+by dividing by the same coefficients (`img_from_labels`), so the pair **cancels**: changing it
+relabels the same image rather than changing the physics. At the old 3.5 / 1.0 a box was ±1.75 sigma
+in chi and ±0.5 sigma in q.
+
+**Why these values.** A 7×8 grid of chi × q rescales was applied to a trained model's predicted boxes
+about their own centres, with the deployed evaluation run at every node. The sum of `ap_total` over
+both gates ridges at chi 0.80–0.85 × q 1.20–1.50. Raw argmax is chi 0.80 / q 1.50 (+0.0195), but
+chi 0.80 / q **1.30** (+0.0190) is statistically tied and sits at or beside the maximum on *both*
+gates read separately — organic 0.5812 (grid max 0.5831), 41 0.7502 (grid max 0.7503):
+
+    a_coef = 3.5 × 0.80 = 2.80        w_coef = 1.0 × 1.30 = 1.30
+
+The q direction is the robust half: q 0.85 is negative in 6 of 7 chi rows while every row improves
+from 0.85 toward ~1.3, and this agrees with an INDEPENDENT measurement — `box_w / FWHM_q` is 0.65 on
+organic and 0.63 on 41 (the two real gates AGREE) against 0.39 in the simulator, a 1.6× deficit. In
+chi the two real gates DISAGREE (`box_h / FWHM_chi` 0.73 organic vs 1.16 on 41, simulator 1.10), so
+no single coefficient satisfies both and 0.80 is the compromise the grid prefers.
+
+**Pre-flight** (relabelling residual, measured not assumed): three filters read the BOX rather than
+the widths — detector-gap rejection, the 1.6 px minimum extent in `filter_dark_area`, and
+`clamp_boxes` feeding sigma back into `img_from_labels` — so the surviving population shifts
+slightly. 84% of frames keep an IDENTICAL object count, segments/frame 29.72 → 29.53 (−0.65%),
+ring:segment 0.5232 → 0.5253 (+0.4%), rendered image mean |ΔI|/std(I) = 0.00031 (median 0.00002).
+This is a relabelling plus a 0.65% segment loss, reported rather than hidden.
+
+**Result** (from-scratch run: SSL backbone + random detector head, matched control at matched epochs).
+PRIMARY gate — neither eval set regresses:
+
+| gate | window | control | 2.80 / 1.30 | delta |
+|---|---|---|---|---|
+| organic | ep 200–402 (n=102) | 0.5551 | 0.5759 | **+0.0208 ± 0.0021** |
+| organic | ep 300–402 (n=52)  | 0.5622 | 0.5849 | **+0.0227 ± 0.0009** |
+| 41      | ep 300–402         | 0.7456 | 0.7474 | +0.0018 ± 0.0007 |
+| 41      | ep 340–402         | 0.7467 | 0.7468 | +0.0001 ± 0.0009 |
+
+SECONDARY gate — box fidelity improves on both sets (`diagnostics/box_size_probe.py` block 3),
+`pred/gt` ratios moving toward 1.0 and matched IoU rising:
+
+| model | gate | pred_h/gt_h p50 | pred_w/gt_w p50 | matched IoU p50 |
+|---|---|---|---|---|
+| control   | organic | 2.55 | 0.58 | 0.27 |
+| 2.80/1.30 | organic | 2.14 | 0.76 | 0.33 |
+| control   | 41      | 1.08 | 0.80 | 0.49 |
+| 2.80/1.30 | 41      | 0.87 | 1.06 | 0.56 |
+
+**Honest caveats.** The organic gain is the real one; **41 is a wash** (+0.0018 over ep 300–402,
++0.0001 over ep 340–402 — inside its own error bar), which is exactly what the disagreeing chi
+measurement above predicts. Close-pair recall is unmoved (organic <5 px chi-gap 0.352 → 0.345, 41
+0.449 → 0.472 — signs flip between pre- and post-drop readings, i.e. noise), so this does **not**
+address the small-peak resolution problem. Separately, matching organic's measured convention
+EXACTLY (`a_coef` 1.85) COSTS −0.0118 organic / −0.0100 on 41: the evaluation's IoU floor of 0.1 does
+not reward tightness, so these values target the AP optimum rather than convention-matching, and land
+only partway toward the real labels on both axes.
+
+⚠️ Old checkpoints still LOAD (no architecture change), but a model trained at 3.5 / 1.0 predicts
+boxes in the old convention. Mixing the two is a silent metric shift, not an error.
+
+## Simulator fixes carried with the convention change
+- **`simulate_img` re-init discarded the config (REQUIRED for the above).** On ~50% of calls the
+  method ran a bare `self.__init__()`, which reset `self.sim_config` to a DEFAULT `SimulationConfig`
+  (and `device` to `'cuda'`) — silently throwing away any configured simulation, `box_coef_override`
+  included, on half of all frames. Now re-inits as `self.__init__(sim_config=self.sim_config,
+  device=self.device)`. Byte-identical on the default path: `SimulationConfig` has constant defaults
+  and its construction consumes no RNG. The surrounding `global WIDTH` block was dead — every arm of
+  its `if` assigned 1024 — so it only ever clobbered a configured WIDTH; removed.
+- **`min_nms` was a dead config knob.** `simulate_labels` called
+  `filter_nms(pos, widths, a_pos, a_widths, sc.min_nms)` — five positional args, which put the
+  threshold into the (unused) `is_ring` slot and left `min_nms` at its default. Now passed by
+  keyword; `filter_nms` gained a docstring saying `is_ring` is accepted for signature compatibility
+  only. Byte-identical today because the config value equals the default (0.001).
+- **Three hardcoded 1024/512 constants now scale with `WIDTH`**: the background ring box
+  (`Tensor([[116,0,128,512]])`), the quazipolar dark-area coefficient
+  (`(1 - (WIDTH-512)/1024)` → `512/WIDTH`, which only agreed with itself at 1024), and
+  `create_detector_mask`'s `rs`/`ws` sampling (absolute 80..380 / 1..7 px, so the detector gap sat at
+  a different physical q at any other resolution and clipped a different set of segment peaks).
+  All byte-identical at the shipped `WIDTH=1024`; correctness only.
+
+---
+
 ## Results so far (run `ringseg_2class_20260603-142434`, ep360 of 500; baseline also ~ep350)
 | set | new 2-class @ep360 | old 91-class baseline | notes |
 |---|---|---|---|

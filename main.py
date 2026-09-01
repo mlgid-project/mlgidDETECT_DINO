@@ -56,7 +56,22 @@ class SimulationDataset(torch.utils.data.Dataset):
         self.args = args
         self.device = 'cuda'
         self.transforms = transforms
-        self.simulation = FastSimulation(device=self.device)        
+        # box_coef_override: (a_coef, w_coef) -- the label CONVENTION, i.e. how many sigma out a
+        # ground-truth box edge sits. simulation.py builds a box as
+        #     pos +- widths*w_coef , a_pos +- a_widths*a_coef
+        # and recovers sigma by dividing by the same coefficients in img_from_labels, so the two
+        # cancel: changing them RELABELS the same image rather than changing the physics.
+        # None => SimulationConfig's defaults 3.5 / 1.0, i.e. every prior run's RNG path untouched.
+        _coefs = getattr(args, 'box_coef_override', None)
+        _sim_config = None
+        if _coefs:
+            from simulation import SimulationConfig
+            _sim_config = SimulationConfig()
+            _sim_config.a_coef = float(_coefs[0])
+            _sim_config.w_coef = float(_coefs[1])
+            print(f"[sim] box convention overridden: a_coef={_sim_config.a_coef} "
+                  f"w_coef={_sim_config.w_coef}", flush=True)
+        self.simulation = FastSimulation(sim_config=_sim_config, device=self.device)
 
     def __getitem__(self, idx):
         image = None

@@ -12,6 +12,13 @@ eval_interval = 2
 #two learned classes: segment=0, ring=1 (label = int(is_ring)). num_classes = max_obj_id + 1.
 num_classes=2
 
+#box label CONVENTION: (a_coef, w_coef) = how many sigma out a ground-truth box edge sits.
+#simulation.py builds a box as pos +- widths*w_coef / a_pos +- a_widths*a_coef and recovers sigma by
+#dividing by the same coefficients, so the pair cancels: this RELABELS the image, it does not change
+#the physics. Defaults were 3.5 / 1.0 (+-1.75 sigma in chi, +-0.5 sigma in q). See MODIFICATIONS.md
+#"Box label convention" for the grid search, the independent FWHM corroboration and the run result.
+box_coef_override = (2.80, 1.30)
+
 lr = 0.00001
 param_dict_type = 'default'
 lr_backbone = 1e-05
