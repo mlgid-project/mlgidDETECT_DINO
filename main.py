@@ -72,6 +72,12 @@ class SimulationDataset(torch.utils.data.Dataset):
             _sim_config.w_coef = float(_coefs[1])
             print(f"[sim] box convention overridden: a_coef={_sim_config.a_coef} "
                   f"w_coef={_sim_config.w_coef}", flush=True)
+        if getattr(args, 'use_raw_intensity', False):
+            if _sim_config is None: 
+                from simulation import  SimulationConfig
+                _sim_config = SimulationConfig()
+            _sim_config.raw_intensity = True
+            print("[sim] raw-intensity model ON")
         self.simulation = FastSimulation(sim_config=_sim_config, device=self.device)
 
     def __getitem__(self, idx):
@@ -186,6 +192,7 @@ def get_args_parser():
     parser.add_argument("--local_rank", type=int, help='local rank for DistributedDataParallel')
     parser.add_argument('--amp', action='store_true',
                         help="Train with mixed precision")
+    parser.add_argument('--use_raw_intensity', action='store_true', help = 'sim: real-matched raw counts')
     
     return parser
 

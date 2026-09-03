@@ -152,7 +152,10 @@ class AngleLimits(object):
 
 @dataclass
 class SimulationConfig():
-    
+
+    raw_intensity: bool = False
+    alpha_range: tuple = (1.1, 4.0)
+    bg_range: tuple = (20,5000)
     obj_num: tuple = (2, 200)
     width_central: tuple = (1., 5.)
     ring_width_central: tuple = (2., 15.)
@@ -248,19 +251,24 @@ class FastSimulation(object):
             return self.simulate_img()
 
         img = mul_perlin(img)
-
-        # add background
-        #img = background_perlin(img)
-     
-        if self.background_img is None:
+        if self.sim_config.raw_intensity:
+            # compose in COUNT units: peaks (Pareto-relative, faintest=1) start at 3B; background ~ B
+            B = 10 ** random.uniform(*np.log10(self.sim_config.bg_range))
+            # O(1) background shape; the plain add_glass/add_linear_background variants
+            # normalize() their input, and normalize(ones) = 0/0 = NaN -> poisson asserts
+            bg = torch.ones_like(img)
+            if random.random() < 0.5:                       # same 50% glass rate as the old path
+                bg = add_glass_not_normalized(bg, self.x, self.y)
+            bg = add_linear_background_no_normalization(bg)
+            img = torch.poisson(random.uniform(3., 8.) * B * img + B * bg)   # peak scale 3-8x bg: true detector statistics, tail mass right of the knee
+            if random.random() < 0.3:
+                img = img.clamp_(max=65535.0)              # 16-bit saturation, as seen in 9/41 real frames
+            self._last_raw_counts = img                    # diagnostics: raw counts before masks/contrast
+        elif self.background_img is None: 
             img = add_glass(img, self.x, self.y)
             img = add_linear_background(img)
-
-        # add noise
             img = apply_poisson_noise(img, self.sim_config.poisson_range)
-        #img = add_perlin_noise(img)
-        # img = apply_speckle_noise(img)
-        #img = apply_stretch(img)
+
         if self.polar_dark_area:
             img = apply_stretch(img, (int(.04*WIDTH), int(.1*WIDTH)), (7, 10))
 
@@ -293,14 +301,22 @@ class FastSimulation(object):
         
         
         clahe_img = img
-        # apply kernels & contrast correction
-        clahe_img = apply_log(clahe_img)
-        clahe_img = apply_he(clahe_img)
-        clahe_img = apply_clip_img(clahe_img)
-        clahe_img = apply_kernel(clahe_img, self.kernel1)
-        clahe_img = digitalize_img(clahe_img)
+        if self.sim_config.raw_intensity:
+            v = clahe_img[mask]
+            lo, hi = torch.quantile(v, 0.05), torch.quantile(v, 0.995) #real pipeline clip
+            clahe_img = torch.log10(clahe_img.clamp(lo,hi).abs() + 1e-7)
+            clahe_img = apply_he(normalize(clahe_img))
+            clahe_img = apply_kernel(clahe_img, self.kernel1)
+            clahe_img = normalize(clahe_img)
+        else: 
+            # apply kernels & contrast correction
+            clahe_img = apply_log(clahe_img)
+            clahe_img = apply_he(clahe_img)
+            clahe_img = apply_clip_img(clahe_img)
+            clahe_img = apply_kernel(clahe_img, self.kernel1)
+            clahe_img = digitalize_img(clahe_img)
 
-        clahe_img = normalize(clahe_img)
+            clahe_img = normalize(clahe_img)
 
         if self.background_img is not None:
             clahe_img = clahe_img + self.background_img
@@ -324,6 +340,8 @@ class FastSimulation(object):
 
         sc = self.sim_config
 
+        alpha = 10 ** random.uniform(*np.log10(sc.alpha_range)) if sc.raw_intensity else None
+
         rings_or_seg_or_both = random.random()
 
 
@@ -341,7 +359,11 @@ class FastSimulation(object):
             # but the knob is now live.
             pos, widths, a_pos, a_widths, _ = filter_nms(
                 pos, widths, a_pos, a_widths, is_ring=None, min_nms=sc.min_nms)
-            intensities = gen_intensities(pos, widths, a_pos, a_widths, intensity_range)
+            # rings: same Pareto law but truncated low -- a ring covers %-level area, so a
+            # spectacular ring amplitude parks a visible shelf in the pixel CCDF that real
+            # frames never show; the extreme tail belongs to (small-area) segment cores
+            intensities = gen_intensities(pos, widths, a_pos, a_widths, intensity_range,
+                                          alpha = alpha, amp_cap = 1e4 if is_segment else 8.0, hero = is_segment)
             return pos, widths, a_pos, a_widths, intensities
 
         ring_pos = ring_widths = ring_a_pos = ring_a_widths = ring_intensities = torch.empty(0, device=self.device)
@@ -408,7 +430,7 @@ class FastSimulation(object):
         is_ring = is_ring[indices]
 
         #add peaks on rings
-        pos, widths, a_pos, a_widths, intensities_peaks =   self.add_peaks_on_rings(pos[is_ring], widths[is_ring], boxes[is_ring], intensities[is_ring])
+        pos, widths, a_pos, a_widths, intensities_peaks =   self.add_peaks_on_rings(pos[is_ring], widths[is_ring], boxes[is_ring], intensities[is_ring], alpha=alpha)
         if pos is not None:
             boxes_peaks_on_rings = self._boxes_from_positions(pos, widths, a_pos, a_widths)
             idx_in_img = self.filter_peaks_detector_gap(boxes_peaks_on_rings)
@@ -451,7 +473,7 @@ class FastSimulation(object):
         
     
 
-    def add_peaks_on_rings(self, x_position, widths, boxes, ring_intensities):
+    def add_peaks_on_rings(self, x_position, widths, boxes, ring_intensities, alpha=None):
         #no peaks on rings
         if random.random() > .1:
             return None, None, None, None, None
@@ -498,7 +520,7 @@ class FastSimulation(object):
                 x_positions = x_position.repeat(4).reshape(4,-1) * num_peaks
                 positions = torch.stack((x_positions, a_positions, widths, a_widths, ring_intensities, ring_ishigh)).reshape(6,-1)
                 positions = positions[:,positions[0]!=0].reshape(6,-1)
-                peak_intensities = gen_intensities(positions[0],positions[2],positions[1],positions[3],tuple(ti for ti in self.sim_config.a_seg_widths_central))
+                peak_intensities = gen_intensities(positions[0],positions[2],positions[1],positions[3],tuple(ti for ti in self.sim_config.a_seg_widths_central), alpha=alpha)
 
                 #if ring is high, peak intensity is the one of the ring
                 peak_intensities = positions[4] + positions[5]*peak_intensities
@@ -1011,7 +1033,24 @@ def apply_stretch(img, x_range: tuple = (50, 150), step_range: tuple = (3, 6)):
     return img
 
 
-def gen_intensities(pos, widths, a_pos, a_widths, intensity_range: tuple):
+def gen_intensities(pos, widths, a_pos, a_widths, intensity_range: tuple, alpha = None, amp_cap = 1e4, hero = False):
+    if alpha is not None:
+        n = pos.shape[0]
+        if n == 0:
+            return torch.empty(0, device=pos.device)
+        if hero:
+            # "brightness ladder": expected order statistics of a power-law population,
+            # A_k = (F/k)^(1/alpha) for the k-th brightest object. iid Pareto draws with
+            # only ~n objects leave the intermediate decades empty (a wall + a lone max);
+            # the ladder fills every decade so the pixel CCDF drops linearly on log-log,
+            # like every real frame. F = f0*n_pix ~ 10^3.2-3.9 sets the extent (alpha-dyn band).
+            F = 10 ** random.uniform(3.2, 3.9)
+            k = torch.randperm(n, device=pos.device) + 1.0        # ranks 1..n, shuffled
+            jitter = torch.empty(n, device=pos.device).uniform_(0.7, 1.4)
+            intensities = (F / k).pow(1.0 / alpha) * jitter
+            return intensities.clamp_(min=1.0, max=amp_cap)
+        u = torch.rand(n, device=pos.device)
+        return u.pow(-1.0 / alpha).clamp_(max=amp_cap)
     intensities = torch.rand(pos.shape[0], device=pos.device) * (
             intensity_range[1] - intensity_range[0]
     ) + intensity_range[0]

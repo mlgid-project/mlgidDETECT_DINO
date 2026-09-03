@@ -76,6 +76,8 @@ def _contrast_correction(
         perform_clipping = getattr(config, 'PREPROCESSING_PERFORMCLIPPING',
                                    getattr(config, 'PEREPROCESSING_PERFORMCLIPPING', perform_clipping))
 
+    img = img.copy()
+
     mask = ~np.isnan(img) & (img != 0)
 
     if perform_clipping:
