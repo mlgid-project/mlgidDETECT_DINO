@@ -304,10 +304,14 @@ class FastSimulation(object):
         if self.sim_config.raw_intensity:
             v = clahe_img[mask]
             lo, hi = torch.quantile(v, 0.05), torch.quantile(v, 0.995) #real pipeline clip
+            # add_dark_area's wedge level assumes a [0,1] image; on the count scale it lands
+            # far above the background and HE maps it WHITE. Park it at the dark floor so it
+            # doesn't distort the HE histogram, and zero it at the end (real invalid == 0).
+            clahe_img = clahe_img.masked_fill(~mask, lo)
             clahe_img = torch.log10(clahe_img.clamp(lo,hi).abs() + 1e-7)
             clahe_img = apply_he(normalize(clahe_img))
             clahe_img = apply_kernel(clahe_img, self.kernel1)
-            clahe_img = normalize(clahe_img)
+            clahe_img = normalize(clahe_img).masked_fill(~mask, 0.)
         else: 
             # apply kernels & contrast correction
             clahe_img = apply_log(clahe_img)
