@@ -25,3 +25,6 @@ model_zoo/
 model_zoo_old/
 scripts/
 diagnostics/*.png
+simulation.ipynb
+*.json
+testing.ipynb

@@ -24,6 +24,7 @@ from util.labeleddataset import H5GIWAXSDataset
 from util.pygidloader import PyGIDDataset, detect_dataset_type
 import util.misc as utils
 from util.postprocessing import onnx_to_xyxy, filter_boxes
+from util.channels import build_channels
 
 import datasets
 from datasets import build_dataset, get_coco_api_from_dataset
@@ -81,7 +82,10 @@ class SimulationDataset(torch.utils.data.Dataset):
             except:
                 pass
 
-        image = image.repeat(self.args.num_channels, 1, 1)
+        if self.args.num_channels == 4: 
+            image = build_channels(image, mask)
+        else: 
+            image = image.repeat(self.args.num_channels, 1, 1)
         num_objects = len(boxes[0:])
 
         area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
@@ -225,10 +229,17 @@ def evaluate_giwaxs_ap(model, postprocessors, args, dset_path, epoch, output_dir
     evaluator = Evaluator()
 
     for i, giwaxs_img_container in enumerate(data.iter_images()):
-        giwaxs_img = giwaxs_img_container.converted_polar_image
-        giwaxs_img = torch.tensor(giwaxs_img[:, 0, :, :]).unsqueeze(0).cuda().repeat(1, args.num_channels, 1, 1)
+        if args.num_channels == 4:
+            giwaxs_img = build_channels(torch.as_tensor(giwaxs_img_container.converted_polar_image[0,0]).cuda(),
+                                        torch.as_tensor(giwaxs_img_container.converted_mask[0,0]).bool().cuda()).unsqueeze(0)
+        else: 
+            giwaxs_img = giwaxs_img_container.converted_polar_image
+            giwaxs_img = torch.tensor(giwaxs_img[:, 0, :, :]).unsqueeze(0).cuda().repeat(1, args.num_channels, 1, 1)
         labels = giwaxs_img_container.polar_labels
-        outputs = model(giwaxs_img)
+        #inference only: without no_grad the forward stores activations for a backward that
+        #never comes (~10 GB for swin-L at 512x1024) and OOMs on small GPUs
+        with torch.no_grad():
+            outputs = model(giwaxs_img)
 
         #mimic the ONNX session outputs [pred_logits, pred_boxes] and run the deployed postprocessing
         raw_results = [outputs['pred_logits'].detach().cpu().numpy(),
