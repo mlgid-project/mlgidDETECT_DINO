@@ -430,7 +430,7 @@ def main(args):
         dataset = SimulationDataset(args)
         data_loader = torch.utils.data.DataLoader(
             dataset,
-            batch_size=2,
+            batch_size=args.batch_size,
             shuffle=True,
             num_workers=0,
             collate_fn=collate_fn
