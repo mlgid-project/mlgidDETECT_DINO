@@ -154,6 +154,7 @@ class AngleLimits(object):
 class SimulationConfig():
 
     raw_intensity: bool = False
+    raw_contrast: bool = True
     alpha_range: tuple = (1.1, 4.0)
     bg_range: tuple = (20,5000)
     obj_num: tuple = (2, 200)
@@ -301,7 +302,7 @@ class FastSimulation(object):
         
         
         clahe_img = img
-        if self.sim_config.raw_intensity:
+        if self.sim_config.raw_intensity and self.sim_config.raw_contrast:
             v = clahe_img[mask]
             lo, hi = torch.quantile(v, 0.05), torch.quantile(v, 0.995) #real pipeline clip
             # add_dark_area's wedge level assumes a [0,1] image; on the count scale it lands

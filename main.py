@@ -77,7 +77,8 @@ class SimulationDataset(torch.utils.data.Dataset):
                 from simulation import  SimulationConfig
                 _sim_config = SimulationConfig()
             _sim_config.raw_intensity = True
-            print("[sim] raw-intensity model ON")
+            _sim_config.raw_contrast = not getattr(args, 'raw_counts_only', False)
+            print(f"[sim] raw-intensity model ON (contrast: {'real-style' if _sim_config.raw_contrast else 'legacy'})")
         self.simulation = FastSimulation(sim_config=_sim_config, device=self.device)
 
     def __getitem__(self, idx):
@@ -193,6 +194,7 @@ def get_args_parser():
     parser.add_argument('--amp', action='store_true',
                         help="Train with mixed precision")
     parser.add_argument('--use_raw_intensity', action='store_true', help = 'sim: real-matched raw counts')
+    parser.add_argument('--raw_counts_only', action='store_true', help = 'sim: raw counts only, no contrast')
     
     return parser
 
