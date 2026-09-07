@@ -108,6 +108,65 @@ def contrast_correction(config, raw_polar_img: np.array):
     return _contrast_correction(config, raw_polar_img)
 
 
+def apply_contrast(raw_polar: np.ndarray, mask: np.ndarray, s: dict) -> np.ndarray:
+    """Parameterised contrast pipeline -- the single implementation used by the contrast
+    sweep (diagnostics/sweep_contrast.py), by the multi-contrast channels
+    (util/channels.py) and by anything else that needs a contrast other than the deployed
+    default. `s` keys:
+
+        clip  : None or (lower_percentile, upper_percentile)
+        log   : bool                       -- log10(|x|) then renormalise
+        gamma : None or float              -- x**gamma on the [0,1] image
+        he    : bool                       -- global histogram equalisation (as deployed)
+        clahe : None or (clip_limit, tile_h, tile_w)   -- local (contrast-limited) HE
+
+    Ops run in the order `_contrast_correction` uses: clip, log, (gamma), HE/CLAHE. Pixels
+    outside `mask` (nan or exactly 0 in the polar image = detector gaps, off-detector area)
+    are excluded from every statistic and zeroed at the end, again as in the real pipeline.
+
+    At s = {'clip': (5, 99.5), 'log': True, 'gamma': None, 'he': True, 'clahe': None} this is
+    numerically identical to `_contrast_correction` at its defaults -- asserted per dataset by
+    diagnostics/sweep_contrast.py, which prints the max abs difference on every run.
+    """
+    img = raw_polar.astype(np.float32).copy()
+
+    clip = s.get('clip')
+    if clip is not None:
+        lo = np.percentile(img[mask], clip[0])
+        hi = np.percentile(img[mask], clip[1])
+        img[mask] = np.clip(img[mask], lo, hi)
+
+    if s.get('log'):
+        img = np.log10(np.abs(img) + 1e-7)
+        img[mask] = normalize(img, mask)
+
+    if s.get('gamma'):
+        img[mask] = normalize(img, mask) ** float(s['gamma'])
+
+    if s.get('he'):
+        img[mask] = normalize(img, mask)
+        img = img * 255
+        equalized = cv2.equalizeHist(img[mask].astype(np.uint8).reshape(-1, 1)).ravel()
+        img[mask] = equalized
+        img = img / 255
+        img = img.astype(np.float32)
+    elif s.get('clahe'):
+        limit, th, tw = s['clahe']
+        #CLAHE is spatial, so it needs the full 2D frame. Masked-out pixels are parked at
+        #the dark floor (0) exactly like the real invalid value, then re-zeroed below.
+        img[mask] = normalize(img, mask)
+        img[~mask] = 0.
+        u8 = np.clip(img * 255, 0, 255).astype(np.uint8)
+        u8 = cv2.createCLAHE(clipLimit=float(limit), tileGridSize=(int(th), int(tw))).apply(u8)
+        img = u8.astype(np.float32) / 255
+    else:
+        #no HE/CLAHE: still hand the model a [0,1] image, as every other branch does
+        img[mask] = normalize(img, mask)
+
+    img[~mask] = 0
+    return img.astype(np.float32)
+
+
 def add_batch_and_color_channel(img: np.array):
     img = np.repeat(img[ np.newaxis, :, :], 1, axis=0)
     return np.repeat(img[ np.newaxis, :, :], 1, axis=0)
