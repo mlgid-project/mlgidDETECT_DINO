@@ -14,7 +14,7 @@ import torch
 from main import build_model_main, get_args_parser, SimulationDataset, collate_fn
 from util.slconfig import SLConfig
 
-config_file = 'config/DINO/DINO_4scale_swin_mc.py'
+config_file = sys.argv[1] if len(sys.argv) > 1 else 'config/DINO/DINO_4scale_swin_mc.py'
 parser = get_args_parser()
 args = parser.parse_args(['--config_file', config_file, '--output_dir', '/tmp/mc_smoke'])
 cfg = SLConfig.fromfile(config_file)

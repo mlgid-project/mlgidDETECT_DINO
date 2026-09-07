@@ -1,0 +1,8 @@
+40 simulated images each
+
+edge_peaks    imgs   boxes    overlap mask   TRUNCATED at wedge
+False           40    1935      471 ( 24.3%)          328 ( 17.0%)
+True            40    2109      872 ( 41.3%)          474 ( 22.5%)
+
+real reference:   41  34.8% of boxes, 100% of images
+                  organic  20.1% of boxes, 100% of images

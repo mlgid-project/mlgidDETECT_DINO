@@ -9,6 +9,7 @@ from math import pi
 import random
 
 import numpy as np
+import cv2
 from typing import Union
 import torch
 from torch import Tensor
@@ -61,6 +62,17 @@ def torch_he(img: Tensor, bins: int = 1000):
     cdf = cdf / cdf[-1]
     res = interp1d(bin_centers, cdf, img_flat)
     return res.view(img.shape)
+
+def clahe_torch(img: Tensor, clip_limit: float, tile: tuple):
+    """Contrast-limited adaptive HE, matching util.exp_preprocess.apply_contrast's CLAHE branch.
+
+    CLAHE is tile-based and has no torch equivalent, so this is the one place the simulator
+    leaves the GPU: ~2 ms per 512x1024 frame, about 3 s on a 9-minute epoch.
+    """
+    a = (img.clamp(0, 1) * 255).to(torch.uint8).cpu().numpy()
+    a = cv2.createCLAHE(clipLimit=float(clip_limit), tileGridSize=tuple(tile)).apply(a)
+    return torch.from_numpy(a).to(device=img.device, dtype=torch.float32) / 255
+
 
 def with_probability(probability: float = 1.):
     def wrapper(func):
@@ -155,6 +167,19 @@ class SimulationConfig():
 
     raw_intensity: bool = False
     raw_contrast: bool = True
+    #EDGE PEAKS: keep peaks cut off by the dark wedge or a detector gap, with their FULL box,
+    #instead of clamping the box to the mask edge (wedge) or deleting the peak (gaps). Real
+    #labels keep them: 34.8% of 41's GT boxes and 20.1% of organic's overlap an invalid pixel,
+    #in 100% of images, while the simulator produces essentially none.
+    edge_peaks: bool = False
+    #keep a wedge-cut peak while at least this fraction of its box is still visible
+    edge_peaks_vis_frac: float = 0.3
+    #drop a gap-hit segment only once this fraction of its box is detector gap
+    edge_peaks_gap_frac: float = 0.7
+    #multi-CONTRAST channels: when True, simulate_img returns a (3, H, W) stack of three
+    #contrasts of the same image instead of one contrasted image. See FastSimulation.
+    #contrast_stack and util/channels.py CONTRAST_CHANNELS (the matching real-data side).
+    contrast_channels: bool = False
     alpha_range: tuple = (1.1, 4.0)
     bg_range: tuple = (20,5000)
     obj_num: tuple = (2, 200)
@@ -313,7 +338,11 @@ class FastSimulation(object):
             clahe_img = apply_he(normalize(clahe_img))
             clahe_img = apply_kernel(clahe_img, self.kernel1)
             clahe_img = normalize(clahe_img).masked_fill(~mask, 0.)
-        else: 
+        elif self.sim_config.contrast_channels:
+            #multi-CONTRAST stack: three contrasts of this image instead of one (3, H, W).
+            #The mask channel is appended in main.SimulationDataset.__getitem__.
+            clahe_img = self.contrast_stack(clahe_img, mask)
+        else:
             # apply kernels & contrast correction
             clahe_img = apply_log(clahe_img)
             clahe_img = apply_he(clahe_img)
@@ -333,6 +362,64 @@ class FastSimulation(object):
         clahe_img, boxes, mask = flip_image(clahe_img, boxes, mask)
 
         return clahe_img, boxes, mask, is_ring
+
+    @torch.no_grad()
+    def contrast_stack(self, img, mask):
+        """Three contrasts of the same simulated image, matching util.channels.CONTRAST_CHANNELS.
+
+            ch0  clip 5/99.5 + log + HE             (deployed default; the SSL-init channel)
+            ch1  clip 5/99.5 + log + CLAHE 4@16x16  (best organic of the 74-setting sweep)
+            ch2  clip 5/99.5 + log + gamma 0.7      (the 41-facing channel)
+
+        All three share the 5/99.5 clip AND the log, so both are applied once and only the
+        last stage differs per channel: HE, CLAHE, or a plain gamma.
+
+        Two deliberate differences from the real-data side (util.exp_preprocess.apply_contrast):
+
+        * The LOG. Simulated images are in arbitrary units, not detector counts, so
+          log10(|x| + 1e-7) -- what the real path uses -- would land on a completely
+          different part of the curve. apply_log maps the image onto a synthetic decade
+          range (normalize * U(50, 5000) + 1) first; that is the form every working run on
+          this branch was trained with. The clip, the gamma and HE/CLAHE are rank- or
+          ratio-based and so transfer from sim units to real counts unchanged.
+        * ONE draw of the trailing augmentations (mean/std clamp, smoothing kernel,
+          digitalisation) is shared by all three channels, so the stack stays coherent
+          rather than each channel being augmented independently.
+        """
+        v = img[mask]
+        lo, hi = torch.quantile(v, 0.05), torch.quantile(v, 0.995)
+        clipped = img.clamp(lo, hi)
+
+        logged = apply_log(clipped)                     #shared log trunk (p=0.9, single draw)
+        chans = [apply_he(logged),
+                 clahe_torch(normalize(logged), 4.0, (16, 16)),
+                 normalize(logged) ** 0.7]
+
+        def safe_norm(t):
+            #normalize() is (t - min) / (max - min): a channel that goes FLAT (digitalize with
+            #few levels, a fully clipped gamma channel, a constant CLAHE tile) makes that 0/0
+            #and puts NaN into the input. The NaN survives the forward and only surfaces much
+            #later as `assert boxes1[:, 2:] >= boxes1[:, :2]` in the matcher, because NaN
+            #comparisons are False -- which is exactly how job 2853568 died at epoch 4.
+            lo, hi = t.min(), t.max()
+            return (t - lo) / (hi - lo) if (hi - lo) > 1e-12 else torch.zeros_like(t)
+
+        do_clip, clip_scale = random.random() < 0.05, random.uniform(2, 4)
+        do_kernel = random.random() < 0.5
+        do_digit, levels = random.random() < 0.4, random.randint(16, 64)
+        out = []
+        for c in chans:
+            c = safe_norm(c)
+            if do_clip:
+                m, sd = c.mean().item(), c.std().item() * clip_scale
+                c = torch.clamp(c, m - sd, m + sd)
+            if do_kernel:
+                c = F.conv2d(c[None, None], self.kernel1, padding=1).squeeze()
+            if do_digit:
+                c = (safe_norm(c) * levels).round()
+            out.append(safe_norm(c).masked_fill(~mask, 0.))
+        #belt and braces: never hand a non-finite pixel to the model
+        return torch.nan_to_num(torch.stack(out), nan=0., posinf=1., neginf=0.)
 
     @torch.no_grad()
     def simulate_boxes(self):
@@ -675,12 +762,19 @@ class FastSimulation(object):
             
 
             angles = (boxes[:, 3] + boxes[:, 1]) / 2
-            boxes[:, 3] = torch.minimum(boxes[:, 3], self.angle_limits.max(pos))
-            boxes[:, 1] = torch.maximum(boxes[:, 1], self.angle_limits.min(pos))
-
-            widths = boxes[:, 3] - boxes[:, 1]
             min_angle = self.sim_config.min_angle
-            polar_indices = (widths >= min_angle) & (angles - boxes[:, 1] > - widths / 2) & (angles < boxes[:, 3])
+            if self.sim_config.edge_peaks:
+                #DO NOT clamp the box to the wedge: a human labels the whole peak, including the
+                #part the mask swallows. Keep the full box, gate on how much is still visible.
+                lo, hi = self.angle_limits.min(pos), self.angle_limits.max(pos)
+                full = (boxes[:, 3] - boxes[:, 1]).clamp(min=1e-6)
+                visible = (torch.minimum(boxes[:, 3], hi) - torch.maximum(boxes[:, 1], lo)).clamp(min=0.)
+                polar_indices = ((visible / full) >= self.sim_config.edge_peaks_vis_frac) & (full >= min_angle)
+            else:
+                boxes[:, 3] = torch.minimum(boxes[:, 3], self.angle_limits.max(pos))
+                boxes[:, 1] = torch.maximum(boxes[:, 1], self.angle_limits.min(pos))
+                widths = boxes[:, 3] - boxes[:, 1]
+                polar_indices = (widths >= min_angle) & (angles - boxes[:, 1] > - widths / 2) & (angles < boxes[:, 3])
 
             if random_nr > .5 and self.background_img is None:
                 #remove boxes in quazipolar region
@@ -690,7 +784,9 @@ class FastSimulation(object):
                 self.quazipolar_coef = 1.54 + (-.2 + .4*random.random())
                 #if rings reach into the quazipolar area, clamp them to the allowed area
                 quazipolar_indices = (boxes[:, 3] >= self.quazipolar_coef * (512/WIDTH) * boxes[:, 0]) & (boxes[:, 0] < (1/self.quazipolar_coef *(WIDTH)))
-                boxes[quazipolar_indices, 3] =  self.quazipolar_coef * (512/WIDTH) * boxes[quazipolar_indices, 0]
+                if not self.sim_config.edge_peaks:
+                    #same reasoning as the polar branch: keep the full box across the cut
+                    boxes[quazipolar_indices, 3] =  self.quazipolar_coef * (512/WIDTH) * boxes[quazipolar_indices, 0]
                 indices = indices_outside_image & polar_indices
 
                 return boxes, indices
@@ -773,6 +869,12 @@ class FastSimulation(object):
     def filter_peaks_detector_gap(self, boxes_peaks_on_rings):
         if self.detector_mask:
             boxes_as_masks = self.boxes_to_masks(boxes_peaks_on_rings)        
+            if self.sim_config.edge_peaks:
+                #a peak clipped by a gap is still a labelled peak in real data -- drop it
+                #only once it is MOSTLY gap, i.e. no visible signal is left to detect
+                gap = (self.idx_black & boxes_as_masks).sum(dim=(1, 2)).float()
+                area = boxes_as_masks.sum(dim=(1, 2)).float().clamp(min=1.)
+                return (gap / area) < self.sim_config.edge_peaks_gap_frac
             return torch.logical_not(torch.any(self.idx_black & boxes_as_masks, dim=(1,2)))
         return torch.ones(size=(len(boxes_peaks_on_rings),), dtype=torch.bool ,device=self.device)
 
@@ -1069,13 +1171,16 @@ def gen_intensities(pos, widths, a_pos, a_widths, intensity_range: tuple, alpha 
 
 
 def flip_image(img, boxes, mask):
+    #spatial dims addressed from the back, so a (C, H, W) contrast stack flips its image
+    #axes and not its channels; identical to the old dims=(0,)/(1,) for a plain (H, W) img
+    shape = img.shape[-2:]
     if np.random.rand() > 0.5:
-        img = torch.flip(img, dims=(0,))
-        boxes = flip_boxes(boxes, 0, img.shape)
+        img = torch.flip(img, dims=(-2,))
+        boxes = flip_boxes(boxes, 0, shape)
         mask = torch.flip(mask, dims=(0,))
     if np.random.rand() > 0.5:
-        img = torch.flip(img, dims=(1,))
-        boxes = flip_boxes(boxes, 1, img.shape)
+        img = torch.flip(img, dims=(-1,))
+        boxes = flip_boxes(boxes, 1, shape)
         mask = torch.flip(mask, dims=(1,))
 
     return img, boxes, mask

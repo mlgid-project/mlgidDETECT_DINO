@@ -24,7 +24,8 @@ from util.labeleddataset import H5GIWAXSDataset
 from util.pygidloader import PyGIDDataset, detect_dataset_type
 import util.misc as utils
 from util.postprocessing import onnx_to_xyxy, filter_boxes
-from util.channels import build_channels
+from util.channels import (build_channels, build_contrast_channels, mask_channel,
+                           CONTRAST_CHANNELS)
 
 import datasets
 from datasets import build_dataset, get_coco_api_from_dataset
@@ -79,6 +80,28 @@ class SimulationDataset(torch.utils.data.Dataset):
             _sim_config.raw_intensity = True
             _sim_config.raw_contrast = not getattr(args, 'raw_counts_only', False)
             print(f"[sim] raw-intensity model ON (contrast: {'real-style' if _sim_config.raw_contrast else 'legacy'})")
+        #edge peaks (config DINO_4scale_swin_edge.py): keep peaks cut off by the dark wedge or a
+        #detector gap with their FULL box, instead of clamping/deleting them. Matches the real
+        #labels, where 34.8% (41) / 20.1% (organic) of GT boxes overlap an invalid pixel.
+        if getattr(args, 'edge_peaks', False):
+            if _sim_config is None:
+                from simulation import SimulationConfig
+                _sim_config = SimulationConfig()
+            _sim_config.edge_peaks = True
+            print(f"[sim] edge peaks ON: keep wedge-cut peaks with >= "
+                  f"{_sim_config.edge_peaks_vis_frac:.0%} visible, gap-hit peaks below "
+                  f"{_sim_config.edge_peaks_gap_frac:.0%} gap", flush=True)
+        #channel_mode 'contrast' (config DINO_4scale_swin_mcc.py): the 4 channels are three
+        #CONTRASTS of the same image + mask, instead of three quantities derived from one
+        #contrast. The simulator then returns a (3, H, W) stack; the mask is added below.
+        self.channel_mode = getattr(args, 'channel_mode', 'derived')
+        if self.channel_mode == 'contrast':
+            if _sim_config is None:
+                from simulation import SimulationConfig
+                _sim_config = SimulationConfig()
+            _sim_config.contrast_channels = True
+            print("[sim] multi-contrast channels ON: "
+                  + ", ".join(c['name'] for c in CONTRAST_CHANNELS) + ", mask", flush=True)
         self.simulation = FastSimulation(sim_config=_sim_config, device=self.device)
 
     def __getitem__(self, idx):
@@ -89,8 +112,12 @@ class SimulationDataset(torch.utils.data.Dataset):
             except:
                 pass
 
-        if self.args.num_channels == 4: 
-            image = build_channels(image, mask)
+        if self.args.num_channels == 4:
+            if self.channel_mode == 'contrast':
+                #simulate_img already returned the (3, H, W) contrast stack; add the mask
+                image = torch.cat([image, mask_channel(mask)[None]], dim=0)
+            else:
+                image = build_channels(image, mask)
         else: 
             image = image.repeat(self.args.num_channels, 1, 1)
         num_objects = len(boxes[0:])
@@ -238,7 +265,12 @@ def evaluate_giwaxs_ap(model, postprocessors, args, dset_path, epoch, output_dir
     evaluator = Evaluator()
 
     for i, giwaxs_img_container in enumerate(data.iter_images()):
-        if args.num_channels == 4:
+        if args.num_channels == 4 and getattr(args, 'channel_mode', 'derived') == 'contrast':
+            #NOTE the raw_polar_image: these channels apply their own clip/log/HE, so they
+            #must start from the PRE-contrast image, not from converted_polar_image.
+            giwaxs_img = build_contrast_channels(giwaxs_img_container.raw_polar_image,
+                                                 giwaxs_img_container.converted_mask[0,0]).cuda().unsqueeze(0)
+        elif args.num_channels == 4:
             giwaxs_img = build_channels(torch.as_tensor(giwaxs_img_container.converted_polar_image[0,0]).cuda(),
                                         torch.as_tensor(giwaxs_img_container.converted_mask[0,0]).bool().cuda()).unsqueeze(0)
         else: 

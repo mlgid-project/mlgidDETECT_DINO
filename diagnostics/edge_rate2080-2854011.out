@@ -1,0 +1,8 @@
+40 simulated images each
+
+edge_peaks    imgs   boxes   overlap mask  imgs with >=1
+False           40    1918     440 ( 22.9%)      34 (  85%)
+True            40    1946     559 ( 28.7%)      36 (  90%)
+
+real reference:   41  34.8% of boxes, 100% of images
+                  organic  20.1% of boxes, 100% of images
