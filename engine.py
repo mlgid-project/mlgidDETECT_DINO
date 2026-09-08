@@ -37,8 +37,20 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
 
+    warmup_steps = getattr(args, 'warmup_steps', 0) if not args.onecyclelr else 0
+
     _cnt = 0
-    for samples, targets in metric_logger.log_every(data_loader, print_freq, header, logger=logger):
+    for _step, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header, logger=logger)):
+
+        if warmup_steps > 0:
+            gstep = epoch * len(data_loader) + _step
+            if gstep < warmup_steps:
+                factor = (gstep + 1) / warmup_steps
+                for g in optimizer.param_groups:
+                    g['lr'] = g['initial_lr'] * factor
+            elif gstep == warmup_steps:
+                for g in optimizer.param_groups:
+                    g['lr'] = g['initial_lr']
 
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
