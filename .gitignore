@@ -28,3 +28,5 @@ diagnostics/*.png
 simulation.ipynb
 *.json
 testing.ipynb
+ap_metric.pdf
+make_ap_metric_pdf.py
