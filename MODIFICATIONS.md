@@ -224,6 +224,212 @@ Plot: `train_output/ringseg_2class_20260603-142434/ap_curves.png`.
   So precision 0.81 is likely pessimistic and the eval may be label-limited, not model-limited. See
   ROADMAP.md "KEY FINDING". Next: expert review of `viz_fp.png` to confirm.
 
+## I. pygidSIM physics peak configuration, second attempt — SUBMITTED AT 100% (2026-09-09)
+
+Replace the simulator's invented peak properties with real crystallography via pygidsim
+(CIF -> structure-factor peak list). **The intensities are the point of this track.** The standard
+sim draws peak intensities UNIFORMLY in a bounded range (`gen_intensities`, `simulation.py:1161`:
+`rand()*(hi-lo)+lo` over ring `(2,50)` / segment `(10,50)`), applies a 2x boost to low-q/narrow
+peaks and rescales linearly — no skew, essentially no q-correlation. Real diffraction has a few
+strong reflections and a long weak tail spanning orders of magnitude, set by structure and form
+factors. Peak POSITIONS come along for the ride but are secondary: the current detector is not
+physics-based, so positions matching only roughly is acceptable.
+
+### Relation to the declined phase P
+Same lever as phase P on branch `development` (`docs/PHYSICS_SIM_INVESTIGATION.md`), DECLINED
+2026-08-03: from-scratch `dino_physics_scratch1` organic 0.5395 vs ssl1's 0.5634, 41 0.6255 vs
+0.7454, and at a matched operating point it lost on every stratum including the high-q one it was
+built to fix (it only looked good at a fixed score because it fired 5.5x more boxes). Four things
+differ now, plus lr 4e-5 where phase P ran at 1e-5:
+
+1. **Library.** Phase P's bank was 98.5 % perovskite — 26,341 of 26,734 entries from a COD
+   perovskite selection, only 393 from the 51 organic CIFs. This one is 60,474 COD organics.
+2. **q coverage.** The old bank stopped at |q| = 4.24 (`q_xy_max = q_z_max = 3.0`), leaving the
+   outer 14 % of an organic frame (q_max 4.95) with no physics peaks. Now 3.5 -> 4.95.
+3. **Box convention.** Phase P predates `box_coef_override` and sampled its own half-widths.
+   `physics_simulation.py` now builds boxes as centre +/- sigma*coef using the run's own
+   `(a_coef, w_coef) = (2.80, 1.30)` and the config's width ranges.
+4. **Dilution 25 %, not 50 %.**
+
+### What was built
+- **`physics_sim/fetch_cod_organics.py`** (NEW) — COD `result.php` runs the selection server-side
+  and returns metadata for 97,992 candidates in one request, so none of the 26.6 GB
+  `cod-cifs-mysql.tgz` is needed. Filtered to 60,474 organic structures (must contain C+H; only
+  non-metals plus at most one OSC metal centre, since the eval family includes CuPc/ZnPc; cell
+  volume 500-8000 A^3; deduped on rounded cell). Median cell 2374 A^3. Fetched by rsync
+  `--files-from` against the sharded `cif/<d1>/<d2d3>/<d4d5>/` tree.
+- **`physics_sim/generate_bank.py`** (ported from `git show e14f8e9:...`) — parameterised CIF dir
+  and output, multiprocessing, random sampling under `--limit`, `Q_XY_MAX = Q_Z_MAX = 3.5`.
+  **`physics_sim/run_bank_organic.sbatch`** builds the full bank on cpu-galvani.
+- **`physics_simulation.py`** (ported from `git show b8f220b:...`) — the four changes above, plus
+  `sim_config` threading: the original built `FastSimulation()` with DEFAULT coefficients, so a
+  `box_coef_override` never reached `img_from_labels`' sigma recovery.
+- **`simulation.py`** — one additive function `contrast_like_real` (49 insertions, 0 deletions;
+  no existing path changes).
+- **`main.py`** — `SimulationDataset` gains `use_physics_sim` / `physics_sim_fraction` /
+  `physics_bank_path` / `unify_contrast`, default off; `__getitem__` picks per sample.
+- **`config/DINO/DINO_4scale_swin_physics2.py`** + **`run_detector_physics2.sbatch`**.
+- **`diagnostics/bank_stats.py`**, **`peak_position_gate.py`**, **`peak_intensity_gate.py`**.
+
+### Bundled second change: unify_contrast
+The sim and the real preprocessing are two separate implementations differing in ORDER (sim
+`apply_log -> apply_he -> apply_clip_img`, where the clip is a rare p=0.05 mean+/-k*std clamp; real
+`percentile clip (5, 99.5) -> log -> HE`, always) and in the log ARGUMENT (sim maps onto a
+synthetic decade range `normalize(x)*U(50,5000)+1` because its intensity units are arbitrary; real
+takes `log10(|x|+1e-7)`). Physics intensities are what make the real form applicable, so the two
+levers are tested together — deliberately, at the cost of attribution if the run moves.
+
+### The evidence for the run: intensity SHAPE (`diagnostics/peak_intensity_gate.py`)
+Intensity normalized by the brightest peak of its own pattern, so the three sources' different
+units cancel. Real organic amplitudes had to be MEASURED from `data/img_gid_q` (patch max minus a
+local background ring) because the label file's `amplitude` column is all zeros; 41 uses its
+`peak height`.
+
+| source | med I/Imax | frac < 0.1 | log10 dynamic range |
+|---|---|---|---|
+| REAL organic (measured) | 0.007 | 0.911 | 1.61 |
+| REAL 41 (`peak height`) | 0.009 | 0.859 | 2.20 |
+| **SIM current (uniform)** | **0.363** | **0.057** | **0.62** |
+| bank perovskite | 0.033 | 0.783 | 2.16 |
+| bank organic | 0.043 | 0.791 | 1.09 |
+
+The standard sim is off by ~50x on median relative intensity, produces 5.7 % weak peaks where
+reality has 86-91 %, and spans 0.6 decades where reality spans 1.6-2.2. Both physics banks are far
+closer on all three. **This is the axis the track is for, and the mismatch is large.** Note the
+organic bank's dynamic range (1.09) is NARROWER than the perovskite bank's (2.16) and than either
+real set -- worth revisiting if the run underperforms.
+
+### Wiring check (`diagnostics/physics_smoke.py`, job 2859173, gate bank)
+All contract assertions pass in both contrast modes -- shape, dtype, finiteness, [0,1] range, mask
+shape, non-empty boxes, and the `x2>x1 & y2>y1` guard the DINO matcher asserts at
+`util/box_ops.py:53`.
+
+| generator | boxes/img | rings | mean px | max abs px outside mask |
+|---|---|---|---|---|
+| physics, unify_contrast=False | 37.6 | 9.8 % | 0.537 | 1.000 |
+| physics, unify_contrast=True | 41.8 | 12.4 % | 0.310 | 0.562 |
+| standard sim (control) | 44.2 | 52.8 % | 0.560 | 1.000 |
+
+Two things to watch, neither blocking:
+- **Ring fraction.** Physics produces 10-12 % rings against the standard sim's 52.8 %, because the
+  composition is 0-1 powder + 1-2 oriented entries with 3-15 rings vs 8-60 spots. At 25 % dilution
+  the overall ring share moves 52.8 % -> ~42 %. Tunable via `N_POWDER` / `N_ORIENTED` /
+  `RINGS_PER_POWDER` in `physics_simulation.py` if the class balance turns out to matter.
+- The standard sim does NOT zero pixels outside the mask either (max abs 1.000), so that is not a
+  physics regression; `unify_contrast=True` is actually cleaner (0.562) because
+  `contrast_like_real` zeroes the invalid region as the real pipeline does.
+
+### Measured on the way (positions only; kept because it is cheap and reusable)
+Peak POSITIONS in the normalized radial coordinate the detector sees, x = q/q_max, against the
+real labeled peaks, using each eval set's own q_max (organic 4.95 for every entry; 41 3.82).
+Two-sample KS, effect size not p-value; noise floor 1.36/sqrt(817) = 0.048:
+
+| source | KS vs organic | KS vs 41 | KS sum |
+|---|---|---|---|
+| SIM current (uniform, `simulation.py:933`) | 0.160 | **0.121** | **0.280** |
+| bank perovskite (phase P's) | **0.140** | 0.333 | 0.473 |
+| bank organic (2,000-CIF gate sample) | 0.215 | 0.207 | 0.422 |
+
+So on POSITIONS alone the uniform sim is already competitive and no bank dominates — expected,
+and not a reason to stop, since positions are not what this track is for. Two side findings worth
+keeping:
+- **Library chemistry does not predict which eval set a bank matches**: the perovskite bank fits
+  the ORGANIC eval better and the organic bank fits the PEROVSKITE eval better. Note `41.h5` is
+  itself a perovskite set (MAPbI3, FAPbI3, FAPbBr3, 2D BA/PEA, SiOx|InOx), so phase P's bank was
+  chemistry-matched to the very set it damaged most.
+- **Physics banks skew outward**: a bank holds every symmetry-allowed reflection to q_max and
+  reflection count grows ~q^3, while real LABELED peaks are those a human could see and fit.
+  Top-200-by-intensity does not undo it.
+
+Label-format note, worth recording because it cost time: `organic_labeled.h5` stores `amplitude`,
+`q_xy`, `q_z` and `is_ring` as ALL ZERO — only `radius` (A^-1), `angle` (deg) and `visibility` are
+populated. 41's `roi_data` does carry `peak height` and `confidence_level`, with `radius` in
+reciprocal-image pixels.
+
+### Dilution: 25% was built, 100% is what runs (user decision, 2026-09-09)
+`DINO_4scale_swin_physics2.py` (fraction 0.25) and its sbatch are kept for the record but the run
+was CANCELLED before starting. The run that is queued is `DINO_4scale_swin_physics3.py` at
+**fraction 1.0** — every training image's peak configuration comes from a CIF. Rationale: the next
+model iteration is intended to use physical peak POSITIONS as well as intensities, so the training
+distribution should be physical end to end rather than a dilution of a random one. Job 2862076,
+`afterok` on the bank job, output `detector_runs/dino_physics3_1`.
+
+Three risks that 25% contained and 100% does not, recorded so the run is read honestly:
+- **Ring fraction.** Physics images are 10-12 % rings against the standard sim's 52.8 %. At 100 %
+  the detector barely sees rings, and `41.h5` is ring-heavy. If 41 collapses while organic holds,
+  check composition before concluding anything about intensities.
+- **Positions.** The KS table above shows the organic bank (0.422) is a WORSE match to the real q
+  distribution than the uniform sim (0.280). At 25 % that is a perturbation; at 100 % those are
+  the only positions the model ever sees.
+- **Eval-cleanliness.** See below — unchanged, but it now applies to every image rather than one
+  in four.
+
+### On-the-fly generation: measured, deferred
+Measured on 145 random CIFs from the library (`mlgid_physics` env): CIF parse median 661 ms,
+`giwaxs_sim` per orientation p50 87.5 ms / p90 500 ms / p100 1096 ms, mean 184 ms, 3 % parse
+failures. At ~2 sims per image that is ~368 ms/image unscreened, ~6 min per 1000-image epoch,
+against ~0.545 s/image of GPU time — so with 12 dataloader workers, on-the-fly generation would
+NOT be the bottleneck, and pre-parsing structures into a per-worker pool removes the 661 ms parse
+entirely. It would also give a fresh random orientation per image, where the bank freezes 8 per
+CIF. Deferred anyway: `pygidsim` + `xrayutilities==1.7.10` live only in `mlgid_physics`, not in
+the training env `DINO_GIWAXS`, and the bank already supplies ~525k entries against ~500k training
+images — each structure/orientation is drawn roughly once per run. Revisit if the next iteration
+needs structure identity carried into the label. (An earlier n=20 sample showed a 41 s outlier and
+led to a wrong "catastrophic tail" conclusion; it did not recur in 145 structures.)
+
+### Status and caveat
+**NOT EVAL-CLEAN YET.** The bank is built with `--no-exclusions`: the mlgidMATCH-based exclusion
+pass (`physics_sim/build_exclusion_list.py` on `development`) is not ported, so a COD structure
+matching an eval material can still contribute peaks. Any AP from this run is provisional until
+the bank is rebuilt with exclusions. Bank job 2859156 on cpu-galvani; training job 2862076 chains
+off it with `afterok`.
+
+## J. Gradient accumulation — effective batch 24 on one GPU (2026-09-09)
+
+Every run in `detector_runs/` is batch 2. The one real large-batch attempt, `dino_truebatch8_1`
+(batch 8, lr left at 4e-5, otherwise identical), LOST: organic **0.5808 vs `dino_batch8_1`'s
+0.6081**, 41 0.7622 vs 0.7613. But it is confounded by OPTIMIZER STEPS — `__len__` is a fixed 1000
+images/epoch (`main.py:163`), so batch 8 took 4x fewer updates for the same epoch count and may
+simply have been undertrained. This run separates the two by raising lr WITH the batch.
+
+- **`engine.py`** — `grad_accum_steps` (config-only, read via `getattr`, default 1). The loss is
+  divided by `accum` so the accumulated gradient is the MEAN over the effective batch, not the sum
+  (otherwise lr is silently scaled by `accum`); `clip_grad_norm_` (max_norm 0.1) applies to the
+  ACCUMULATED gradient on update steps only; `zero_grad()` moves from before the backward to after
+  the step, plus once before the loop. **Warmup counts OPTIMIZER steps, not iterations** — else
+  `warmup_steps=300` becomes 300*12 iterations, a 7-epoch ramp instead of 0.6. `onecyclelr` and
+  the EMA update move inside the update guard, both being per-optimizer-step semantics.
+  At `accum == 1` the path is provably identical to before, so no existing config changes.
+  Verified numerically: accum-12 reproduces a true batch-24 gradient to 2.7e-07.
+- **`config/DINO/DINO_4scale_swin_accum24.py`** — `grad_accum_steps=12` (effective batch 24 at the
+  memory cost of 2, so swin-L at 512x1024 still fits one a100), `lr = lr_backbone = 1.4e-4`
+  (sqrt(12) x 4e-5, the Adam scaling rule), `warmup_steps=300` (~7.2 epochs).
+- **Sizing is compute- AND axis-matched to `dino_batch8_1`**: 1000 images/epoch x 500 epochs =
+  500,000 images, so the curves overlay and the post-280 rule applies unchanged. 500 iterations
+  and **42 optimizer steps** per epoch; 20,833 total against batch 2's 250,000.
+  NOTE raising images/epoch does NOT buy optimizer steps — total steps = total images / effective
+  batch however epochs are sliced. Only more compute, a higher lr, or a smaller effective batch
+  closes that gap. The 12x step deficit is intrinsic and is what the lr must cover.
+- **The lr deliberately enters a band that FAILED at batch 2.** The base config records 1e-4 and
+  1.6e-4 classifying fine (class_error 37.7% -> 1.5%) but never localizing (`loss_giou` stuck at
+  1.59 / 1.71 at epoch 85 against 0.35). The hypothesis is that this was a GRADIENT-NOISE ceiling,
+  not an lr ceiling: 12x the batch cuts noise ~3.5x. **Decisive early gate, epoch ~85:** if
+  `loss_giou` is still above ~1.5, the hypothesis is dead, 4e-5 is an lr ceiling independent of
+  batch size, and the run should be killed rather than burning 76 h.
+- **CAVEAT — not bit-exact to a true batch 24.** DINO normalizes its losses by `num_boxes` over the
+  batch (`models/dino/dino.py:408,413`). Accumulating 12 micro-batches each normalized by its OWN
+  box count gives the mean of per-micro-batch means, not the true batch-24 mean, so images in
+  box-sparse micro-batches are weighted up. Standard accumulation practice, but a real difference
+  from `dino_truebatch8_1`'s genuine batch 8.
+- **Single GPU on purpose.** DDP is not wired here: `main.py:323` has `init_distributed_mode`
+  commented out, `model_without_ddp = model` with no DDP wrap, `DistributedSampler` imported but
+  unused, and no sbatch in the repo has ever used `--ntasks=2`. A 2-GPU allocation would idle the
+  second card. Accumulation first so a negative result is attributable to batch size rather than
+  to an untested distribution path. (Per-rank seeding is already correct at `main.py:374`, so that
+  part would not be the hard bit.)
+- Job 2862095, output `detector_runs/dino_accum24_1`. Needs ~76 h against the 72 h limit, so
+  expect exactly one resubmit. Verdict post-280 against `dino_batch8_1` (0.6081 / 0.7613).
+
 ## Open / not yet done
 - Path A (#3 simulation fix) tried and reverted — no AP gain (see Phase H). The 2-class model from
   `ringseg_2class_20260603-142434` (organic ~0.55 / 41 ~0.76 by ep360) stands as the current best.

@@ -39,11 +39,22 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
     warmup_steps = getattr(args, 'warmup_steps', 0) if not args.onecyclelr else 0
 
+    # GRADIENT ACCUMULATION. effective batch = batch_size * grad_accum_steps, at the memory cost
+    # of batch_size alone. accum == 1 reproduces the previous behaviour exactly: is_update is then
+    # always True, losses/1 is losses, and moving zero_grad() from before the backward to after
+    # the step is equivalent once the grads are zeroed before the loop.
+    accum = max(1, int(getattr(args, 'grad_accum_steps', 1)))
+    # warmup counts OPTIMIZER steps, not iterations -- otherwise a 300-step warmup silently
+    # becomes 300*accum iterations, i.e. 7 epochs instead of 0.6 at accum 12.
+    opt_steps_per_epoch = math.ceil(len(data_loader) / accum)
+    optimizer.zero_grad()
+
     _cnt = 0
     for _step, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header, logger=logger)):
+        is_update = ((_step + 1) % accum == 0) or (_step + 1 == len(data_loader))
 
         if warmup_steps > 0:
-            gstep = epoch * len(data_loader) + _step
+            gstep = epoch * opt_steps_per_epoch + (_step // accum)
             if gstep < warmup_steps:
                 factor = (gstep + 1) / warmup_steps
                 for g in optimizer.param_groups:
@@ -82,28 +93,34 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             sys.exit(1)
 
 
-        # amp backward function
+        # amp backward function. The loss is divided by accum so the accumulated gradient is the
+        # MEAN over the effective batch, not the sum -- without this, lr would be scaled by accum
+        # implicitly. clip_grad_norm_ is applied to the ACCUMULATED gradient, on update steps only.
         if args.amp:
-            optimizer.zero_grad()
-            scaler.scale(losses).backward()
-            if max_norm > 0:
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-            scaler.step(optimizer)
-            scaler.update()
+            scaler.scale(losses / accum).backward()
+            if is_update:
+                if max_norm > 0:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
         else:
             # original backward function
-            optimizer.zero_grad()
-            losses.backward()
-            if max_norm > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-            optimizer.step()
+            (losses / accum).backward()
+            if is_update:
+                if max_norm > 0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+                optimizer.step()
+                optimizer.zero_grad()
 
-        if args.onecyclelr:
-            lr_scheduler.step()
-        if args.use_ema:
-            if epoch >= args.ema_epoch:
-                ema_m.update(model)
+        # both are per-OPTIMIZER-step semantics, so they move inside the update guard
+        if is_update:
+            if args.onecyclelr:
+                lr_scheduler.step()
+            if args.use_ema:
+                if epoch >= args.ema_epoch:
+                    ema_m.update(model)
 
         metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
         if 'class_error' in loss_dict_reduced:
