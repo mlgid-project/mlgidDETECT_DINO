@@ -63,6 +63,55 @@ def torch_he(img: Tensor, bins: int = 1000):
     res = interp1d(bin_centers, cdf, img_flat)
     return res.view(img.shape)
 
+@torch.no_grad()
+def contrast_like_real(img: Tensor, mask: Tensor, clip=(5.0, 99.5), log=True, he=True):
+    """The REAL contrast pipeline (util.exp_preprocess.apply_contrast), in torch.
+
+    The simulator's own chain diverges from the real one in two ways that this function removes:
+      * ORDER. The sim does log -> HE -> clip (apply_log, apply_he, apply_clip_img), where the
+        "clip" is a rare (p=0.05) mean +/- k*std clamp. The real pipeline does percentile clip ->
+        log -> HE, always.
+      * The log ARGUMENT. apply_log maps onto a synthetic decade range, normalize(x)*U(50,5000)+1,
+        because the standard sim's intensity units are arbitrary. The real pipeline takes
+        log10(|x| + 1e-7) directly. With physics structure-factor intensities the dynamic range is
+        physically meaningful, so the real form applies.
+
+    Mask-aware exactly as the real one is: every statistic is computed over valid pixels only and
+    the invalid region is zeroed at the end.
+    """
+    img = img.float()
+    m = mask.bool()
+    if not bool(m.any()):
+        return img
+    vals = img[m]
+
+    if clip is not None:
+        lo = torch.quantile(vals, clip[0] / 100.0)
+        hi = torch.quantile(vals, clip[1] / 100.0)
+        img = torch.where(m, img.clamp(lo, hi), img)
+        vals = img[m]
+
+    if log:
+        img = torch.log10(img.abs() + 1e-7)
+        vals = img[m]
+        rng = (vals.max() - vals.min()).clamp(min=1e-12)
+        img = (img - vals.min()) / rng
+
+    if he:
+        vals = img[m]
+        rng = (vals.max() - vals.min()).clamp(min=1e-12)
+        img = (img - vals.min()) / rng
+        bins = 1000
+        edges = torch.linspace(float(vals.min()), float(vals.max()), bins + 1, device=img.device)
+        centers = (edges[:-1] + edges[1:]) / 2
+        hist = torch.histc(img[m], bins=bins, min=float(vals.min()), max=float(vals.max()))
+        cdf = torch.cumsum(hist, 0)
+        cdf = cdf / cdf[-1].clamp(min=1e-12)
+        img = interp1d(centers, cdf, img.reshape(-1)).reshape(img.shape)
+
+    return torch.where(m, img, torch.zeros_like(img))
+
+
 def clahe_torch(img: Tensor, clip_limit: float, tile: tuple):
     """Contrast-limited adaptive HE, matching util.exp_preprocess.apply_contrast's CLAHE branch.
 

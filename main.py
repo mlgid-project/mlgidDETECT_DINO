@@ -104,11 +104,33 @@ class SimulationDataset(torch.utils.data.Dataset):
                   + ", ".join(c['name'] for c in CONTRAST_CHANNELS) + ", mask", flush=True)
         self.simulation = FastSimulation(sim_config=_sim_config, device=self.device)
 
+        #PHYSICS SIM (MODIFICATIONS.md section I): a fraction of each epoch's images get their peak
+        #configuration from real crystallography instead of random draws -- positions AND, the
+        #point of the track, structure-factor INTENSITIES, which the standard sim draws uniformly
+        #in (2,50)/(10,50). Off by default; nothing about eval or ONNX changes.
+        self.physics = None
+        self.physics_fraction = float(getattr(args, 'physics_sim_fraction', 0.0))
+        if getattr(args, 'use_physics_sim', False):
+            from physics_simulation import PhysicsSimulation
+            bank = getattr(args, 'physics_bank_path', None)
+            if not bank:
+                raise ValueError("use_physics_sim is set but physics_bank_path is not")
+            self.physics = PhysicsSimulation(
+                bank, sim_config=_sim_config, device=self.device,
+                unify_contrast=bool(getattr(args, 'unify_contrast', False)))
+            print(f"[sim] physics sim ON: {self.physics_fraction:.0%} of images from {bank} "
+                  f"({len(self.physics.powder_ids)} powder / {len(self.physics.oriented_ids)} "
+                  f"oriented entries), unify_contrast="
+                  f"{bool(getattr(args, 'unify_contrast', False))}", flush=True)
+
     def __getitem__(self, idx):
         image = None
         while image is None:
             try:
-                image, boxes, mask, is_ring = self.simulation.simulate_img()
+                if self.physics is not None and random.random() < self.physics_fraction:
+                    image, boxes, mask, is_ring = self.physics.simulate_img()
+                else:
+                    image, boxes, mask, is_ring = self.simulation.simulate_img()
             except:
                 pass
 
