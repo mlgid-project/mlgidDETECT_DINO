@@ -488,6 +488,20 @@ def main(args):
     print("Start training")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
+        #RESEED PER EPOCH. The seeds are set once, at process start (seed = args.seed + rank,
+        #above), and resume restores model/optimizer/lr_scheduler/epoch but NO RNG state. With
+        #num_workers=0 every training image comes off that one stream in order, so a run that
+        #resumed at epoch 41 regenerated the images of epochs 0-40 verbatim: dino_physics3_1
+        #trained 82 epochs on ~41,000 distinct images, each seen twice, instead of 82,000 fresh
+        #ones. Two crashes landing at the identical stream index from different weights is how
+        #that surfaced. Seeding from the EPOCH makes the stream a function of the epoch number
+        #rather than of how many epochs this process happens to have run, so a resumed epoch 41
+        #draws what an uninterrupted epoch 41 would, and no epoch repeats another.
+        _epoch_seed = seed + 1000 * (epoch + 1)
+        random.seed(_epoch_seed)
+        np.random.seed(_epoch_seed % (2 ** 32))
+        torch.manual_seed(_epoch_seed)
+
         dataset = SimulationDataset(args)
         data_loader = torch.utils.data.DataLoader(
             dataset,
