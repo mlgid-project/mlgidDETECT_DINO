@@ -378,6 +378,11 @@ needs structure identity carried into the label. (An earlier n=20 sample showed 
 led to a wrong "catastrophic tail" conclusion; it did not recur in 145 structures.)
 
 ### Status and caveat
+**CRASHED AND RESTARTED.** Jobs 2862172 / 2865413 both died on a NaN training image; see section
+K for the two defects that came out of it. The run is now `dino_physics3_2` (job 2867359) from
+epoch 0 -- `dino_physics3_1`'s weights are not a valid warm start, since its 82 epochs covered only
+~41,000 distinct images. `_1`'s logs and AP curves are kept for reference.
+
 **NOT EVAL-CLEAN YET.** The bank is built with `--no-exclusions`: the mlgidMATCH-based exclusion
 pass (`physics_sim/build_exclusion_list.py` on `development`) is not ported, so a COD structure
 matching an eval material can still contribute peaks. Any AP from this run is provisional until
@@ -429,6 +434,98 @@ simply have been undertrained. This run separates the two by raising lr WITH the
   part would not be the hard bit.)
 - Job 2862095, output `detector_runs/dino_accum24_1`. Needs ~76 h against the 72 h limit, so
   expect exactly one resubmit. Verdict post-280 against `dino_batch8_1` (0.6081 / 0.7613).
+
+## K. Two defects the `dino_phys3` crash exposed (2026-09-10)
+
+`dino_physics3_1` died twice with `AssertionError` at `util/box_ops.py:52`, once at epoch 41 (job
+2862172, fresh start) and once at epoch 82 (job 2865413, resumed at 41). Chasing it turned up two
+independent bugs, one fatal and one silent. Both are fixed; the run restarts from epoch 0 as
+`dino_physics3_2` (job 2867359, `detector_runs/dino_physics3_2`).
+
+### K1. A NaN training image kills the run (fatal)
+
+**Reading the traceback.** The assert is on `boxes1`, which at `models/dino/matcher.py:87` is
+`out_bbox` -- the PREDICTIONS, not the targets (an inverted TARGET box trips line 53 instead, which
+is the older `dino_physics1` failure, already fixed by the `x1<x2 & y1<y2` filter in
+`physics_simulation._attempt`). Predicted boxes are sigmoid `cxcywh`, so `x2 >= x1` can only fail
+on NaN, and this run has `amp False`, so there is no fp16-overflow route: the NaN was in the input.
+
+**It is the data, not the model.** `num_workers=0` (`main.py:489`) and the seeds are set once per
+process, so image generation is one deterministic stream. Both processes crashed after 41 epochs x
+1000 images + ~510 -- the same stream index -- from completely different weight states, and no
+`Loss is nan, stopping training` line appeared, so the weights were healthy going in.
+
+**Reproduced and traced.** Replaying the seed-42 stream (`tmp_diag/phys_nan_probe2.py`), draw
+15,850 of 25,000 returns `nan_frac = 1.0000` with finite boxes -- about **1 image in 20,000**,
+which is why 41 clean epochs ran first. Per-stage instrumentation on that draw
+(`tmp_diag/phys_nan_replay.py`):
+
+```
+apply_salt_pepper_noise   min +0  max +1   const=False
+contrast_like_real        min +0  max +0   const=True    <- every VALID pixel identical
+apply_kernel              min +0  max +0   const=True
+digitalize_img            min +0  max +0   const=True
+normalize                 nan = 524288  (512x1024, i.e. all of them)
+```
+
+`mask_valid` was 0.459 and both peaks of that frame fell in the masked-out region, so the valid
+area carried no signal: the 5/99.5 clip quantiles coincide, `log10` maps them to one constant, and
+the closing `where(m, img, 0)` zeroes the frame. `normalize()` is `(img - min) / (max - min)` --
+0/0 -- so every pixel becomes NaN.
+
+**Why the old guards missed it.** `_attempt` checked `img.min() == img.max()`, which is **False for
+an all-NaN image** because `NaN != NaN`; a min/max test alone waves NaN through. And nothing
+checked the image AFTER the contrast chain at all, which is exactly where it is produced.
+
+**Fix.** `_usable(img)` in `physics_simulation.py` tests `isfinite` AND contrast, replaces both old
+guards, and runs after the contrast chain; a failing draw is retried (`simulate_img` already
+retries 20x before raising). `main.SimulationDataset.__getitem__` gets the same check as a belt for
+BOTH simulators -- nothing here is physics-specific, `FastSimulation` ends in the same `normalize()`
+and `apply_poisson_noise` calls it internally too (innocent on this draw, still a possible route).
+Verified: 20,000 draws through the guarded simulator, 0 rejected images reaching the caller.
+
+### K2. The RNG is seeded per PROCESS, so a resumed run repeats its first epochs (silent)
+
+`main.py` sets `seed = args.seed + get_rank()` once, at startup, and the resume block restores
+model, optimizer, lr_scheduler and `start_epoch` but **no RNG state**. With `num_workers=0`,
+`SimulationDataset.__getitem__` ignoring the index it is handed, and `dropout = 0.0` (so the model
+consumes no random numbers), every training image comes off that one stream in order, from image 0
+of the process.
+
+So each wall-clock resubmit restarted the simulator from the beginning. `dino_physics3_1` resumed
+at epoch 41 and its epochs 41-81 were run 1's epochs 0-40, image for image: 82 epochs of training
+over ~41,000 distinct images, each seen twice. The two crashes landing at the identical stream
+index is the proof.
+
+**This is not specific to the physics track.** Every run that crossed the 72 h limit did it, at its
+own restart epoch: `dino_rawcounts1` @218 (twice), `dino_truebatch8_1` @175 and @183, `dino_mc` @395,
+`dino_lrsweep` @88 and @221, `dino_hires` @264, `dino_mcc` @4, `dino_physics3_1` @41. `dino_accum24_1`
+(section J) expects one resubmit and will now pick up the fix.
+
+**Fix.** `main.py` reseeds at the top of each epoch from `seed + 1000*(epoch + 1)`, so the stream is
+a property of the EPOCH NUMBER rather than of how long the process has been alive: a resumed epoch
+41 draws what an uninterrupted epoch 41 would, and no epoch repeats another. Restoring saved RNG
+state would also have worked; per-epoch seeding gets the same determinism without adding anything
+to the checkpoint format.
+
+**Does it explain `dino_physics3_1`'s flat AP after epoch 41?** Consistent, not proven. Slope in
+ap_total per 100 epochs, before vs after that boundary:
+
+| run | organic ep1-40 | organic ep41-80 | 41 ep1-40 | 41 ep41-80 |
+|---|---|---|---|---|
+| `dino_physics3_1` (restarts @41) | +0.295 | **-0.037** | +0.310 | **-0.037** |
+| `dino_batch8_1` | +0.456 | +0.041 | +0.600 | +0.065 |
+| `dino_ssl1` | +0.674 | +0.118 | +1.004 | +0.091 |
+| `dino_boxconv1` | +0.513 | +0.129 | +0.405 | +0.295 |
+| `dino_rawcounts1` | +0.585 | +0.081 | +0.486 | +0.067 |
+
+Every run flattens hard after epoch 40 -- that is the normal shape of the curve, not evidence by
+itself -- but `dino_physics3_1` is the only one that goes NEGATIVE on both eval sets, and it does so
+exactly at its restart. Confounds remain: it entered the window higher than the others (0.5388
+organic at ep20-40 against `dino_batch8_1`'s 0.4811, so less headroom) and it is a different data
+recipe. The clean test is `dino_physics3_2`, which now trains on 82 distinct epochs.
+The comparison runs are NOT clean controls for this: they carry the same defect at their own
+restart epochs, all of which fall outside this window.
 
 ## Open / not yet done
 - Path A (#3 simulation fix) tried and reverted — no AP gain (see Phase H). The 2-class model from
