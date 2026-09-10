@@ -60,6 +60,14 @@ INTENSITY_RANGE = (2.0, 50.0)   # only the UPPER bound is used; see _compress
 ENTRY_SCALE_RANGE = (0.08, 1.0)  # per-entry scale: minor/major phases, trains faint-phase recall
 
 
+def _usable(img):
+    """True only if the image is FINITE and has contrast. Both halves are load-bearing, and a
+    min/max test alone is not enough: `img.min() == img.max()` is False for an all-NaN image
+    (NaN != NaN), so the old guard waved NaN straight through. See _attempt for how NaN gets in.
+    """
+    return bool(torch.isfinite(img).all()) and bool(img.min() != img.max())
+
+
 class PhysicsSimulation(object):
     def __init__(self, bank_path, sim_config=None, device='cuda', unify_contrast=False):
         d = np.load(bank_path, allow_pickle=False)
@@ -217,7 +225,7 @@ class PhysicsSimulation(object):
         clamp_boxes(boxes)
 
         img = f.img_from_labels(boxes, intensities, is_ring)
-        if img.min() == img.max() or torch.any(img.isnan()):
+        if not _usable(img):
             return None
 
         img = mul_perlin(img)
@@ -226,7 +234,7 @@ class PhysicsSimulation(object):
         img = apply_poisson_noise(img, f.sim_config.poisson_range)
         if f.polar_dark_area:
             img = apply_stretch(img, (int(.04 * WIDTH), int(.1 * WIDTH)), (7, 10))
-        if img.min() == img.max():
+        if not _usable(img):
             return None
 
         img, mask = f.add_dark_area(img, boxes)
@@ -246,6 +254,17 @@ class PhysicsSimulation(object):
             img = apply_kernel(img, f.kernel1)
             img = digitalize_img(img)
             img = normalize(img)
+
+        # THE contrast chain can produce NaN, and this is where the dino_phys3 crash came from
+        # (jobs 2862172 and 2865413, both at util/box_ops.py:52 with boxes1 = the PREDICTIONS,
+        # i.e. a NaN model output in an amp=False run, i.e. a NaN input image). Every chain above
+        # ends in normalize(), which is (img - min) / (max - min) -- 0/0, NaN in every pixel, for
+        # an image that arrives constant; apply_poisson_noise normalizes internally too, so a
+        # constant image there becomes poisson(NaN). Measured rate on the seed-42 stream: 1 image
+        # in ~20,000 (draw 15,850 of 25,000), which is why 41 epochs of 1000 images ran before it
+        # bit. Retrying costs one draw; letting it through costs the run.
+        if not _usable(img):
+            return None
 
         img, boxes, mask = flip_image(img, boxes, mask)
         return img, boxes, mask, is_ring

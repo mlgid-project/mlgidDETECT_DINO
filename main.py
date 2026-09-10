@@ -131,6 +131,13 @@ class SimulationDataset(torch.utils.data.Dataset):
                     image, boxes, mask, is_ring = self.physics.simulate_img()
                 else:
                     image, boxes, mask, is_ring = self.simulation.simulate_img()
+                #BELT for both simulators: a non-finite image reaches the matcher as NaN
+                #predictions and trips util/box_ops.py:52 (assert x2 >= x1, False for NaN),
+                #killing the run mid-epoch. Every contrast chain ends in normalize(), which is
+                #0/0 for a constant image, so this is not physics-specific -- FastSimulation can
+                #do it too. Discard and draw again; the cost is one wasted image.
+                if image is not None and not torch.isfinite(image).all():
+                    image = None
             except:
                 pass
 
