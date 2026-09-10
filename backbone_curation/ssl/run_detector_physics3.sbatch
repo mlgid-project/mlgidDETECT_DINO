@@ -43,13 +43,25 @@
 #   If 41 drops but organic holds, check the ring fraction before concluding anything about
 #   intensities -- see risk (a) in the config header.
 #
+# RESTARTED FROM EPOCH 0 as dino_physics3_2. dino_physics3_1 crashed twice on a NaN training
+# image (AssertionError at util/box_ops.py:52 -- boxes1 there is the PREDICTIONS, so NaN model
+# output in an amp=False run, so a NaN input). One image in ~20,000 arrives constant and
+# normalize()'s 0/0 turns it into NaN everywhere; the old guards missed it because
+# `img.min() == img.max()` is False when both are NaN. Fixed by _usable() in physics_simulation.py
+# plus a belt in main.SimulationDataset.__getitem__ for both simulators.
+# The second fix is why this starts over rather than resuming: the RNG was seeded once per
+# PROCESS, so _1's resume regenerated epochs 0-40 image for image as its epochs 41-81 -- 82
+# epochs over ~41,000 distinct images. main.py now reseeds per epoch, so the stream depends on
+# the epoch number, not on when the job was restarted. _1's weights carry both defects in their
+# history, so they are not a valid warm start for the fixed recipe.
+#
 # RESUMABLE: main.py auto-picks-up checkpoint.pth from --output_dir, so resubmit the same command
 # across 72h sessions. Per-epoch eval logs ap_total for 41 + organic (eval_interval=2).
 
 set -e
 REPO=/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO
 PY=/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/bin/python
-OUT_DIR=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_physics3_1
+OUT_DIR=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_physics3_2
 BB=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/ssl_runs/simmim1/backbone_export/swin_large_patch4_window12_384_22k.pth
 BANK=/mnt/lustre/work/schreiber/szb389/datasets/cif_library_organic/bank/bank_organic.npz
 export PYTHONPATH=$REPO
