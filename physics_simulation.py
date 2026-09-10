@@ -257,12 +257,19 @@ class PhysicsSimulation(object):
 
         # THE contrast chain can produce NaN, and this is where the dino_phys3 crash came from
         # (jobs 2862172 and 2865413, both at util/box_ops.py:52 with boxes1 = the PREDICTIONS,
-        # i.e. a NaN model output in an amp=False run, i.e. a NaN input image). Every chain above
-        # ends in normalize(), which is (img - min) / (max - min) -- 0/0, NaN in every pixel, for
-        # an image that arrives constant; apply_poisson_noise normalizes internally too, so a
-        # constant image there becomes poisson(NaN). Measured rate on the seed-42 stream: 1 image
-        # in ~20,000 (draw 15,850 of 25,000), which is why 41 epochs of 1000 images ran before it
-        # bit. Retrying costs one draw; letting it through costs the run.
+        # i.e. a NaN model output in an amp=False run, i.e. a NaN input image). Traced on the
+        # offending draw (seed 42, draw 15,850 -- 1 image in ~20,000, which is why 41 epochs of
+        # 1000 images ran first):
+        #     apply_salt_pepper_noise   min +0  max +1     const=False
+        #     contrast_like_real        min +0  max +0     const=True     <- every VALID pixel equal
+        #     apply_kernel              min +0  max +0     const=True
+        #     digitalize_img            min +0  max +0     const=True
+        #     normalize                 nan=524288 (512x1024, i.e. all of them)
+        # contrast_like_real returns all-zero when the valid region carries no signal at all --
+        # here mask_valid was 0.459 and both peaks fell in the masked-out region, so the clip
+        # quantiles coincide, log10 gives one constant, and the final where(m, img, 0) is zero
+        # everywhere. normalize() is then (img - min) / (max - min) = 0/0. Retrying costs one
+        # draw; letting it through costs the run.
         if not _usable(img):
             return None
 
