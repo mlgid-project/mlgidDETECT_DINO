@@ -50,8 +50,13 @@ N_POWDER = (0, 1)               # entries composed into one image
 N_ORIENTED = (1, 2)
 RINGS_PER_POWDER = (3, 15)      # cap rings (top by intensity)
 SPOTS_PER_ORIENTED = (8, 60)    # cap spots (top by intensity)
-GAMMA_RANGE = (0.3, 0.6)        # intensity compression I' = (I/I_max)^gamma
-INTENSITY_RANGE = (2.0, 50.0)   # final range fed to img_from_labels (matches SimulationConfig)
+# Per-image DYNAMIC RANGE in decades: the faintest RENDERED peak sits 10^-d below the brightest.
+# Calibrated to the eval sets, not invented: measured per-pattern I/Imax of real labeled peaks puts
+# p5 at 0.0019 for organic (2.71 decades) and 0.00024 for 41 (3.63 decades). Peaks fainter than the
+# floor are DROPPED, not clamped -- real label files contain the peaks a human could see, so
+# labeling a peak that is invisible in the rendered image would train the detector to hallucinate.
+DYN_RANGE_DECADES = (2.4, 3.4)
+INTENSITY_RANGE = (2.0, 50.0)   # only the UPPER bound is used; see _compress
 ENTRY_SCALE_RANGE = (0.08, 1.0)  # per-entry scale: minor/major phases, trains faint-phase recall
 
 
@@ -78,13 +83,32 @@ class PhysicsSimulation(object):
         s, c = int(self.entry_start[idx]), int(self.entry_count[idx])
         return self.q[s:s + c], self.chi[s:s + c], self.intensity[s:s + c]
 
-    def _compress(self, inten, gamma):
-        """Map structure-factor intensities into the renderer's range, PRESERVING their ordering
-        and relative contrast. gamma < 1 compresses the many-decade physical range into something
-        the log+HE chain can still show, which is the whole point of using physics intensities."""
-        rel = (inten / inten.max().clamp(min=1e-12)) ** gamma
-        lo, hi = INTENSITY_RANGE
-        return lo + rel * (hi - lo)
+    def _scale(self, inten, dyn):
+        """Map structure-factor intensities into the renderer LINEARLY, preserving true relative
+        contrast, and report which peaks clear the visibility floor.
+
+        Returns (values, keep_mask). `dyn` is the per-image dynamic range (max/floor).
+
+        WHY NOT COMPRESS. The previous version applied (I/I_max)^gamma with gamma 0.3-0.6 into a
+        (2, 50) range. Two things made that destroy the point of this whole track:
+          - the FLOOR. 2/50 caps the rendered dynamic range at 25x, the same cap the uniform
+            standard sim has. Real labeled peaks span 2.7 (organic) to 3.6 (41) decades. No gamma
+            can put a peak at I/Imax = 0.007 through a 25x mapping.
+          - the GAMMA. At 0.45 a peak at 0.1% of max comes out at 5.6% -- weak peaks are pulled up
+            hard. Measured on the bank, after compression: med I/Imax 0.286 and only 2.3% of peaks
+            below 0.1, against the uniform sim's 0.363 / 5.7% and reality's ~0.008 / ~0.89. The
+            compressed physics distribution was WORSE than the uniform sim on the weak-peak
+            fraction, i.e. the intensity advantage was erased before the detector ever saw it.
+        The many-decade range does need handling, but the contrast pipeline is what handles it --
+        percentile clip -> log10 -> HE, the same chain applied to real frames (unify_contrast), and
+        apply_log's own log in the legacy chain. Compressing first does that job twice.
+
+        NOTE the absolute scale is irrelevant: add_glass/add_linear_background normalize() their
+        input (simulation.py:331 says so), so only the RATIOS between peaks survive into the image.
+        """
+        rel = inten / inten.max().clamp(min=1e-12)
+        keep = rel >= (1.0 / dyn)
+        return rel * INTENSITY_RANGE[1], keep
 
     @torch.no_grad()
     def simulate_img(self):
@@ -103,7 +127,7 @@ class PhysicsSimulation(object):
         dev = self.device
         sc = self.sim_config
         q_max = random.uniform(*Q_MAX_RANGE)
-        gamma = random.uniform(*GAMMA_RANGE)
+        dyn = 10.0 ** random.uniform(*DYN_RANGE_DECADES)
         boxes_l, inten_l, ring_l = [], [], []
 
         # ---- powder entries (rings) ----
@@ -113,6 +137,10 @@ class PhysicsSimulation(object):
             if int(vis.sum()) < 1:
                 continue
             qs, ii = qs[vis], ii[vis]
+            vals, keep = self._scale(ii, dyn)          # drop peaks below the visibility floor
+            if int(keep.sum()) < 1:
+                continue
+            qs, ii, vals = qs[keep], ii[keep], vals[keep]
             k = min(len(qs), random.randint(*RINGS_PER_POWDER))
             top = torch.argsort(ii, descending=True)[:k]
             x = qs[top] / q_max * WIDTH
@@ -123,7 +151,7 @@ class PhysicsSimulation(object):
             b = torch.stack([x - w, torch.zeros(k), x + w, torch.full((k,), float(HEIGHT))], -1)
             scale = random.uniform(*ENTRY_SCALE_RANGE)
             boxes_l.append(b)
-            inten_l.append(self._compress(ii[top], gamma) * scale)
+            inten_l.append(vals[top] * scale)
             ring_l.append(torch.ones(k, dtype=torch.bool))
 
         # ---- oriented entries (spots / arcs) ----
@@ -133,6 +161,10 @@ class PhysicsSimulation(object):
             if int(vis.sum()) < 1:
                 continue
             qs, cs, ii = qs[vis], cs[vis], ii[vis]
+            vals, keep = self._scale(ii, dyn)          # drop peaks below the visibility floor
+            if int(keep.sum()) < 1:
+                continue
+            qs, cs, ii, vals = qs[keep], cs[keep], ii[keep], vals[keep]
             k = min(len(qs), random.randint(*SPOTS_PER_ORIENTED))
             top = torch.argsort(ii, descending=True)[:k]
             x = qs[top] / q_max * WIDTH
@@ -143,7 +175,7 @@ class PhysicsSimulation(object):
             b = torch.stack([x - w, y - aw, x + w, y + aw], -1)
             scale = random.uniform(*ENTRY_SCALE_RANGE)
             boxes_l.append(b)
-            inten_l.append(self._compress(ii[top], gamma) * scale)
+            inten_l.append(vals[top] * scale)
             ring_l.append(torch.zeros(k, dtype=torch.bool))
 
         if not boxes_l:
