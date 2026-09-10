@@ -19,9 +19,19 @@ num_classes=2
 #"Box label convention" for the grid search, the independent FWHM corroboration and the run result.
 box_coef_override = (2.80, 1.30)
 
-lr = 0.00001
+#LEARNING RATE: 4e-5, head and backbone alike. Priced on the post-lr-drop plateau (epochs > 280),
+#the only window where runs are comparable -- across the drop the ranking barely holds (rho = 0.49).
+#dino_lr4e5_1 is 4e-5 with an otherwise identical recipe to dino_boxconv1's 1e-5, one variable
+#apart, and wins organic 0.6081 vs 0.5850 and 41 0.7613 vs 0.7483. Every successful run in
+#detector_runs/ keeps lr == lr_backbone; the one split ratio tried (dino_lr1e4_1, 10:1) failed.
+#4e-5 is also the CEILING: 1e-4 and 1.6e-4 both classify fine (class_error 37.7% -> 1.5%) but never
+#localize (loss_giou stuck at 1.59 / 1.71 at epoch 85 against 0.35 here). A 1000-step linear warmup
+#(dino_lr1e4_wu, on the multi-channel-analysis branch) does reach 1e-4 -- giou 0.882 at epoch 3,
+#matching this recipe's 0.856 -- then walks back out mid-epoch-3 and never recovers, so warmup buys
+#nothing at any lr this schedule can hold.
+lr = 4e-05
 param_dict_type = 'default'
-lr_backbone = 1e-05
+lr_backbone = 4e-05
 lr_backbone_names = ['backbone.0']
 lr_linear_proj_names = ['reference_points', 'sampling_offsets']
 lr_linear_proj_mult = 0.1
