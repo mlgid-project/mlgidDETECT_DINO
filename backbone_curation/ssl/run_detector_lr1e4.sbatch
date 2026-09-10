@@ -12,7 +12,7 @@
 # The ONLY difference vs the ssl1 recipe is those two numbers -- see DINO_4scale_swin_lr1e4.py.
 # 1-channel, SSL backbone init, legacy simulation, 2.80/1.30 boxes, same 500ep/lr_drop 280.
 #
-# Gate: organic/41 ap_total vs ssl1's 0.5683 / 0.7441; the bar to beat is dino_batch8_1's
+# Gate: organic/41 ap_total vs ssl1's 0.5683 / 0.7441; the bar to beat is dino_lr4e5_1's
 # organic 0.6102 plateau (lr 4e-5). EARLY CHECK at epoch 6-10: ssl1 reached organic 0.203 by
 # epoch 6, dino_lrsweep_1 (1.6e-4) never left 0.018. Flat by epoch 10 -> kill it.
 # RESUMABLE: main.py auto-picks-up checkpoint.pth from --output_dir, so resubmit the same

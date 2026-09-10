@@ -2,7 +2,7 @@
 #rates. 1 channel, SSL backbone init, legacy simulation, 2.80/1.30 boxes, same schedule.
 #
 #Why these two numbers (measured 2026-09-07):
-#  lr 4e-5  with lr_backbone 4e-5  -> dino_batch8_1, organic 0.6102 plateau. Best so far.
+#  lr 4e-5  with lr_backbone 4e-5  -> dino_lr4e5_1, organic 0.6102 plateau. Best so far.
 #  lr 1.6e-4 with lr_backbone 1.6e-4 -> dino_lrsweep_1, NEVER learned (organic 0.008-0.018 for
 #  84 epochs) and was killed. A checkpoint autopsy found nothing broken: no NaNs, backbone
 #  mean|W| 13.9 vs ssl1's 14.0, backbone drift only 0.106. It did not diverge, it just never

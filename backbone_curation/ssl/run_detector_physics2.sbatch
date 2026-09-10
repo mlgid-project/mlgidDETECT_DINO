@@ -34,7 +34,7 @@
 #   stalled epoch 0 with no error means the physics generator is failing every draw -- check the
 #   bank before assuming a GPU problem.
 #   VERDICT: organic/41 AP judged ONLY on the post-280 plateau (MODIFICATIONS.md; pre-drop
-#   ranking correlates only rho=0.49 with the settled one) against dino_batch8_1's 0.6081/0.7613.
+#   ranking correlates only rho=0.49 with the settled one) against dino_lr4e5_1's 0.6081/0.7613.
 #   Phase P's decisive probe applies here too: a fixed-score recall comparison is NOT admissible,
 #   because dilution made the detector fire 5.5x more boxes and look better at score 0.3 while
 #   losing at every matched precision. Compare at matched precision (~0.83) and matched FP/img.

@@ -392,7 +392,7 @@ off it with `afterok`.
 ## J. Gradient accumulation — effective batch 24 on one GPU (2026-09-09)
 
 Every run in `detector_runs/` is batch 2. The one real large-batch attempt, `dino_truebatch8_1`
-(batch 8, lr left at 4e-5, otherwise identical), LOST: organic **0.5808 vs `dino_batch8_1`'s
+(batch 8, lr left at 4e-5, otherwise identical), LOST: organic **0.5808 vs `dino_lr4e5_1`'s
 0.6081**, 41 0.7622 vs 0.7613. But it is confounded by OPTIMIZER STEPS — `__len__` is a fixed 1000
 images/epoch (`main.py:163`), so batch 8 took 4x fewer updates for the same epoch count and may
 simply have been undertrained. This run separates the two by raising lr WITH the batch.
@@ -409,7 +409,7 @@ simply have been undertrained. This run separates the two by raising lr WITH the
 - **`config/DINO/DINO_4scale_swin_accum24.py`** — `grad_accum_steps=12` (effective batch 24 at the
   memory cost of 2, so swin-L at 512x1024 still fits one a100), `lr = lr_backbone = 1.4e-4`
   (sqrt(12) x 4e-5, the Adam scaling rule), `warmup_steps=300` (~7.2 epochs).
-- **Sizing is compute- AND axis-matched to `dino_batch8_1`**: 1000 images/epoch x 500 epochs =
+- **Sizing is compute- AND axis-matched to `dino_lr4e5_1`**: 1000 images/epoch x 500 epochs =
   500,000 images, so the curves overlay and the post-280 rule applies unchanged. 500 iterations
   and **42 optimizer steps** per epoch; 20,833 total against batch 2's 250,000.
   NOTE raising images/epoch does NOT buy optimizer steps — total steps = total images / effective
@@ -433,7 +433,7 @@ simply have been undertrained. This run separates the two by raising lr WITH the
   to an untested distribution path. (Per-rank seeding is already correct at `main.py:374`, so that
   part would not be the hard bit.)
 - Job 2862095, output `detector_runs/dino_accum24_1`. Needs ~76 h against the 72 h limit, so
-  expect exactly one resubmit. Verdict post-280 against `dino_batch8_1` (0.6081 / 0.7613).
+  expect exactly one resubmit. Verdict post-280 against `dino_lr4e5_1` (0.6081 / 0.7613).
 
 ## K. Two defects the `dino_phys3` crash exposed (2026-09-10)
 
@@ -514,7 +514,7 @@ ap_total per 100 epochs, before vs after that boundary:
 | run | organic ep1-40 | organic ep41-80 | 41 ep1-40 | 41 ep41-80 |
 |---|---|---|---|---|
 | `dino_physics3_1` (restarts @41) | +0.295 | **-0.037** | +0.310 | **-0.037** |
-| `dino_batch8_1` | +0.456 | +0.041 | +0.600 | +0.065 |
+| `dino_lr4e5_1` | +0.456 | +0.041 | +0.600 | +0.065 |
 | `dino_ssl1` | +0.674 | +0.118 | +1.004 | +0.091 |
 | `dino_boxconv1` | +0.513 | +0.129 | +0.405 | +0.295 |
 | `dino_rawcounts1` | +0.585 | +0.081 | +0.486 | +0.067 |
@@ -522,7 +522,7 @@ ap_total per 100 epochs, before vs after that boundary:
 Every run flattens hard after epoch 40 -- that is the normal shape of the curve, not evidence by
 itself -- but `dino_physics3_1` is the only one that goes NEGATIVE on both eval sets, and it does so
 exactly at its restart. Confounds remain: it entered the window higher than the others (0.5388
-organic at ep20-40 against `dino_batch8_1`'s 0.4811, so less headroom) and it is a different data
+organic at ep20-40 against `dino_lr4e5_1`'s 0.4811, so less headroom) and it is a different data
 recipe. The clean test is `dino_physics3_2`, which now trains on 82 distinct epochs.
 The comparison runs are NOT clean controls for this: they carry the same defect at their own
 restart epochs, all of which fall outside this window.

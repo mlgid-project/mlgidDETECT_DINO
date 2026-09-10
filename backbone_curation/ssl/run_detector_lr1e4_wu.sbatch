@@ -16,7 +16,7 @@
 #
 # WHY: two runs above 4e-5 have now failed identically -- dino_lr1e4_1 (1e-4/1e-5) and
 # dino_lrsweep_1 (1.6e-4/1.6e-4) both classify fine (class_error 37.7% -> 1.5%) but never
-# localize (loss_giou stuck at 1.59 / 1.71 at epoch 85, vs 0.346 for the dino_batch8_1
+# localize (loss_giou stuck at 1.59 / 1.71 at epoch 85, vs 0.346 for the dino_lr4e5_1
 # winner). Both lost it in epochs 0-2: batch8_1 went giou 2.30 -> 1.60 -> 1.05 -> 0.74 by
 # epoch 5, while lr1e4_1 went 2.51 -> 2.03 -> 2.05 -> 1.88 and never recovered in 88 epochs.
 # There is no warmup anywhere in the codebase, so step 1 already runs at full lr; combined
@@ -27,7 +27,7 @@
 # Warmup is implemented in engine.py:train_one_epoch and scales each param group by its own
 # 'initial_lr', so the backbone and the 0.1x lr_linear_proj groups keep their ratios.
 #
-# Gate: organic/41 ap_total vs ssl1's 0.5683 / 0.7441; the bar to beat is dino_batch8_1's
+# Gate: organic/41 ap_total vs ssl1's 0.5683 / 0.7441; the bar to beat is dino_lr4e5_1's
 # organic 0.6102 plateau (lr 4e-5). WIRING CHECK in epoch 0: the per-step `lr:` field must
 # climb from ~0 toward 0.000100 over the first 1000 steps, not sit at 0.000100 from step 0.
 # EARLY CHECK at epoch 5 on loss_giou.txt (the ramp pushes this later than the usual ep6-10

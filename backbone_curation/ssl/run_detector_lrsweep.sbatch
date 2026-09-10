@@ -9,7 +9,7 @@
 #SBATCH --output=/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/backbone_curation/ssl/dino_lrsweep-%j.out
 #
 # Learning-Rate experiment: lr = 1.6e-4, LEGACY simulation.
-# Only variable vs dino_batch8_1 (batch 2, lr 4e-5) is lr. 1-channel, SSL backbone init, 2.80/1.30 boxes.
+# Only variable vs dino_lr4e5_1 (batch 2, lr 4e-5) is lr. 1-channel, SSL backbone init, 2.80/1.30 boxes.
 
 # Gate: organic/41 ap_total vs ssl1's 0.5683 / 0.7441 (reproduced on this branch).
 # RESUMABLE: main.py auto-picks-up checkpoint.pth from --output_dir, so resubmit the same

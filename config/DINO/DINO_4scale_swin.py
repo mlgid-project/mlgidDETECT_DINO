@@ -20,7 +20,7 @@ num_classes=2
 box_coef_override = (2.80, 1.30)
 
 #LEARNING RATE: 4e-5, head and backbone alike. Priced on the post-lr-drop plateau (epochs > 280,
-#the only window where runs are comparable -- see MODIFICATIONS.md): dino_batch8_1 is 4e-5 with an
+#the only window where runs are comparable -- see MODIFICATIONS.md): dino_lr4e5_1 is 4e-5 with an
 #otherwise identical recipe to dino_boxconv1's 1e-5 and wins organic 0.6081 vs 0.5850 and 41
 #0.7613 vs 0.7483. Every successful run in detector_runs/ keeps lr == lr_backbone; the one split
 #ratio tried (dino_lr1e4_1, 10:1) failed. 4e-5 is also the CEILING: 1e-4 and 1.6e-4 both classify

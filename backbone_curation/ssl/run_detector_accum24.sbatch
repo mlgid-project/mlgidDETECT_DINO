@@ -38,7 +38,7 @@
 #   lift the ceiling, 4e-5 is an lr ceiling independent of batch size, and this run can be killed
 #   early rather than burning 76h. If giou tracks toward ~0.35, the hypothesis is alive.
 #   VERDICT: organic/41 AP judged ONLY on the post-280 plateau (pre-drop ranking correlates only
-#   rho=0.49 with the settled one) against dino_batch8_1's 0.6081 / 0.7613 -- compute-matched and
+#   rho=0.49 with the settled one) against dino_lr4e5_1's 0.6081 / 0.7613 -- compute-matched and
 #   axis-matched to this run, so the curves overlay directly.
 #
 # RESUMABLE: main.py auto-picks-up checkpoint.pth from --output_dir. The run needs ~76h against a

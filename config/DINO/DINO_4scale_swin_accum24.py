@@ -2,7 +2,7 @@
 #
 # WHAT THIS TESTS. Every run in detector_runs/ is batch 2. The one real large-batch attempt,
 # dino_truebatch8_1 (batch 8, lr unchanged at 4e-5, otherwise identical), LOST: organic 0.5808 vs
-# dino_batch8_1's 0.6081, 41 0.7622 vs 0.7613. But that run is confounded by optimizer steps --
+# dino_lr4e5_1's 0.6081, 41 0.7622 vs 0.7613. But that run is confounded by optimizer steps --
 # __len__ is a fixed 1000 images/epoch, so batch 8 got 4x fewer updates for the same epoch count
 # and may simply have been undertrained rather than harmed by the batch size. This run separates
 # the two by raising lr with the batch instead of holding it fixed.
@@ -21,7 +21,7 @@
 # 4e-5 is an lr ceiling independent of batch size.
 # warmup_steps 300 = ~7.2 epochs at 42 optimizer steps/epoch (~1.4% of the run's 20,833 steps).
 #
-# SIZING -- compute-matched AND axis-matched to dino_batch8_1 (0.6081 / 0.7613), on purpose:
+# SIZING -- compute-matched AND axis-matched to dino_lr4e5_1 (0.6081 / 0.7613), on purpose:
 #   1000 images/epoch (main.py:163, unchanged) x 500 epochs = 500,000 images, identical to it.
 #   500 dataloader iterations/epoch -> 42 optimizer steps/epoch -> 20,833 total (vs 250,000 at
 #   batch 2); lr_drop at epoch 280 = 11,667 steps. ~76 h.
