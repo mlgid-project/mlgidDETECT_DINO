@@ -527,6 +527,118 @@ recipe. The clean test is `dino_physics3_2`, which now trains on 82 distinct epo
 The comparison runs are NOT clean controls for this: they carry the same defect at their own
 restart epochs, all of which fall outside this window.
 
+## L. The simulator's ring rate is the organic/41 lever — `physics_n_powder` (2026-09-11)
+
+`dino_physics3_2` (100% physics-CIF, section I) splits the two eval gates harder than any run so
+far. Against `dino_lr4e5_1` at matched epochs it **wins organic in 33 of 35 shared epochs** and
+**loses 41 in 34 of 35**:
+
+| | organic | 41 |
+|---|---|---|
+| `dino_physics3_2`, mean ep>=50 | **0.5528** | **0.5275** |
+| `dino_lr4e5_1`, same epochs | 0.5224 | 0.7167 |
+| delta | **+0.030** | **-0.189** |
+
+That asymmetry is far too large and too consistent to be noise, and risk (a) in the physics3
+config header named the suspect in advance: *"RING FRACTION. Physics images are 10-12% rings; the
+standard sim is 52.8%. At 100% the detector sees almost no rings, and 41.h5 is ring-heavy. If 41
+AP collapses while organic holds, this is the first thing to check — it is a composition artefact,
+not evidence about intensities."*
+
+### L1. The measurement
+
+120 frames per simulator, geometric ring criterion (box spans >= 70% of the valid chi rows at its
+own radius — `is_ring_geom`, `diagnostics/postproc_diag.py:115`; `41.h5` does not populate
+`is_ring` at all, so geometry is the only trustworthy label, see section AA.4). Current box
+convention `a_coef=2.8 w_coef=1.3`. Script: `diagnostics/ring_rate_sims.py`.
+
+| source | rings/frame | segs/frame | ring:segment | frames with 0 rings |
+|---|---|---|---|---|
+| real 41 | 16.90 | 24.0 | **0.704** | — |
+| real organic | 3.50 | 98.6 | **0.035** | — |
+| sim legacy | 17.05 | 30.7 | 0.555 | 34/120 |
+| sim physics-CIF | **4.38** | 37.2 | **0.118** | 62/120 |
+
+**The legacy sim sits on 41's composition; the physics-CIF sim sits on organic's.** Rings are the
+EASY class on both gates (41 ring recall 0.856 against 0.713 for segments) and 41% of 41's
+objects, so cutting the ring supply to a quarter costs 41 far more than it costs organic. This
+also explains the standing pattern that every legacy-sim run scores 0.74-0.77 on 41 but only
+0.55-0.62 on organic: the legacy sim is **5x too ring-heavy for organic**.
+
+CAUTION comparing to the older figure. The eval-dataset table records the legacy sim at 7.9
+geometric rings/frame, ratio 0.206. That was measured under the OLD box convention; `a_coef=2.8`
+widens boxes in chi, so more arcs now clear the 70% span test. Under the current convention the
+sim's own flag and the geometry agree (17.14 vs 17.05) where before they did not (14.8 vs 7.9).
+The two numbers are not comparable — do not read a change in the simulator into the difference.
+
+### L2. The mechanism, one line
+
+`physics_simulation.py:49`, `N_POWDER = (0, 1)`: `random.randint(0, 1)` gives **half of all
+physics frames zero powder entries** and the other half exactly one (3-15 rings each). The legacy
+analogue is `simulation.py:486`, `rings_or_seg_or_both = random.random()` split into thirds (rings
+only / segments only / both), which is how it reaches 17 rings/frame.
+
+### L3. The fix — a WIDE range, not a higher fixed one
+
+`PhysicsSimulation.__init__` takes `n_powder=None`; `_attempt` reads `self.n_powder`. `None` keeps
+`N_POWDER`, so **every run up to and including `dino_physics3_2` is bit-identical** —
+`random.randint(*self.n_powder)` consumes the RNG the same way for the same range. Verified: frame
+0 of the default path reproduces `img.sum() = 205665.921875` and 50 boxes either way, and the
+measured 4.38 rings/frame is unchanged. A malformed range raises `ValueError`.
+
+`main.py` passes `n_powder=getattr(args, 'physics_n_powder', None)` and prints the value in the
+epoch-0 banner, so the wiring is visible in the log rather than inferred.
+
+The two gates want OPPOSITE ring rates (0.704 vs 0.035), so **no single rate matches both** and a
+compromise value matches neither. Widening the range instead makes the regime a per-image random
+variable, the way the legacy sim already does it coarsely:
+
+| variant | rings/frame | segs/frame | ring:segment | frames with 0 rings |
+|---|---|---|---|---|
+| default / explicit `(0, 1)` | 4.38 | 37.2 | 0.118 | 62/120 |
+| **`(0, 3)` — physics4** | **11.98** | 36.4 | **0.329** | 34/120 |
+
+`(0, 3)` lands between the two gates and its ring-free fraction now matches the legacy sim's
+exactly (34/120).
+
+### L4. The run
+
+`dino_physics4_1`, job 2869152, `config/DINO/DINO_4scale_swin_physics4.py`,
+`backbone_curation/ssl/run_detector_physics4.sbatch`. Diffed through the config loader against
+physics3: `physics_n_powder` is the ONLY key that differs, and `dino_physics3_2` is running
+concurrently as its control, so any AP difference is the ring rate alone.
+
+Wiring check at epoch 0: the banner must end `n_powder=(0, 3)`. If it reads `(0, 1)` the config
+key did not reach `args` and the run is a duplicate of physics3_2 — kill it rather than let it
+burn 72h.
+
+**Three outcomes, only one of which supports the idea.** Recorded before the numbers arrive:
+1. 41 climbs toward the 0.72-0.76 band AND organic keeps physics3_2's +0.030 — the ring rate was
+   the whole story, and the same lever should then be widened on the legacy sim for organic.
+2. 41 climbs but organic falls back to the legacy 0.55-0.62 band — ring rate merely TRADES the two
+   gates and the physics bank buys nothing beyond a different point on the same curve.
+3. 41 does not move — the cause is elsewhere, and peak POSITIONS become the prime suspect (risk (b)
+   of section I: the bank's q distribution is a WORSE match to the eval sets than uniform draws,
+   KS sum 0.422 against 0.280, noise floor 0.048).
+
+Judge post-280 for the verdict — pre-drop ranking correlates with the plateau at only rho = 0.49.
+The matched-epoch comparison is for spotting a dead run early, not for calling the result.
+
+Inherited risks are unchanged from section I: peak positions (b) and NOT EVAL-CLEAN (c) — the bank
+is built with `--no-exclusions`, so a COD structure matching an eval material can contribute peaks.
+Any AP from this run is PROVISIONAL until the bank is rebuilt with exclusions.
+
+### L5. A related lever that is now CLOSED
+
+`dino_edge1` (`SimulationConfig.edge_peaks`, keep the full box at the mask edge instead of clamping
+it) **ran and lost.** lr 1e-5, `box_coef_override=[2.8, 1.3]`, stopped at epoch 210 on 2026-09-08,
+never reached the lr drop. Against its correct control `dino_boxconv1` (same lr, same box
+convention), mean over epochs 150-210: organic 0.5310 vs 0.5424 (**-0.011**), 41 0.7233 vs 0.7387
+(**-0.015**) — i.e. back to plain `dino_ssl1` level (0.5363 / 0.7235). Negative on both gates.
+Judged pre-drop only, but there is no positive signal anywhere in the curve to wait for. Do not
+re-propose the edge-peak sim change; `edge_peaks` stays default False.
+
+
 ## Open / not yet done
 - Path A (#3 simulation fix) tried and reverted — no AP gain (see Phase H). The 2-class model from
   `ringseg_2class_20260603-142434` (organic ~0.55 / 41 ~0.76 by ep360) stands as the current best.
