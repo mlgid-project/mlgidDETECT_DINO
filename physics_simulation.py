@@ -46,7 +46,7 @@ from simulation import (FastSimulation, SimulationConfig, HEIGHT, WIDTH, normali
 
 # per-image detector q_max [A^-1]. Real: organic 4.95 (every entry), 41 sqrt(2*1350^2)/500 = 3.82.
 Q_MAX_RANGE = (3.5, 5.0)
-N_POWDER = (0, 1)               # entries composed into one image
+N_POWDER = (0, 1)               # entries composed into one image -- OVERRIDABLE, see below
 N_ORIENTED = (1, 2)
 RINGS_PER_POWDER = (3, 15)      # cap rings (top by intensity)
 SPOTS_PER_ORIENTED = (8, 60)    # cap spots (top by intensity)
@@ -69,7 +69,28 @@ def _usable(img):
 
 
 class PhysicsSimulation(object):
-    def __init__(self, bank_path, sim_config=None, device='cuda', unify_contrast=False):
+    """`n_powder` overrides N_POWDER, the per-image count of powder (ring) entries.
+
+    This is the ring:segment lever. Measured 2026-09-11 over 120 frames with the geometric ring
+    criterion (box spans >= 70% of the valid chi rows at its radius), current box convention:
+
+        real 41        16.90 rings/frame   24.0 segs   ring:seg 0.704
+        real organic    3.50               98.6        ring:seg 0.035
+        sim legacy     17.05               30.7        ring:seg 0.555
+        sim physics     4.38               37.2        ring:seg 0.118   <- N_POWDER = (0, 1)
+
+    At the default the physics sim lands on ORGANIC's composition and misses 41's, which is what
+    dino_physics3_2 does on the gates: +0.030 organic over dino_lr4e5_1 (33/35 shared epochs) and
+    -0.189 on 41 (34/35). Rings are the easy class (41 ring recall 0.856 vs 0.713 segments) and
+    41% of 41's objects, so starving them costs 41 disproportionately. Widening the range -- NOT
+    raising it to a compromise value -- lets single frames span both regimes.
+
+    Default None keeps N_POWDER, so every run up to and including dino_physics3_2 is unchanged:
+    `random.randint(*self.n_powder)` draws from the RNG identically for the same range.
+    """
+
+    def __init__(self, bank_path, sim_config=None, device='cuda', unify_contrast=False,
+                 n_powder=None):
         d = np.load(bank_path, allow_pickle=False)
         self.q = torch.from_numpy(d['q']).float()
         self.chi = torch.from_numpy(d['chi']).float()
@@ -83,6 +104,10 @@ class PhysicsSimulation(object):
             raise ValueError(f'bank {bank_path} has no oriented entries')
         self.device = device
         self.unify_contrast = unify_contrast
+        self.n_powder = N_POWDER if n_powder is None else (int(n_powder[0]), int(n_powder[1]))
+        if self.n_powder[0] < 0 or self.n_powder[1] < self.n_powder[0]:
+            raise ValueError(f'n_powder must be a non-negative (lo, hi) with hi >= lo, '
+                             f'got {self.n_powder}')
         self.sim_config = sim_config or SimulationConfig()
         # the SAME config object, so box_coef_override reaches img_from_labels' sigma recovery
         self.fast = FastSimulation(sim_config=self.sim_config, device=device)
@@ -139,7 +164,7 @@ class PhysicsSimulation(object):
         boxes_l, inten_l, ring_l = [], [], []
 
         # ---- powder entries (rings) ----
-        for _ in range(random.randint(*N_POWDER)):
+        for _ in range(random.randint(*self.n_powder)):
             qs, _, ii = self._entry(int(np.random.choice(self.powder_ids)))
             vis = qs < q_max * 0.99
             if int(vis.sum()) < 1:

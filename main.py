@@ -115,13 +115,18 @@ class SimulationDataset(torch.utils.data.Dataset):
             bank = getattr(args, 'physics_bank_path', None)
             if not bank:
                 raise ValueError("use_physics_sim is set but physics_bank_path is not")
+            #physics_n_powder overrides the per-image powder-entry count, the ring:segment
+            #lever -- see the PhysicsSimulation docstring. Absent => the (0, 1) default, so
+            #every run up to dino_physics3_2 is unchanged.
             self.physics = PhysicsSimulation(
                 bank, sim_config=_sim_config, device=self.device,
-                unify_contrast=bool(getattr(args, 'unify_contrast', False)))
+                unify_contrast=bool(getattr(args, 'unify_contrast', False)),
+                n_powder=getattr(args, 'physics_n_powder', None))
             print(f"[sim] physics sim ON: {self.physics_fraction:.0%} of images from {bank} "
                   f"({len(self.physics.powder_ids)} powder / {len(self.physics.oriented_ids)} "
                   f"oriented entries), unify_contrast="
-                  f"{bool(getattr(args, 'unify_contrast', False))}", flush=True)
+                  f"{bool(getattr(args, 'unify_contrast', False))}, "
+                  f"n_powder={self.physics.n_powder}", flush=True)
 
     def __getitem__(self, idx):
         image = None
