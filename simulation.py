@@ -64,7 +64,8 @@ def torch_he(img: Tensor, bins: int = 1000):
     return res.view(img.shape)
 
 @torch.no_grad()
-def contrast_like_real(img: Tensor, mask: Tensor, clip=(5.0, 99.5), log=True, he=True):
+def contrast_like_real(img: Tensor, mask: Tensor, clip=(5.0, 99.5), log=True, he=True,
+                       he_bins: int = 1000):
     """The REAL contrast pipeline (util.exp_preprocess.apply_contrast), in torch.
 
     The simulator's own chain diverges from the real one in two ways that this function removes:
@@ -78,6 +79,11 @@ def contrast_like_real(img: Tensor, mask: Tensor, clip=(5.0, 99.5), log=True, he
 
     Mask-aware exactly as the real one is: every statistic is computed over valid pixels only and
     the invalid region is zeroed at the end.
+
+    `he_bins` is the HE histogram resolution. The default 1000 is what every run up to and
+    including dino_physics4_1 used, so it is kept as the default and those runs stay bit-identical.
+    The REAL pipeline runs cv2.equalizeHist on a uint8 image, i.e. exactly 256 bins, which is one
+    of the two things `real_tail_only` matches (PhysicsSimulation).
     """
     img = img.float()
     m = mask.bool()
@@ -101,7 +107,7 @@ def contrast_like_real(img: Tensor, mask: Tensor, clip=(5.0, 99.5), log=True, he
         vals = img[m]
         rng = (vals.max() - vals.min()).clamp(min=1e-12)
         img = (img - vals.min()) / rng
-        bins = 1000
+        bins = int(he_bins)
         edges = torch.linspace(float(vals.min()), float(vals.max()), bins + 1, device=img.device)
         centers = (edges[:-1] + edges[1:]) / 2
         hist = torch.histc(img[m], bins=bins, min=float(vals.min()), max=float(vals.max()))

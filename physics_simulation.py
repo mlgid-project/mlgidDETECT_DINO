@@ -90,7 +90,7 @@ class PhysicsSimulation(object):
     """
 
     def __init__(self, bank_path, sim_config=None, device='cuda', unify_contrast=False,
-                 n_powder=None):
+                 n_powder=None, real_tail_only=False):
         d = np.load(bank_path, allow_pickle=False)
         self.q = torch.from_numpy(d['q']).float()
         self.chi = torch.from_numpy(d['chi']).float()
@@ -104,6 +104,11 @@ class PhysicsSimulation(object):
             raise ValueError(f'bank {bank_path} has no oriented entries')
         self.device = device
         self.unify_contrast = unify_contrast
+        self.real_tail_only = bool(real_tail_only)
+        if self.real_tail_only and not unify_contrast:
+            raise ValueError('real_tail_only requires unify_contrast=True -- it only trims the '
+                             'tail of the REAL contrast chain, and has no meaning for the legacy '
+                             'log -> HE -> clip chain.')
         self.n_powder = N_POWDER if n_powder is None else (int(n_powder[0]), int(n_powder[1]))
         if self.n_powder[0] < 0 or self.n_powder[1] < self.n_powder[0]:
             raise ValueError(f'n_powder must be a non-negative (lo, hi) with hi >= lo, '
@@ -268,10 +273,34 @@ class PhysicsSimulation(object):
 
         if self.unify_contrast:
             # the real pipeline's order and log argument, mask-aware (see contrast_like_real)
-            img = contrast_like_real(img, mask)
-            img = apply_kernel(img, f.kernel1)
-            img = digitalize_img(img)
-            img = normalize(img)
+            if self.real_tail_only:
+                # EXACTLY the real preprocessing and nothing after it. util.exp_preprocess's
+                # contrast_correction ends at HE; the three ops below have NO counterpart there:
+                #   apply_kernel   an unnormalised 3x3 blur (_SMOOTH_KERNEL sums to 8.3, so it
+                #                  also scales the image)
+                #   digitalize_img @with_probability(0.4), quantises to randint(16, 64) levels
+                #   normalize      a second min-max, and the step that produced the NaN crash (K1)
+                # Measured distinct grey levels in the valid region, before this flag existed:
+                #   real organic  94 / 116 / 158 (min/median/max)     real 41  61 / 109 / 165
+                #   sim physics    8 / 363 / 367,139
+                # i.e. 40% of training images crushed to <=65 levels and 60% left at full float
+                # precision -- bimodal, and neither mode matches real data.
+                # he_bins 256 because the real chain is cv2.equalizeHist on uint8.
+                img = contrast_like_real(img, mask, he_bins=256)
+                # SNAP TO THE uint8 GRID, which is what makes this the real chain rather than an
+                # approximation of it. util/exp_preprocess.py:148-151 does img*255 -> uint8 ->
+                # cv2.equalizeHist -> /255, so a real frame takes at most 256 values, all on the
+                # exact k/255 grid. contrast_like_real instead interpolates the CDF at bin CENTRES,
+                # which yields continuous values (and extrapolates past the last centre, so the max
+                # came out at 1.00256 -- the trailing normalize() used to hide that). Rounding onto
+                # k/255 restores both the range and the level structure; it is the real pipeline's
+                # own quantisation, NOT a reintroduction of digitalize_img's 16-64 levels.
+                img = (img * 255.0).round().clamp(0.0, 255.0) / 255.0
+            else:
+                img = contrast_like_real(img, mask)
+                img = apply_kernel(img, f.kernel1)
+                img = digitalize_img(img)
+                img = normalize(img)
         else:
             img = apply_log(img)
             img = apply_he(img)

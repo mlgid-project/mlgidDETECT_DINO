@@ -121,12 +121,14 @@ class SimulationDataset(torch.utils.data.Dataset):
             self.physics = PhysicsSimulation(
                 bank, sim_config=_sim_config, device=self.device,
                 unify_contrast=bool(getattr(args, 'unify_contrast', False)),
-                n_powder=getattr(args, 'physics_n_powder', None))
+                n_powder=getattr(args, 'physics_n_powder', None),
+                real_tail_only=bool(getattr(args, 'real_tail_only', False)))
             print(f"[sim] physics sim ON: {self.physics_fraction:.0%} of images from {bank} "
                   f"({len(self.physics.powder_ids)} powder / {len(self.physics.oriented_ids)} "
                   f"oriented entries), unify_contrast="
                   f"{bool(getattr(args, 'unify_contrast', False))}, "
-                  f"n_powder={self.physics.n_powder}", flush=True)
+                  f"n_powder={self.physics.n_powder}, "
+                  f"real_tail_only={self.physics.real_tail_only}", flush=True)
 
     def __getitem__(self, idx):
         image = None
