@@ -87,10 +87,26 @@ class PhysicsSimulation(object):
 
     Default None keeps N_POWDER, so every run up to and including dino_physics3_2 is unchanged:
     `random.randint(*self.n_powder)` draws from the RNG identically for the same range.
+
+    `frame_types` replaces that single composition with a per-frame MIXTURE, and is the reason
+    dino_physics6_1 exists. Widening `n_powder` alone cannot reach both eval sets: the two counts
+    are drawn independently, so with n_powder=(1,4) x n_oriented=(1,7) the 28 equally likely cells
+    put only 18% at 41's ring:seg (>= 0.5) and 14% at organic's (<= 0.10), 68% in a composition
+    neither eval set contains -- and NO cell reaches organic's 0.035, because a powder floor of 1
+    guarantees ~8.5 rings while real organic has 3.5. A ring FLOOR is what 41 needs and a ring
+    CEILING is what organic needs; one distribution cannot hold both.
+
+    So pick the frame TYPE first, exactly as the legacy sim does at simulation.py:514
+    (`rings_or_seg_or_both` -> rings-only / segments-only / both, 1/3 each). `frame_types` is a
+    sequence of (weight, n_powder, n_oriented); the weights are normalised at construction and one
+    branch is drawn per frame. Per-entry yields, measured over the 0..9 powder sweep, are 8.5
+    rings per powder entry and 24.5 segments per oriented entry.
+
+    Default None keeps the single composition, so dino_physics4_1 / dino_physics5_1 are unchanged.
     """
 
     def __init__(self, bank_path, sim_config=None, device='cuda', unify_contrast=False,
-                 n_powder=None, real_tail_only=False):
+                 n_powder=None, real_tail_only=False, frame_types=None):
         d = np.load(bank_path, allow_pickle=False)
         self.q = torch.from_numpy(d['q']).float()
         self.chi = torch.from_numpy(d['chi']).float()
@@ -113,9 +129,48 @@ class PhysicsSimulation(object):
         if self.n_powder[0] < 0 or self.n_powder[1] < self.n_powder[0]:
             raise ValueError(f'n_powder must be a non-negative (lo, hi) with hi >= lo, '
                              f'got {self.n_powder}')
+        self.n_oriented = N_ORIENTED
+        self.frame_types = self._parse_frame_types(frame_types)
         self.sim_config = sim_config or SimulationConfig()
         # the SAME config object, so box_coef_override reaches img_from_labels' sigma recovery
         self.fast = FastSimulation(sim_config=self.sim_config, device=device)
+
+    @staticmethod
+    def _parse_frame_types(spec):
+        """(weight, (p_lo, p_hi), (o_lo, o_hi)) triples -> the same with weights normalised.
+
+        Returns None for None, which is the bit-identical single-composition path."""
+        if spec is None:
+            return None
+        out = []
+        for t in spec:
+            if len(t) != 3:
+                raise ValueError(f'frame_types entries are (weight, n_powder, n_oriented), got {t}')
+            w, npw, nor = float(t[0]), (int(t[1][0]), int(t[1][1])), (int(t[2][0]), int(t[2][1]))
+            if w <= 0:
+                raise ValueError(f'frame_types weight must be > 0, got {w}')
+            for name, r in (('n_powder', npw), ('n_oriented', nor)):
+                if r[0] < 0 or r[1] < r[0]:
+                    raise ValueError(f'frame_types {name} must be a non-negative (lo, hi) with '
+                                     f'hi >= lo, got {r}')
+            out.append((w, npw, nor))
+        if not out:
+            raise ValueError('frame_types is empty -- pass None for the single composition')
+        tot = sum(t[0] for t in out)
+        return [(w / tot, npw, nor) for w, npw, nor in out]
+
+    def _draw_composition(self):
+        """Per-frame (n_powder, n_oriented). One `random.random()` when branching is on, mirroring
+        the legacy sim's `rings_or_seg_or_both` draw; nothing at all when it is off, which is what
+        keeps dino_physics4_1 / dino_physics5_1 bit-identical."""
+        if self.frame_types is None:
+            return self.n_powder, self.n_oriented
+        r, acc = random.random(), 0.0
+        for w, npw, nor in self.frame_types:
+            acc += w
+            if r < acc:
+                return npw, nor
+        return self.frame_types[-1][1], self.frame_types[-1][2]   # float-rounding guard
 
     def _entry(self, idx):
         s, c = int(self.entry_start[idx]), int(self.entry_count[idx])
@@ -167,9 +222,10 @@ class PhysicsSimulation(object):
         q_max = random.uniform(*Q_MAX_RANGE)
         dyn = 10.0 ** random.uniform(*DYN_RANGE_DECADES)
         boxes_l, inten_l, ring_l = [], [], []
+        n_powder, n_oriented = self._draw_composition()
 
         # ---- powder entries (rings) ----
-        for _ in range(random.randint(*self.n_powder)):
+        for _ in range(random.randint(*n_powder)):
             qs, _, ii = self._entry(int(np.random.choice(self.powder_ids)))
             vis = qs < q_max * 0.99
             if int(vis.sum()) < 1:
@@ -193,7 +249,7 @@ class PhysicsSimulation(object):
             ring_l.append(torch.ones(k, dtype=torch.bool))
 
         # ---- oriented entries (spots / arcs) ----
-        for _ in range(random.randint(*N_ORIENTED)):
+        for _ in range(random.randint(*n_oriented)):
             qs, cs, ii = self._entry(int(np.random.choice(self.oriented_ids)))
             vis = qs < q_max * 0.99
             if int(vis.sum()) < 1:
