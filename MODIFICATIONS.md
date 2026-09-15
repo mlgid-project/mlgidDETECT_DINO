@@ -638,6 +638,114 @@ convention), mean over epochs 150-210: organic 0.5310 vs 0.5424 (**-0.011**), 41
 Judged pre-drop only, but there is no positive signal anywhere in the curve to wait for. Do not
 re-propose the edge-peak sim change; `edge_peaks` stays default False.
 
+## M. The physics sim is recall-strong and precision-poor — `dn_number` (2026-09-15)
+
+`dino_physics4_1` finished at epoch 434 (72h wall, not a crash): organic **0.5804**, 41 **0.6412**,
+against `dino_lr4e5_1`'s 0.6222 / 0.7631. The question was why. Decomposing AP into recall and
+precision says the physics simulator is **not** the problem people assumed it was.
+
+### M1. The measurement
+
+All numbers at the DEPLOYED operating point — top-225 in `onnx_to_xyxy`, class-aware NMS (ring 0.1
+/ segment 0.4), score > 0.1 — from `diagnostics/{numselect_sweep,capsplit,fploc,tpiou,nmssweep}.py`.
+Each caches the raw `(pred_logits, pred_boxes)` once per gate and replays postprocessing off the
+cache, so a whole sweep costs one forward pass. Replay validated exact: physics4 at 225 reproduces
+41 = 0.6412 and organic = 0.5804, the tails of its own `exp_ap_*.txt`.
+
+| gate | model | recall | precision | ap_total | med TP score | med FP score |
+|---|---|---|---|---|---|---|
+| 41 | lr4e5 (ep367) | **0.888** | **0.445** | **0.7631** | 0.848 | 0.198 |
+| 41 | ssl1 (ep437) | 0.869 | 0.453 | 0.7441 | 0.810 | 0.199 |
+| 41 | physics4 (ep434) | 0.856 | **0.256** | 0.6412 | 0.657 | 0.258 |
+| 41 | physics5 (ep240) | 0.834 | 0.274 | 0.5496 | 0.573 | 0.195 |
+| organic | lr4e5 | 0.681 | **0.643** | 0.6222 | 0.879 | 0.212 |
+| organic | ssl1 | 0.643 | 0.630 | 0.5683 | 0.703 | 0.183 |
+| organic | physics4 | **0.752** | 0.434 | 0.5804 | 0.612 | 0.294 |
+| organic | physics5 | 0.704 | 0.437 | 0.5685 | 0.436 | 0.219 |
+
+**On organic the physics sim already beats the baseline at finding peaks.** physics4 recovers 76.8
+of the 102.1 GT peaks per frame; lr4e5 recovers 69.5. Uncapped (`num_select` 900) physics4 reaches
+recall **0.886** while lr4e5 **saturates at 0.687** — the legacy-sim model has nothing above score
+0.1 left to give, the physics one has a fifth of the organic peak population sitting in its output,
+correctly localised, that the ranking cannot surface. **On 41 there is no recall advantage at all**
+(0.856 vs 0.888) and the same precision collapse. The two gates are different problems.
+
+Score separation (median TP − median FP) is the axis: lr4e5 0.650 / 0.667, ssl1 0.611 / 0.520,
+physics4 0.399 / 0.318, physics5 0.378 / 0.217.
+
+### M2. The excess is a duplicate spray, not noise firings
+
+Every FP split by IoU with the nearest GT (`diagnostics/fploc.py`):
+
+| model | gate | dup (IoU>0.3) | near (0<IoU≤0.3) | bg (IoU=0) |
+|---|---|---|---|---|
+| physics4 | 41 | 3.9/fr | **55.3/fr** | 42.9/fr |
+| lr4e5 | 41 | 1.5/fr | 13.0/fr | 30.9/fr |
+| physics4 | organic | 7.5/fr | **53.2/fr** | 39.2/fr |
+| lr4e5 | organic | 0.8/fr | 10.2/fr | 27.6/fr |
+
+Background firings are comparable (1.4×); the near-miss bucket is **4.3×**. And the matched boxes
+are fine — median matched IoU on organic is **0.394 for physics4 vs 0.343 for lr4e5**, i.e. it
+localises *better* (`diagnostics/tpiou.py`). So it is not blind and not sloppy: it hedges, emitting
+several boxes per peak at IoU 0.1–0.4 with the true one — just under the 0.4 segment NMS threshold,
+so they survive.
+
+Confirmed by `diagnostics/nmssweep.py`: segment NMS IoU 0.4 → 0.10 is worth physics4 **+0.042 on 41
+and +0.032 on organic**, while lr4e5 moves ≤0.002 and ssl1 ≤0.007. **Not shipped** — even at its
+best it is still below baseline on both gates (0.6827 vs 0.7636; 0.6124 vs 0.6222), and it would
+change the deployed mlgidDETECT path and break comparability with every existing run. Revisit only
+if a physics run clears baseline.
+
+### M3. `num_select` — the "free +0.019" is REJECTED
+
+`main.evaluate_giwaxs_ap` calls `onnx_to_xyxy` with **no** `num_select`, so every per-epoch AP curve
+is at the function default **225** (`util/postprocessing.py:32`). The config's `num_select = 150`
+(`DINO_4scale_swin.py:102`) feeds `PostProcess` in `dino.py` and is **never used on the eval path**.
+
+Δ vs 225 at each model's best alternative: ssl1 −0.006 @450 (41) / **+0.019** @900 (organic);
+lr4e5 −0.001 / +0.004; physics4 **−0.038** / +0.005; physics5 **−0.034** / +0.002. Section E's ssl1
+gain reproduces exactly but is ssl1-only, costs 0.006 on 41 even there, and is negative on both
+gates for both physics models. Below 225 is worse everywhere. **225 is a joint optimum; leave it.**
+
+Why it splits the models: kept boxes/frame at 225→450→900 against 41.0 GT on 41 — ssl1 79→86→86 and
+lr4e5 82→83→83 *saturate* (the score cut binds, the cap is slack); physics4 137→274→524 and
+physics5 149→272→520 never do. Raising the cap on them adds +135.8 FP/frame of which only +1.0 is
+above score 0.5, so ~134 of 136 land in the 0.1–0.3 band — and score thresholds are not recall
+levels, so those depress precision across the MID-recall region where most of the AP area is.
+`_interpolate_precisions` cannot rescue it because everything to the right is worse.
+
+A second, smaller mechanism is real (`diagnostics/capsplit.py`): `QMatcher` +
+`linear_sum_assignment` over |Δq| (`util/matchers.py:31`) **never looks at the scores**, so extra
+candidates can hand a GT to a geometrically closer, lower-scored box and demote the previous holder
+to a high-score FP. physics4 on 41, 225→450: 98 of 1437 GT (6.8%) move down, median drop 0.283,
+≈2.4 displaced boxes/frame — about the whole +1.0 in FP>0.5. Controls: ssl1 17/1460, lr4e5 3/1492.
+
+### M4. What was queued
+
+`dino_physics4_dn400_1` (job 2882738, config `DINO_4scale_swin_physics4_dn400.py`, sbatch
+`backbone_curation/ssl/run_detector_dn400.sbatch`). ONE VARIABLE vs `dino_physics4_1`: `dn_number`
+100 → 400, verified by diffing the resolved configs.
+
+`prepare_for_cdn` (`models/dino/dn_components.py:43`) turns `dn_number` into GROUPS as
+`dn_number // max_gt_in_batch`. Contrastive denoising — reconstruct the box from a noised copy,
+reject the more-noised negative — is precisely the mechanism that teaches one box per object, and
+our ~50–70-box frames train at **1–2 groups** where COCO's ~7-object images give ~14.
+`dn_number = 400` restores ~6.
+
+**CAVEAT, written into the config header too:** the legacy sim is starved identically (~46
+boxes/frame), so this may be a general DINO gain rather than a physics-specific fix. The legacy-sim
+control arm (lr4e5 recipe, `dn_number=400`) is deliberately **not queued** — no free a100-galvani —
+and a positive result here does NOT establish that the hedging is what got fixed.
+
+### M5. Caveats on all of the above
+
+- organic is **8 frames / 817 GT boxes**. A few percent there is noise; the +0.20 recall is not.
+- physics5 was at epoch 240, inside the pre-280 zone where run ranking correlates only ρ = 0.49.
+  Do not rank it against physics4 at ep434.
+- recall/precision here are the matcher's assignment counts at score > 0.1 — a different quantity
+  from `ap_total`.
+- the bank is still built `--no-exclusions` (section I), so every physics AP stays PROVISIONAL.
+
 
 ## Open / not yet done
 - Path A (#3 simulation fix) tried and reverted — no AP gain (see Phase H). The 2-class model from
