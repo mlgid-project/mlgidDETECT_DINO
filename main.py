@@ -132,11 +132,30 @@ class SimulationDataset(torch.utils.data.Dataset):
                   f"real_tail_only={self.physics.real_tail_only}, "
                   f"frame_types={self.physics.frame_types}", flush=True)
 
+        #REAL-BACKGROUND SIM (realbkg_simulation.py): pygidSIM peak positions and intensities
+        #drawn onto REAL GIWAXS frames whose own diffraction features have been removed, instead
+        #of a modelled background. When on it replaces the image source entirely -- physics_sim
+        #and the legacy sim are not consulted. Ground truth is still only the peaks we drew.
+        self.realbkg = None
+        if getattr(args, 'use_realbkg_sim', False):
+            from realbkg_simulation import RealBkgSimulation
+            self.realbkg = RealBkgSimulation(
+                bank_path=getattr(args, 'physics_bank_path', None),
+                donor_path=args.realbkg_donor_path,
+                stats_path=args.realbkg_stats_path,
+                sim_config=_sim_config, device=self.device,
+                n_oriented=tuple(getattr(args, 'realbkg_n_oriented', (1, 3))),
+                p_ring=float(getattr(args, 'realbkg_p_ring', 0.15)))
+            print("[sim] real-background sim ON -- image source is "
+                  f"{args.realbkg_donor_path}", flush=True)
+
     def __getitem__(self, idx):
         image = None
         while image is None:
             try:
-                if self.physics is not None and random.random() < self.physics_fraction:
+                if self.realbkg is not None:
+                    image, boxes, mask, is_ring = self.realbkg.simulate_img()
+                elif self.physics is not None and random.random() < self.physics_fraction:
                     image, boxes, mask, is_ring = self.physics.simulate_img()
                 else:
                     image, boxes, mask, is_ring = self.simulation.simulate_img()
