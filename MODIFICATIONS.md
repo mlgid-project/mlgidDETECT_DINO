@@ -746,6 +746,48 @@ and a positive result here does NOT establish that the hedging is what got fixed
   from `ap_total`.
 - the bank is still built `--no-exclusions` (section I), so every physics AP stays PROVISIONAL.
 
+### M6. Three levers killed the same day
+
+- **`num_select`** — M3 above. 225 is a joint optimum.
+- **polar / quazipolar composition** (`diagnostics/geomcost.py`, `diagnostics/geomreal.py`). Both
+  simulators draw the dark area 50/50 between a polar and a quazipolar wedge
+  (`simulation.py:799`), and DINO evaluation of real data is always standard polar, so half of
+  every training stream is a geometry the eval never contains. It costs nothing. On its own
+  simulator lr4e5 scores **0.9990 polar / 0.9976 quazipolar** and physics4 **0.8175 / 0.8560** (the
+  latter confounded: quazipolar frames carry 39.9 GT vs 57.6, because the wedge eats peaks). On
+  real 41, switching eval to `PREPROCESSING_QUAZIPOLAR` (`exp_preprocess.py:303`, a genuine
+  coordinate remap, NOT the simulator's dark-area wedge) costs lr4e5 −0.015, ssl1 −0.006, physics4
+  −0.032, physics5 −0.031 and leaves the ranking intact. **organic could not be tested**:
+  `PyGIDDataset` has no quazipolar GT transform — only `H5GIWAXSDataset` does
+  (`labeleddataset.py:131`) — so it would remap the image and leave the labels in polar
+  coordinates. Port that transform before anyone retries this on organic.
+- **physics-sim under-labeling** (`diagnostics/underlabel.py`). Hypothesis: physics4 keeps 96.3
+  boxes for 57.6 GT on its OWN simulator (precision 0.507) where lr4e5 keeps 46.8 for 44.7 (0.954),
+  so perhaps the simulator renders signal it does not label, teaching the model to fire on
+  unlabeled structure. **Rejected.** Unmatched FPs touching no GT have median intensity **0.633**,
+  *below* a mask-aware radius-matched control at **0.699** (matched TPs 0.755). No
+  rendered-but-unlabeled signal.
+
+  A methodological note worth keeping: the first version of that probe sampled the control angle
+  uniformly over the frame height. That lands in the dark-area wedge ~45% of the time, deflated the
+  control to 0.542 and produced a confident FALSE POSITIVE (FP 0.834 > TP 0.772 > control 0.542)
+  which the rendered frames then contradicted. **Mask-restrict every background control in polar
+  frames.**
+
+### M7. What the negative results leave
+
+physics4's own-sim FP split is **dup 4.0 / near-miss 33.4 / background 8.0 per frame** — 74%
+near-misses, the same duplicate spray measured on real data. The hedging is therefore present on
+the distribution the model trains on: not a domain-transfer artifact, not a data bug, not a
+geometry mismatch. That is what `dino_physics4_dn400_1` (M4) targets.
+
+The one lever held back deliberately is **mixing the simulators** (`physics_sim_fraction = 0.5`).
+The two fail in opposite directions — physics wins organic recall (0.752 vs 0.681; 0.886 vs 0.687
+uncapped), legacy wins 41 and precision decisively (own-sim 0.954 vs 0.507) — so a mix tests
+whether the failure modes cancel rather than compound. One config line, but **not to be queued
+until physics5 and physics6 report**: the right physics arm to mix may be physics6's frame-type
+mixture rather than physics4's composition.
+
 
 ## Open / not yet done
 - Path A (#3 simulation fix) tried and reverted — no AP gain (see Phase H). The 2-class model from
