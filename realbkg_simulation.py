@@ -222,23 +222,43 @@ class RealBkgSimulation:
             an[order[k:]] = self.contrast_min*np.exp(-np.abs(np.random.normal(0, 0.8, n-k)))
         return an*noise_at
 
-    def _render(self, x, y, s_q, s_c, amp, eta, chunk=48):
+    #: render each peak only within this many sigma of its centre. The taper is
+    #: exp(-(u^2/uc^2)^2) with uc^2 = voigt_cut^2 * 2ln2, so at u = 2*voigt_cut = 6 the Lorentzian
+    #: term is 1/(1+26) = 0.037 and the taper is exp(-8.3) = 2.4e-4: together under 1e-5 of the
+    #: peak amplitude. Truncating there is invisible and turns a full-frame evaluation into a
+    #: window roughly 45x smaller for a typical peak (sigma_q 4, sigma_chi 20).
+    PATCH_SIGMA = 2.0
+
+    def _render(self, x, y, s_q, s_c, amp, eta):
         """pseudo-Voigt: Gaussian core, Lorentzian wings, both normalised to the SAME FWHM so the
         mixing weight cannot move the peak's visible width -- which is what keeps the box
         convention exact for any eta. A pure Gaussian stops abruptly; real peaks at 2 HWHM are
         4-5x brighter than a Gaussian predicts. Wings tapered past `voigt_cut` half-widths, because
-        a 2-D Lorentzian falls only as 1/u^2 and dozens of untapered tails sum into a pedestal."""
+        a 2-D Lorentzian falls only as 1/u^2 and dozens of untapered tails sum into a pedestal.
+
+        Evaluated per peak over a local window rather than the whole frame -- see PATCH_SIGMA.
+        Full-frame evaluation cost 4.16 s per simulated frame, which at 8 dataloader workers is
+        1.9 images/s, exactly what the detector consumes and therefore no margin at all.
+        """
         dev = self.device
-        X = torch.arange(WIDTH, device=dev, dtype=torch.float32).view(1, WIDTH, 1)
-        Y = torch.arange(HEIGHT, device=dev, dtype=torch.float32).view(HEIGHT, 1, 1)
         img = torch.zeros(HEIGHT, WIDTH, device=dev, dtype=torch.float32)
-        t = lambda v: torch.as_tensor(np.asarray(v, np.float32), device=dev).view(1, 1, -1)
         uc2 = (float(self.voigt_cut)**2)*2*math.log(2)
-        for a in range(0, len(x), chunk):
-            b = slice(a, a+chunk)
-            u2 = ((X - t(x[b]))/t(s_q[b]))**2 + ((Y - t(y[b]))/t(s_c[b]))**2
-            prof = eta/(1.0 + u2/(2*math.log(2))) + (1-eta)*torch.exp(-u2/2)
-            img += (t(amp[b])*prof*torch.exp(-(u2/uc2)**2)).sum(-1)
+        ln2 = 2*math.log(2)
+        R = float(self.PATCH_SIGMA)*float(self.voigt_cut)
+        x = np.asarray(x, np.float64); y = np.asarray(y, np.float64)
+        s_q = np.asarray(s_q, np.float64); s_c = np.asarray(s_c, np.float64)
+        amp = np.asarray(amp, np.float64)
+        for i in range(len(x)):
+            rx, ry = R*s_q[i], R*s_c[i]
+            c0 = max(int(math.floor(x[i] - rx)), 0); c1 = min(int(math.ceil(x[i] + rx)) + 1, WIDTH)
+            r0 = max(int(math.floor(y[i] - ry)), 0); r1 = min(int(math.ceil(y[i] + ry)) + 1, HEIGHT)
+            if c1 <= c0 or r1 <= r0:
+                continue
+            X = torch.arange(c0, c1, device=dev, dtype=torch.float32).view(1, -1)
+            Y = torch.arange(r0, r1, device=dev, dtype=torch.float32).view(-1, 1)
+            u2 = ((X - float(x[i]))/float(s_q[i]))**2 + ((Y - float(y[i]))/float(s_c[i]))**2
+            prof = eta/(1.0 + u2/ln2) + (1-eta)*torch.exp(-u2/2)
+            img[r0:r1, c0:c1] += float(amp[i])*prof*torch.exp(-(u2/uc2)**2)
         return img.cpu().numpy().astype(np.float64)
 
     def _visibility(self, amp, noise_at, s_q, s_c, is_ring, mask, x):
@@ -295,7 +315,13 @@ class RealBkgSimulation:
             amp = amp/el['f']              # an arc is the same reflection over a longer footprint
 
         eta = random.uniform(*self.voigt_eta)
-        peaks = self._render(x, y, s_q, s_c, amp, eta)
+        # Skip peaks that cannot be seen at all. `_visibility`'s contrast is amp over the local
+        # noise, so amp < 0.2*noise puts the peak's BRIGHTEST pixel a fifth of a sigma above the
+        # background -- nothing a render would show and nothing the gate would ever keep. Peaks
+        # merely below the labelling threshold are still drawn, because those are real faint
+        # structure the frame should contain; only the invisible ones are dropped.
+        vis = amp >= 0.2*np.maximum(noise[iy, ix], 1e-9)
+        peaks = self._render(x[vis], y[vis], s_q[vis], s_c[vis], amp[vis], eta)
         # Counting noise on the PEAK photons only: the donor already carries its own noise, and
         # adding it again would double-count what the real frame already has. c = n/sqrt(B) is
         # measured on THIS donor, so peaks are exactly as grainy as the background they sit on.
