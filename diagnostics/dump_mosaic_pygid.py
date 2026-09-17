@@ -99,6 +99,13 @@ def main():
     ap.add_argument('--config', default='config/DINO/DINO_4scale_swin_realbkg.py')
     ap.add_argument('--out', default='/mnt/lustre/work/schreiber/szb389/datasets/mosaicsim_raw.h5')
     ap.add_argument('--donors', default=None, help='override the donor json')
+    ap.add_argument('--decades', type=float, nargs=2, default=None, metavar=('LO', 'HI'),
+                    help='override realbkg_intensity_decades, e.g. --decades 5 6')
+    ap.add_argument('--amp-mode', default=None, choices=['pygid', 'fitted'],
+                    help="override realbkg_amplitude_mode")
+    ap.add_argument('--stratify-intensity', action='store_true',
+                    help='instead of drawing the peak scale at random, step it evenly in log10 '
+                         'across the frames so every decade is represented')
     ap.add_argument('--seed', type=int, default=0)
     a = ap.parse_args()
 
@@ -130,7 +137,11 @@ def main():
         return True
     RealBkgSimulation._load_donors = install
     sim = RealBkgSimulation(bank_path=cfg.physics_bank_path, donor_path=cfg.realbkg_donor_path,
-                            stats_path=cfg.realbkg_stats_path, sim_config=sc, device='cpu')
+                            stats_path=cfg.realbkg_stats_path, sim_config=sc, device='cpu',
+                            intensity_decades=(tuple(a.decades) if a.decades else
+                                               getattr(cfg, 'realbkg_intensity_decades', None)),
+                            amplitude_mode=(a.amp_mode or
+                                            getattr(cfg, 'realbkg_amplitude_mode', 'fitted')))
     RealBkgSimulation._load_donors = _ld
 
     snap = {}
@@ -176,6 +187,11 @@ def main():
         n_or, p_ring, label = STRATA[len(frames) % len(STRATA)]
         sim.n_oriented, sim.p_ring = n_or, p_ring
         k = len(frames) % npool
+        if a.stratify_intensity:
+            lo, hi = (a.decades if a.decades else
+                      getattr(cfg, 'realbkg_intensity_decades', (3.0, 6.0)))
+            n = max(a.frames-1, 1)
+            sim.next_intensity_target = 10.0**(lo + (hi-lo)*len(frames)/n)
         if not a.shared_pool:
             # hand the simulator a pool of exactly ONE background, so frame k is guaranteed to be
             # built on donor group k rather than on whatever the RNG happens to pick
@@ -187,10 +203,13 @@ def main():
         _img, boxes, mask, is_ring = r
         boxes = boxes.cpu().numpy(); is_ring = is_ring.cpu().numpy()
         c = snap['cand']; j = match(boxes, is_ring, c)
+        # amplitudes were recorded before the per-frame gain; put them in the image's units so the
+        # stored peak list and the stored image agree
+        g = float(getattr(sim, 'last_gain', 1.0))
         frames.append(dict(pol=snap['total'].astype(np.float32), mask=snap['mask'].astype(bool),
-                           boxes=boxes, is_ring=is_ring, qmax=snap['qmax'], label=label,
+                           boxes=boxes, is_ring=is_ring, qmax=snap['qmax'], label=label, gain=g,
                            bkg=pinfo[k] if not a.shared_pool else dict(donor_ids=[]),
-                           amp=c['amp'][j].astype(np.float32), s_q=c['s_q'][j].astype(np.float32),
+                           amp=(c['amp'][j]*g).astype(np.float32), s_q=c['s_q'][j].astype(np.float32),
                            s_c=c['s_c'][j].astype(np.float32)))
         f = frames[-1]
         print(f"  frame {len(frames)-1:2d} [{label:22s}] {len(boxes):3d} boxes "
@@ -246,7 +265,11 @@ def main():
                 'resampling and loses the high-q wedge; entry/polar/image is lossless.'))
             pr.create_dataset('settings', data=json.dumps(dict(
                 stratum=fr['label'], seed=a.seed, n=n, q_max=qmax,
-                a_coef=sc.a_coef, w_coef=sc.w_coef, background=fr['bkg'])))
+                a_coef=sc.a_coef, w_coef=sc.w_coef, background=fr['bkg'],
+                intensity_gain=fr['gain'],
+                amplitude_mode=(a.amp_mode or getattr(cfg, 'realbkg_amplitude_mode', 'fitted')),
+                intensity_decades=list(a.decades or getattr(cfg, 'realbkg_intensity_decades', [])
+                                       or []))))
 
     nb = np.array([len(x['boxes']) for x in frames])
     nr = np.array([int(x['is_ring'].sum()) for x in frames])

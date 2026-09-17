@@ -154,7 +154,9 @@ class SimulationDataset(torch.utils.data.Dataset):
                 mosaic_refresh=int(getattr(args, 'realbkg_mosaic_refresh', 64)),
                 #seed left None on purpose: a fresh entropy draw per run is what makes the
                 #backgrounds new every time. Set realbkg_mosaic_seed only to reproduce a run.
-                mosaic_seed=getattr(args, 'realbkg_mosaic_seed', None))
+                mosaic_seed=getattr(args, 'realbkg_mosaic_seed', None),
+                intensity_decades=getattr(args, 'realbkg_intensity_decades', None),
+                amplitude_mode=getattr(args, 'realbkg_amplitude_mode', 'fitted'))
             src = ('fresh mosaics of reviewed peak-free frames'
                    if getattr(args, 'realbkg_mosaic', False) else args.realbkg_donor_path)
             print(f"[sim] real-background sim ON -- image source is {src}", flush=True)

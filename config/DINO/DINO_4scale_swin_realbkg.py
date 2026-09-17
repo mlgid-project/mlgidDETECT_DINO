@@ -49,3 +49,17 @@ realbkg_p_ring     = 0.15
 realbkg_mosaic         = True
 realbkg_mosaic_pool    = 48    # backgrounds held in memory at once
 realbkg_mosaic_refresh = 64    # rebuild one pool slot every N simulated frames (~15 ms/frame)
+
+# ARBITRARY INTENSITY RANGE. pygidSIM returns NORMALISED structure-factor intensities; a real
+# pyGID frame carries whatever units its own processing left, and the labelled set's maxima span
+# 3.6e4 to 2.2e6. Each frame's finished raw image is rescaled so its maximum lands on a
+# log-uniform draw over these decades. It is a pure gain -- every ratio, the visibility gate and
+# the boxes are unchanged, and the contrast chain is gain-invariant up to HE quantisation
+# (measured: mean |diff| 3e-7, max 0.0078 = two of 255 levels). It only makes the RAW frames read
+# in realistic units. Set to None to keep raw frames in donor counts.
+realbkg_intensity_decades = (3.0, 6.4771)   # 1e3 to 3e6
+# 'pygid': peak amplitude = pygidSIM's normalised intensity x one per-frame scale,
+#          so the physics' relative intensities are preserved exactly.
+# 'fitted': the old path -- keeps only the ORDERING and redraws values from the
+#          lognormal fitted to real labelled peaks (amp/local-noise).
+realbkg_amplitude_mode = 'pygid'

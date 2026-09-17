@@ -57,7 +57,8 @@ class RealBkgSimulation:
                  contrast_min=1.5, snr_min=6.0, ring_iou_max=0.10,
                  voigt_eta=(0.6, 1.0), voigt_cut=3.0, donor_keep_frac=0.40,
                  elongate=None, max_donors=None,
-                 mosaic=False, mosaic_pool=48, mosaic_refresh=64, mosaic_seed=None):
+                 mosaic=False, mosaic_pool=48, mosaic_refresh=64, mosaic_seed=None,
+                 intensity_decades=None, amplitude_mode='fitted'):
         from physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -76,6 +77,11 @@ class RealBkgSimulation:
         S = np.load(stats_path)
         self.R = {k: (float(S[k]) if S[k].ndim == 0 else S[k]) for k in S.files}
         self.mosaic_refresh = int(mosaic_refresh)
+        self.intensity_decades = (None if intensity_decades is None
+                                  else (float(intensity_decades[0]), float(intensity_decades[1])))
+        self.last_gain = 1.0
+        self.next_intensity_target = None   # set to force one frame's peak scale, else drawn
+        self.amplitude_mode = str(amplitude_mode)
         self._frames_made = 0
         if mosaic:
             self._load_mosaic_donors(mosaic_pool, mosaic_seed)
@@ -371,10 +377,32 @@ class RealBkgSimulation:
         x, y, rel, rg, iy, ix = x[inside], y[inside], rel[inside], rg[inside], iy[inside], ix[inside]
 
         s_q, s_c, el = self._draw_widths(len(x), rg)
-        n_label = int(np.random.choice(self.R['npf']))
-        amp = self._assign_amplitudes(rel, noise[iy, ix], n_label)
-        if el['on'] and self.elongate['conserve_flux'] and el['f'] is not None:
-            amp = amp/el['f']              # an arc is the same reflection over a longer footprint
+
+        if self.amplitude_mode == 'pygid':
+            # PYGIDSIM INTENSITIES, UNTOUCHED. `rel` is I/I_max straight out of the structure
+            # factors; every peak in the frame is multiplied by ONE scale, so the relative
+            # intensity distribution the physics produced is exactly what gets rendered. This is
+            # the whole point of the mode: the 'fitted' path below reduces `rel` to a RANK and
+            # redraws the values from a lognormal fitted to real labelled peaks, which reproduces
+            # the real amplitude-over-noise distribution but discards the physics' own ratios.
+            #
+            # Elongation's flux division is skipped here for the same reason -- dividing an
+            # elongated peak's amplitude by its stretch factor would make amplitude no longer
+            # proportional to `rel`.
+            #
+            # NOTE the scale is applied to AMPLITUDE, i.e. peak height. If pygidSIM's intensities
+            # are integrated intensities rather than peak heights, a wide peak and a narrow peak
+            # with the same I should NOT get the same height; that conversion is not done here.
+            tgt = self.next_intensity_target
+            R = (float(tgt) if tgt is not None
+                 else 10.0**random.uniform(*(self.intensity_decades or (3.0, 6.0))))
+            amp = np.asarray(rel, np.float64)*R
+            self.last_gain = R
+        else:
+            n_label = int(np.random.choice(self.R['npf']))
+            amp = self._assign_amplitudes(rel, noise[iy, ix], n_label)
+            if el['on'] and self.elongate['conserve_flux'] and el['f'] is not None:
+                amp = amp/el['f']          # an arc is the same reflection over a longer footprint
 
         eta = random.uniform(*self.voigt_eta)
         # Skip peaks that cannot be seen at all. `_visibility`'s contrast is amp over the local
@@ -384,6 +412,32 @@ class RealBkgSimulation:
         # structure the frame should contain; only the invisible ones are dropped.
         vis = amp >= 0.2*np.maximum(noise[iy, ix], 1e-9)
         peaks = self._render(x[vis], y[vis], s_q[vis], s_c[vis], amp[vis], eta)
+
+        # PEAK INTENSITY SCALE. pygidSIM returns NORMALISED structure-factor intensities, which
+        # only become "counts" once multiplied by some chosen range; real pyGID frames carry
+        # maxima from 1e3 to 1e6. The scale is applied to the RENDERED PEAKS ONLY -- the donor
+        # background keeps the real counts it was measured at, untouched.
+        #
+        # Applied BEFORE the peak counting noise below, so a peak scaled to 1e6 gets the grain a
+        # 1e6-count measurement would have rather than its old grain multiplied up.
+        #
+        # NOTE what this does to the labels. `contrast` and the matched-filter SNR in the gate are
+        # computed from the PRE-scale amplitude against the background's own noise, so the boxes
+        # are exactly the ones the calibrated gate chooses and do not move. But every peak,
+        # including the sub-threshold ones the gate deliberately leaves unlabelled, is lifted by
+        # the same factor relative to the background -- so at a large scale a faint unlabelled
+        # peak can look obvious while carrying no box. That is acceptable for LOOKING at frames
+        # and is not acceptable for training; see the dynamic-range work before any run.
+        if self.amplitude_mode != 'pygid':
+            self.last_gain = 1.0
+        tgt = self.next_intensity_target
+        if self.amplitude_mode != 'pygid' and (tgt is not None
+                                               or self.intensity_decades is not None):
+            pmax = float(peaks[mask].max()) if mask.any() else 0.0
+            if pmax > 0:
+                R = float(tgt) if tgt is not None else 10.0**random.uniform(*self.intensity_decades)
+                self.last_gain = R/pmax
+                peaks = peaks*self.last_gain
         # Counting noise on the PEAK photons only: the donor already carries its own noise, and
         # adding it again would double-count what the real frame already has. c = n/sqrt(B) is
         # measured on THIS donor, so peaks are exactly as grainy as the background they sit on.
