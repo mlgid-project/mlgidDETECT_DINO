@@ -62,6 +62,37 @@ def ang_deg(u, v, rec):
     return float(np.degrees(np.arccos(np.clip(abs(float(np.dot(uc, vc))), -1.0, 1.0))))
 
 
+#: Low-index plane normals, ordered so the most common contact planes come first. In the crystal
+#: basis an integer triple is read as hkl -- a PLANE NORMAL -- because `to_cartesian` maps it
+#: through the RECIPROCAL basis. Multiples are omitted: (002) is parallel to (001) and adds
+#: nothing. The {111} family has four members distinct up to sign, which is why the natural list
+#: is 13 long; `--k-orient` caps it, so k_orient=12 drops the last one, (-1,1,1).
+LOW_INDEX_HKL = [(0, 0, 1), (0, 1, 0), (1, 0, 0),
+                 (1, 1, 0), (1, -1, 0), (1, 0, 1), (1, 0, -1), (0, 1, 1), (0, 1, -1),
+                 (1, 1, 1), (1, -1, 1), (1, 1, -1), (-1, 1, 1)]
+
+
+def hkl_vectors(k, rec, hkl=None):
+    """The first k low-index plane normals that are physically distinct for THIS cell.
+
+    The same hkl list produces different physical angles in different cells: in some monoclinic
+    cells (001) and (101) come out nearly parallel, in others they are far apart. The 15 deg
+    separation test is therefore still needed -- without it a cell can contribute two entries that
+    are the same texture twice. Cells where several low-index normals coincide simply yield fewer
+    than k entries, so the per-CIF count is not constant, unlike the random path.
+    """
+    vs = []
+    for u in (hkl or LOW_INDEX_HKL):
+        v = np.asarray(u, float)
+        if to_cartesian(v, rec)[2] < 0:      # upper hemisphere in REAL space, as for random axes
+            v = -v
+        if all(ang_deg(v, w, rec) > 15.0 for w in vs):
+            vs.append(v)
+        if len(vs) >= k:
+            break
+    return vs
+
+
 def orientation_vectors(k, rng, rec):
     """k random fiber axes as crystal-basis directions, physically well separated."""
     vs, tries = [], 0
@@ -89,7 +120,7 @@ def _init_worker():
 
 def _simulate_cif(job):
     """One CIF -> (entries, errors). Runs in a worker; must not raise."""
-    path, k_orient, seed, powder_banned, orient_banned = job
+    path, k_orient, seed, powder_banned, orient_banned, orient_mode = job
     name = os.path.basename(path)
     from pygidsim.giwaxs_sim import GIWAXSFromCif
     entries, errors = [], []
@@ -117,7 +148,9 @@ def _simulate_cif(job):
             errors.append([name, 'powder: ' + repr(e)[:80]])
 
     rng = np.random.default_rng(seed)
-    for v in orientation_vectors(k_orient, rng, rec):
+    axes = (hkl_vectors(k_orient, rec) if orient_mode == 'hkl'
+            else orientation_vectors(k_orient, rng, rec))
+    for v in axes:
         if any(ang_deg(v, b, rec) < ORIENT_MARGIN_DEG for b in orient_banned):
             continue
         try:
@@ -166,6 +199,9 @@ def main():
     ap.add_argument('--cif-dir', required=True)
     ap.add_argument('--out', required=True, help='output .npz (manifest written alongside)')
     ap.add_argument('--k-orient', type=int, default=8)
+    ap.add_argument('--orient-mode', default='random', choices=['random', 'hkl'],
+                    help="'random' = random fiber axes (the original bank); "
+                         "'hkl' = fixed low-index plane normals, see LOW_INDEX_HKL")
     ap.add_argument('--limit', type=int, default=0,
                     help='use only N CIFs, sampled at random (smoke / distribution gate)')
     ap.add_argument('--seed', type=int, default=0, help='sampling seed for --limit')
@@ -191,7 +227,8 @@ def main():
           f'{sum(len(v) for v in orient_excl.values())} oriented on {len(orient_excl)} CIFs')
 
     jobs = [(os.path.join(args.cif_dir, n), args.k_orient, i,
-             n in powder_excl, orient_excl.get(n, [])) for i, n in enumerate(names)]
+             n in powder_excl, orient_excl.get(n, []), args.orient_mode)
+            for i, n in enumerate(names)]
 
     q_all, chi_all, i_all = [], [], []
     starts, counts, kinds, cifs, metas = [], [], [], [], []
@@ -227,6 +264,9 @@ def main():
     n_pow = kinds.count('powder')
     manifest = dict(cif_dir=args.cif_dir, n_cifs=len(names), n_entries=len(starts),
                     n_powder=n_pow, n_oriented=len(starts) - n_pow, k_orient=args.k_orient,
+                    orient_mode=args.orient_mode,
+                    hkl_list=([list(h) for h in LOW_INDEX_HKL[:args.k_orient]]
+                              if args.orient_mode == 'hkl' else None),
                     orient_margin_deg=ORIENT_MARGIN_DEG, q_xy_max=Q_XY_MAX, q_z_max=Q_Z_MAX,
                     top_peaks=TOP_PEAKS, exclusions_applied=not args.no_exclusions,
                     n_sim_errors=len(errors), entries=metas, errors=errors[:2000])
