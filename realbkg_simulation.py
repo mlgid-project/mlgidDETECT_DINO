@@ -225,6 +225,28 @@ class RealBkgSimulation:
         return float(np.median(out)) if out else 0.0
 
     # ------------------------------------------------------------------ peaks
+    @staticmethod
+    def _pick(I, k, n_bright=5, rng=np.random):
+        """k reflections drawn at RANDOM from the entry, not the k brightest.
+
+        Taking the top k collapses the frame's intensity range: measured over 3,000 oriented
+        entries, the brightest 8 span 0.53 decades at the median and the brightest 60 span 1.15,
+        while the entry's stored list spans 1.61 and real labelled peaks span 2.7 (organic) to 3.6
+        (41). Sampling across the whole list instead lets one frame carry both ends of the
+        structure's own distribution, which is the point -- the ratios stay exactly the physics',
+        only which subset is shown changes.
+
+        One of the `n_bright` brightest is always forced in, so no frame ends up made entirely of
+        faint reflections and every frame has a proper bright peak to anchor it.
+        """
+        n = len(I)
+        k = min(k, n)
+        idx = rng.choice(n, size=k, replace=False)
+        bright = np.argsort(-I)[:min(n_bright, n)]
+        if not np.intersect1d(idx, bright).size:
+            idx[rng.randint(k)] = bright[rng.randint(len(bright))]
+        return idx
+
     def _draw_peaks(self, qmax):
         xs, ys, ii, rg = [], [], [], []
         for _ in range(random.randint(*self.n_oriented)):
@@ -236,7 +258,8 @@ class RealBkgSimulation:
                 continue
             q, chi, I = q[v], chi[v], I[v]
             k = min(len(q), random.randint(*self.spots_cap))
-            top = np.argsort(-I)[:k]
+            top = self._pick(I, k)
+            k = len(top)
             xs.append(q[top]/qmax*WIDTH); ys.append(chi[top]/90.0*HEIGHT)
             ii.append(I[top]);            rg.append(np.zeros(k, bool))
         if random.random() < self.p_ring:
@@ -248,7 +271,8 @@ class RealBkgSimulation:
                     continue
                 q, I = q[v], I[v]
                 k = min(len(q), random.randint(*self.rings_cap))
-                top = np.argsort(-I)[:k]
+                top = self._pick(I, k)
+                k = len(top)
                 xs.append(q[top]/qmax*WIDTH); ys.append(np.full(k, HEIGHT/2.0))
                 ii.append(I[top]);            rg.append(np.ones(k, bool))
         if not xs:

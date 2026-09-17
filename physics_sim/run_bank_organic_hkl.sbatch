@@ -3,7 +3,7 @@
 #SBATCH --partition=cpu-galvani
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=160G
-#SBATCH --time=20:00:00
+#SBATCH --time=24:00:00
 #SBATCH --output=/mnt/lustre/work/schreiber/szb389/datasets/cif_library_organic/bank_hkl-%j.out
 #
 # The organic peak bank again, but with FIXED LOW-INDEX hkl fibre axes instead of random ones.
@@ -25,9 +25,16 @@
 # and in some of them two low-index normals nearly coincide. Measured on 39 CIFs: 37 keep all 12,
 # one keeps 9, one keeps 7, mean 11.79. So entries per CIF vary, unlike the random path's flat 8.
 #
+# ALSO: TOP_PEAKS is now 2000, i.e. effectively no cap -- the old 200 truncated 98% of entries and
+# was the binding limit on how much intensity range a frame could show (2.14 decades at the median
+# against 5.89 for the full list, and 2.7-3.6 for real labelled peaks). Which of those reflections
+# a frame actually uses is decided at draw time, not here.
+#
 # Expect roughly 60k * (1 powder + ~11.8 oriented) ~ 775k entries against the random bank's
-# 526,131, and correspondingly longer: the random build took 6-8 h at 9 giwaxs_sim calls per CIF,
-# this one makes 13, so 9-12 h. The 20 h limit is slack, not an estimate.
+# 526,131, each holding ~700 reflections against ~187, so ~540M peaks and ~3.5 GB. Runtime: the
+# random build took 6-8 h at 9 giwaxs_sim calls per CIF, this one makes 13, so 9-12 h of
+# simulation; the wider store adds concatenate and compression time at the end, call it 10-14 h
+# overall. The 24 h limit is slack, not an estimate.
 #
 # This does NOT replace bank_organic.npz. Both stay on disk so the two can be A/B'd with
 # everything else held fixed.

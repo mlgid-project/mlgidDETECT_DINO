@@ -56,9 +56,12 @@ def build_pool(n, seed, disjoint=True, donors=None):
     so the n backgrounds have no source frame in common.
     """
     from realbkg_sim.mosaic_background import MosaicBackground
+    from realbkg_sim.detector_masks import MaskBank
     from realbkg_simulation import RealBkgSimulation as RB
     mb = MosaicBackground(seed=seed, **({'accepted': donors} if donors else {}))
     groups = mb.exposure_partition(n) if disjoint else None
+    # a DIFFERENT detector geometry per review frame, so a small file still shows the spread
+    mkb = MaskBank(seed=seed)
     info = []
     qsrc = None
     mm = os.path.join(os.environ.get('GIWAXS_WORK', '/mnt/lustre/work/schreiber/szb389'),
@@ -68,23 +71,32 @@ def build_pool(n, seed, disjoint=True, donors=None):
     bkg, msk, noi, cof, qmx = [], [], [], [], []
     for i in range(n):
         g = groups[i % len(groups)] if groups else None
-        b, m = mb.background(pool=g)
+        # the mask comes first and carries the geometry: a real detector mask AND a freshly
+        # generated missing wedge. Its q_max is the frame's q_max.
+        mkb.rng = np.random.default_rng(seed + 1000*i)
+        j = i % len(mkb.masks)
+        md = dict(mkb.meta[j])
+        md['alpha_i_deg'] = float(mkb.rng.uniform(*mkb.alpha_i))
+        from realbkg_sim.detector_masks import missing_wedge
+        mk = mkb.masks[j] & missing_wedge(md['q_max'], md['energy_keV'], md['alpha_i_deg'])
+        b, m = mb.background(pool=g, mask=mk)
         nz = RB._noise_map(b.astype(np.float64), m)
         bkg.append(b.astype(np.float32)); msk.append(m)
         noi.append(nz.astype(np.float32))
         cof.append((nz/np.sqrt(np.maximum(cv2.GaussianBlur(b, (0, 0), 16.0), 1e-6))).astype(np.float32))
-        # q_max is not defined by a mosaic; take a real polar frame's so peak positions map the
-        # same way they do in the evaluation data
-        qmx.append(float(qsrc[i % len(qsrc)]) if qsrc is not None and len(qsrc) else 4.45)
+        qmx.append(float(md['q_max']))
         if groups is not None:
-            info.append(dict(donor_ids=[int(mb.rows[j].get('id', j)) for j in g],
-                             donor_samples=sorted({mb.rows[j].get('sample', '?') for j in g}),
-                             level_counts=float(np.median(mb.med[g]))))
+            info.append(dict(donor_ids=[int(mb.rows[k].get('id', k)) for k in g],
+                             donor_samples=sorted({mb.rows[k].get('sample', '?') for k in g}),
+                             level_counts=float(np.median(mb.med[g])), mask=md))
             print(f'  mosaic {i+1}/{n} from {len(g)} donors @ '
-                  f'{info[-1]["level_counts"]:.0f} cts  ids {info[-1]["donor_ids"]}', flush=True)
+                  f'{info[-1]["level_counts"]:.0f} cts | mask {md["id"]} '
+                  f'q_max {md["q_max"]:.2f} a_i {md["alpha_i_deg"]:.2f} deg '
+                  f'valid {m.mean()*100:.0f}%', flush=True)
         else:
-            info.append(dict(donor_ids=[], donor_samples=[], level_counts=float(np.median(b[m]))))
-            print(f'  mosaic {i+1}/{n}', flush=True)
+            info.append(dict(donor_ids=[], donor_samples=[],
+                             level_counts=float(np.median(b[m])), mask=md))
+            print(f'  mosaic {i+1}/{n} | mask {md["id"]}', flush=True)
     return ((np.stack(bkg), np.stack(msk), np.stack(noi), np.stack(cof),
              np.asarray(qmx, np.float32)), info)
 

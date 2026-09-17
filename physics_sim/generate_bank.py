@@ -36,7 +36,21 @@ import numpy as np
 Q_XY_MAX = 3.5
 Q_Z_MAX = 3.5
 ORIENT_MARGIN_DEG = 10.0
-TOP_PEAKS = 200          # keep at most this many peaks per entry (by intensity)
+#: Keep at most this many reflections per entry, by intensity. 2000 is effectively NO cap: over 56
+#: CIFs re-simulated without one, the full list after the q and positivity cuts runs min 199,
+#: p50 578, p90 1161, max 1962, and 98% of entries hold more than the old 200.
+#:
+#: The old 200 was the binding constraint on how much intensity range a frame could show. Decades
+#: spanned by the brightest k, same entries:
+#:      k       200    500   1000   2000/all
+#:      p50    2.14   3.66   5.54   5.89
+#: against 2.7 decades for real labelled peaks on the organic set and 3.6 on the 41 set. Note the
+#: curve cannot be extrapolated from the top of the list: the trend over k = 8..200 is a steady
+#: +0.22 decades per doubling, which predicts ~2.1 at k=1000 and is wrong by more than three
+#: decades. The faint tail is far steeper than the bright end suggests.
+#:
+#: Storage goes with the mean count, ~700 against ~187 now, so roughly 3.7x: ~3.5 GB npz.
+TOP_PEAKS = 2000
 MIN_PEAKS = 3            # drop entries with fewer visible peaks
 MIN_Q = 0.05
 
