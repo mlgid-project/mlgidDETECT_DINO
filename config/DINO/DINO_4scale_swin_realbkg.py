@@ -65,3 +65,11 @@ realbkg_intensity_decades = (3.0, 7.3010)   # 1e3 to 2e7, the range the two
 # 'fitted': the old path -- keeps only the ORDERING and redraws values from the
 #          lognormal fitted to real labelled peaks (amp/local-noise).
 realbkg_amplitude_mode = 'pygid'
+
+# DETECTOR MASKS. Real converted masks (10 geometries: Eiger2 CdTe 4M, Eiger2 4M, Eiger 4M at
+# ID10/P08/ID13, 0.099-0.629 m, 15-25 keV) combined per frame with a freshly generated GIWAXS
+# missing wedge at a random incidence angle. The mask carries the frame's q_max, because its gaps
+# sit at the q they do because of that geometry. Three of the thirteen delivered geometries are
+# left out -- see KEEP_DEFAULT in realbkg_sim/detector_masks.py for why.
+realbkg_mask_bank = True
+realbkg_mask_keep = 'default'

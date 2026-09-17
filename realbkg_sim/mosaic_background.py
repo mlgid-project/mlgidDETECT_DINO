@@ -362,8 +362,14 @@ class MosaicBackground:
         return np.maximum(e/max(m, 1e-6), 1e-3).astype(np.float32)
 
     # ------------------------------------------------------------- background
-    def background(self, level=None, pool=None):
-        """-> (bkg float32 (512,1024) in counts, mask bool). Random crop of a fresh canvas."""
+    def background(self, level=None, pool=None, mask=None):
+        """-> (bkg float32 (512,1024) in counts, mask bool). Random crop of a fresh canvas.
+
+        `mask` lets the caller supply the detector mask instead of drawing one from the old polar
+        bank -- see realbkg_sim/detector_masks.py, which combines a real converted detector mask
+        with a freshly generated missing wedge. The mosaic only needs a mask at all because it has
+        no geometry of its own.
+        """
         cv = self.canvas_image(pool=pool)
         H, W = cv.shape
         r = int(self.rng.integers(0, max(H - HEIGHT, 1)))
@@ -379,10 +385,12 @@ class MosaicBackground:
             # allows at that brightness, and the reverse for the other direction.
             level = float(getattr(self, '_target', self.med[self.rng.integers(len(self.med))]))
         bkg = (patch*self._envelope()*level).astype(np.float32)
-        if self.masks is not None and len(self.masks):
-            mask = np.asarray(self.masks[self.rng.integers(len(self.masks))], bool)
-        else:
-            mask = np.ones((HEIGHT, WIDTH), bool)
+        if mask is None:
+            if self.masks is not None and len(self.masks):
+                mask = np.asarray(self.masks[self.rng.integers(len(self.masks))], bool)
+            else:
+                mask = np.ones((HEIGHT, WIDTH), bool)
+        mask = np.asarray(mask, bool)
         return np.where(mask, np.maximum(bkg, 0), 0).astype(np.float32), mask
 
 

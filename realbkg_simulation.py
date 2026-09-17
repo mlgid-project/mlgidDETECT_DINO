@@ -58,7 +58,8 @@ class RealBkgSimulation:
                  voigt_eta=(0.6, 1.0), voigt_cut=3.0, donor_keep_frac=0.40,
                  elongate=None, max_donors=None,
                  mosaic=False, mosaic_pool=48, mosaic_refresh=64, mosaic_seed=None,
-                 intensity_decades=None, amplitude_mode='fitted'):
+                 intensity_decades=None, amplitude_mode='fitted',
+                 mask_bank=True, mask_keep='default'):
         from physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -82,6 +83,7 @@ class RealBkgSimulation:
         self.last_gain = 1.0
         self.next_intensity_target = None   # set to force one frame's peak scale, else drawn
         self.amplitude_mode = str(amplitude_mode)
+        self.mask_bank, self.mask_keep = bool(mask_bank), mask_keep
         self._frames_made = 0
         if mosaic:
             self._load_mosaic_donors(mosaic_pool, mosaic_seed)
@@ -97,12 +99,20 @@ class RealBkgSimulation:
         land on. Both are measured on THIS background, exactly as for a real donor -- the mosaic is
         made of real detector pixels, so its noise is real detector noise and nothing is assumed.
         """
-        b, m = self._mb.background(pool=pool)
+        # The mask is drawn FIRST and carries the geometry: a real converted detector mask AND a
+        # freshly generated missing wedge at a random incidence angle. Its q_max is then the
+        # frame's q_max -- the mask's gaps sit where they do because of that geometry, so a
+        # borrowed q axis would put them at the wrong q relative to the peaks.
+        if self._masks is not None:
+            m, md = self._masks.draw()
+            qm = float(md['q_max'])
+        else:
+            m, md, qm = None, {}, None
+        b, m = self._mb.background(pool=pool, mask=m)
         nz = self._noise_map(b.astype(np.float64), m)
         cf = nz/np.sqrt(np.maximum(cv2.GaussianBlur(b, (0, 0), 16.0), 1e-6))
-        # A mosaic has no geometry of its own, so q_max is borrowed from a real polar frame; that
-        # only fixes where peaks land in q, which must match the evaluation data's convention.
-        qm = float(self._qsrc[np.random.randint(len(self._qsrc))]) if len(self._qsrc) else 4.45
+        if qm is None:
+            qm = float(self._qsrc[np.random.randint(len(self._qsrc))]) if len(self._qsrc) else 4.45
         return b.astype(np.float32), m, nz.astype(np.float32), cf.astype(np.float32), qm
 
     def _load_mosaic_donors(self, n_pool, seed):
@@ -114,6 +124,10 @@ class RealBkgSimulation:
         """
         from realbkg_sim.mosaic_background import MosaicBackground
         self._mb = MosaicBackground(seed=seed)
+        self._masks = None
+        if self.mask_bank:
+            from realbkg_sim.detector_masks import MaskBank
+            self._masks = MaskBank(seed=seed, keep=self.mask_keep)
         qp = os.path.join(os.environ.get('GIWAXS_WORK', '/mnt/lustre/work/schreiber/szb389'),
                           'datasets/realbkg_donors_mm/qmax.npy')
         self._qsrc = np.load(qp) if os.path.exists(qp) else np.array([], np.float32)

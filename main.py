@@ -156,7 +156,9 @@ class SimulationDataset(torch.utils.data.Dataset):
                 #backgrounds new every time. Set realbkg_mosaic_seed only to reproduce a run.
                 mosaic_seed=getattr(args, 'realbkg_mosaic_seed', None),
                 intensity_decades=getattr(args, 'realbkg_intensity_decades', None),
-                amplitude_mode=getattr(args, 'realbkg_amplitude_mode', 'fitted'))
+                amplitude_mode=getattr(args, 'realbkg_amplitude_mode', 'fitted'),
+                mask_bank=bool(getattr(args, 'realbkg_mask_bank', True)),
+                mask_keep=getattr(args, 'realbkg_mask_keep', 'default'))
             src = ('fresh mosaics of reviewed peak-free frames'
                    if getattr(args, 'realbkg_mosaic', False) else args.realbkg_donor_path)
             print(f"[sim] real-background sim ON -- image source is {src}", flush=True)
