@@ -57,7 +57,9 @@ realbkg_mosaic_refresh = 64    # rebuild one pool slot every N simulated frames 
 # the boxes are unchanged, and the contrast chain is gain-invariant up to HE quantisation
 # (measured: mean |diff| 3e-7, max 0.0078 = two of 255 levels). It only makes the RAW frames read
 # in realistic units. Set to None to keep raw frames in donor counts.
-realbkg_intensity_decades = (3.0, 6.4771)   # 1e3 to 3e6
+realbkg_intensity_decades = (3.0, 7.3010)   # 1e3 to 2e7, the range the two
+#   validation sets actually occupy: highest fitted peak height per frame runs
+#   3.0e3 to 5.1e7 on 41.h5 and 2.3e3 to 1.4e6 on organic_labeled.h5.
 # 'pygid': peak amplitude = pygidSIM's normalised intensity x one per-frame scale,
 #          so the physics' relative intensities are preserved exactly.
 # 'fitted': the old path -- keeps only the ORDERING and redraws values from the

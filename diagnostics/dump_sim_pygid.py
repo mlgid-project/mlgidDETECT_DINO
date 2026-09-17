@@ -52,7 +52,12 @@ def polar_to_reciprocal(polar, n):
     r_max = float(np.hypot(n - 1, n - 1))
     col = (r / r_max * (WIDTH - 1)).astype(np.float32)
     row = (phi / (np.pi / 2) * (HEIGHT - 1)).astype(np.float32)
-    return cv2.remap(polar.astype(np.float32), col, row, cv2.INTER_CUBIC,
+    # INTER_LINEAR, not INTER_CUBIC. The cubic kernel has negative side lobes and undershoots at
+    # a sharp step; the mask edge is a step from full intensity straight to 0, so the wedge came
+    # out lined with negative pixels -- 0.15-1.6% of the frame, reaching -5.1e6 on a 2e7 frame,
+    # scaling with brightness. The polar frame itself has min exactly 0. Linear cannot overshoot,
+    # and measured on the same frames it gives min 0.
+    return cv2.remap(polar.astype(np.float32), col, row, cv2.INTER_LINEAR,
                      borderMode=cv2.BORDER_CONSTANT, borderValue=0.0)
 
 
