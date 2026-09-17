@@ -39,3 +39,13 @@ realbkg_donor_path = '/mnt/lustre/work/schreiber/szb389/datasets/sim_background_
 realbkg_stats_path = '/mnt/lustre/work/schreiber/szb389/datasets/sim_real_stats.npz'
 realbkg_n_oriented = (1, 3)
 realbkg_p_ring     = 0.15
+
+# MOSAIC BACKGROUNDS. With this on, `realbkg_donor_path` is not read at all. Every background is
+# assembled from tiles of the 90 reviewed peak-free bare-silicon Lambda frames
+# (tmp_diag/sim2/donors_final.json), built fresh at run start and continuously refreshed, so no
+# two runs share background pixels in the same arrangement and nothing is cached between them.
+# The old bank is kept only as the source of the smooth radial envelope and the detector masks,
+# where its unremoved peaks cannot survive (sigma 64 blur / pure geometry).
+realbkg_mosaic         = True
+realbkg_mosaic_pool    = 48    # backgrounds held in memory at once
+realbkg_mosaic_refresh = 64    # rebuild one pool slot every N simulated frames (~15 ms/frame)

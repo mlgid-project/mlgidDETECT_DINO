@@ -5,10 +5,17 @@ Same layout as the ground-truth set (`organic_labeled.h5`): `data/img_gid_q` plu
 tooling and the GT boxes draw. `entry/polar/*` additionally carries the LOSSLESS polar frame the
 simulator actually built, before any contrast step.
 
-BACKGROUNDS come from `realbkg_sim.mosaic_background`, i.e. tiles of 64 bare-silicon Lambda
-modules that never contained diffraction, reassembled per frame. This replaces the old donor bank,
-where every frame carried real peaks that suppression had failed to remove and that therefore
-trained the detector to call peaks background.
+BACKGROUNDS come from `realbkg_sim.mosaic_background`, i.e. tiles of the 90 reviewed bare-silicon
+Lambda frames that never contained diffraction, reassembled per frame. This replaces the old donor
+bank, where every frame carried real peaks that suppression had failed to remove and that
+therefore trained the detector to call peaks background.
+
+BACKGROUND DIVERSITY IS FORCED HERE, HARDER THAN IN TRAINING. The donors are sorted by count rate
+and cut into as many DISJOINT groups as there are frames, and each frame's background is
+mosaicked from its own group only. No two frames in this file share a single source pixel, so
+anything that looks alike across frames is the simulator, not a repeated donor. Training does the
+opposite on purpose -- it wants the widest tile pool it can get -- so this file is a strict
+worst-case view of how varied the backgrounds can be, not the typical one.
 
 PEAK DIVERSITY is stratified rather than left to chance: the frames cycle through sparse, medium
 and crowded spot counts, with and without powder rings, so a reviewer sees the range the simulator
@@ -42,11 +49,17 @@ STRATA = [((1, 1), 0.0, 'sparse spots'),
           ((3, 3), 1.0, 'rings + crowded spots')]
 
 
-def build_pool(n, seed):
-    """Pre-generate n mosaic backgrounds with the per-donor quantities simulate_img expects."""
+def build_pool(n, seed, disjoint=True, donors=None):
+    """Pre-generate n mosaic backgrounds with the per-donor quantities simulate_img expects.
+
+    With `disjoint`, background i is cut only from donor group i of an exposure-sorted partition,
+    so the n backgrounds have no source frame in common.
+    """
     from realbkg_sim.mosaic_background import MosaicBackground
     from realbkg_simulation import RealBkgSimulation as RB
-    mb = MosaicBackground(seed=seed)
+    mb = MosaicBackground(seed=seed, **({'accepted': donors} if donors else {}))
+    groups = mb.exposure_partition(n) if disjoint else None
+    info = []
     qsrc = None
     mm = os.path.join(os.environ.get('GIWAXS_WORK', '/mnt/lustre/work/schreiber/szb389'),
                       'datasets/realbkg_donors_mm/qmax.npy')
@@ -54,7 +67,8 @@ def build_pool(n, seed):
         qsrc = np.load(mm)
     bkg, msk, noi, cof, qmx = [], [], [], [], []
     for i in range(n):
-        b, m = mb.background()
+        g = groups[i % len(groups)] if groups else None
+        b, m = mb.background(pool=g)
         nz = RB._noise_map(b.astype(np.float64), m)
         bkg.append(b.astype(np.float32)); msk.append(m)
         noi.append(nz.astype(np.float32))
@@ -62,19 +76,29 @@ def build_pool(n, seed):
         # q_max is not defined by a mosaic; take a real polar frame's so peak positions map the
         # same way they do in the evaluation data
         qmx.append(float(qsrc[i % len(qsrc)]) if qsrc is not None and len(qsrc) else 4.45)
-        if (i+1) % 5 == 0:
+        if groups is not None:
+            info.append(dict(donor_ids=[int(mb.rows[j].get('id', j)) for j in g],
+                             donor_samples=sorted({mb.rows[j].get('sample', '?') for j in g}),
+                             level_counts=float(np.median(mb.med[g]))))
+            print(f'  mosaic {i+1}/{n} from {len(g)} donors @ '
+                  f'{info[-1]["level_counts"]:.0f} cts  ids {info[-1]["donor_ids"]}', flush=True)
+        else:
+            info.append(dict(donor_ids=[], donor_samples=[], level_counts=float(np.median(b[m]))))
             print(f'  mosaic {i+1}/{n}', flush=True)
-    return (np.stack(bkg), np.stack(msk), np.stack(noi), np.stack(cof),
-            np.asarray(qmx, np.float32))
+    return ((np.stack(bkg), np.stack(msk), np.stack(noi), np.stack(cof),
+             np.asarray(qmx, np.float32)), info)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--frames', type=int, default=24)
-    ap.add_argument('--pool', type=int, default=24)
+    ap.add_argument('--frames', type=int, default=20)
+    ap.add_argument('--pool', type=int, default=0, help='0 = one background per frame')
+    ap.add_argument('--shared-pool', action='store_true',
+                    help='let frames share backgrounds, as training does')
     ap.add_argument('--n', type=int, default=1024)
     ap.add_argument('--config', default='config/DINO/DINO_4scale_swin_realbkg.py')
     ap.add_argument('--out', default='/mnt/lustre/work/schreiber/szb389/datasets/mosaicsim_raw.h5')
+    ap.add_argument('--donors', default=None, help='override the donor json')
     ap.add_argument('--seed', type=int, default=0)
     a = ap.parse_args()
 
@@ -91,8 +115,10 @@ def main():
     sc.a_coef, sc.w_coef = (getattr(cfg, 'box_coef_override', None) or (2.80, 1.30))
     print(f'box convention: a_coef (chi) = {sc.a_coef}, w_coef (q) = {sc.w_coef}')
 
-    print(f'building {a.pool} mosaic backgrounds...', flush=True)
-    pool = build_pool(a.pool, a.seed)
+    npool = a.pool or a.frames
+    print(f'building {npool} mosaic backgrounds '
+          f'({"shared" if a.shared_pool else "one disjoint donor group each"})...', flush=True)
+    pool, pinfo = build_pool(npool, a.seed, disjoint=not a.shared_pool, donors=a.donors)
 
     # install the mosaic pool in place of the donor bank; simulate_img is untouched
     _ld = RealBkgSimulation._load_donors
@@ -149,6 +175,11 @@ def main():
     while len(frames) < a.frames:
         n_or, p_ring, label = STRATA[len(frames) % len(STRATA)]
         sim.n_oriented, sim.p_ring = n_or, p_ring
+        k = len(frames) % npool
+        if not a.shared_pool:
+            # hand the simulator a pool of exactly ONE background, so frame k is guaranteed to be
+            # built on donor group k rather than on whatever the RNG happens to pick
+            sim.bkg, sim.mask, sim.noise, sim.coef, sim.qmax = [x[k:k+1] for x in pool]
         snap.clear()
         r = sim.simulate_img()
         if r is None:
@@ -158,6 +189,7 @@ def main():
         c = snap['cand']; j = match(boxes, is_ring, c)
         frames.append(dict(pol=snap['total'].astype(np.float32), mask=snap['mask'].astype(bool),
                            boxes=boxes, is_ring=is_ring, qmax=snap['qmax'], label=label,
+                           bkg=pinfo[k] if not a.shared_pool else dict(donor_ids=[]),
                            amp=c['amp'][j].astype(np.float32), s_q=c['s_q'][j].astype(np.float32),
                            s_c=c['s_c'][j].astype(np.float32)))
         f = frames[-1]
@@ -214,7 +246,7 @@ def main():
                 'resampling and loses the high-q wedge; entry/polar/image is lossless.'))
             pr.create_dataset('settings', data=json.dumps(dict(
                 stratum=fr['label'], seed=a.seed, n=n, q_max=qmax,
-                a_coef=sc.a_coef, w_coef=sc.w_coef)))
+                a_coef=sc.a_coef, w_coef=sc.w_coef, background=fr['bkg'])))
 
     nb = np.array([len(x['boxes']) for x in frames])
     nr = np.array([int(x['is_ring'].sum()) for x in frames])

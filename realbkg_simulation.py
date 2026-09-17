@@ -36,6 +36,7 @@ KNOWN GAPS, both open and both measured (see the notebook's section 6):
     carry a faint unremoved real feature with no box on it -- an unlabelled positive.
 """
 import math
+import os
 import random
 
 import cv2
@@ -55,7 +56,8 @@ class RealBkgSimulation:
                  n_oriented=(1, 3), p_ring=0.15, n_powder=(1, 1),
                  contrast_min=1.5, snr_min=6.0, ring_iou_max=0.10,
                  voigt_eta=(0.6, 1.0), voigt_cut=3.0, donor_keep_frac=0.40,
-                 elongate=None, max_donors=None):
+                 elongate=None, max_donors=None,
+                 mosaic=False, mosaic_pool=48, mosaic_refresh=64, mosaic_seed=None):
         from physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -73,7 +75,63 @@ class RealBkgSimulation:
                                       unify_contrast=True)
         S = np.load(stats_path)
         self.R = {k: (float(S[k]) if S[k].ndim == 0 else S[k]) for k in S.files}
-        self._load_donors(donor_path, donor_keep_frac, max_donors)
+        self.mosaic_refresh = int(mosaic_refresh)
+        self._frames_made = 0
+        if mosaic:
+            self._load_mosaic_donors(mosaic_pool, mosaic_seed)
+        else:
+            self._load_donors(donor_path, donor_keep_frac, max_donors)
+
+    # ------------------------------------------------------------------ mosaic
+    def _mosaic_entry(self, pool=None):
+        """One mosaic background plus the per-donor quantities `simulate_img` needs.
+
+        `noise` is the local fluctuation amplitude measured on the background itself, and `coef`
+        turns that into a sqrt(I) law so peak photons get the same graininess as the pixels they
+        land on. Both are measured on THIS background, exactly as for a real donor -- the mosaic is
+        made of real detector pixels, so its noise is real detector noise and nothing is assumed.
+        """
+        b, m = self._mb.background(pool=pool)
+        nz = self._noise_map(b.astype(np.float64), m)
+        cf = nz/np.sqrt(np.maximum(cv2.GaussianBlur(b, (0, 0), 16.0), 1e-6))
+        # A mosaic has no geometry of its own, so q_max is borrowed from a real polar frame; that
+        # only fixes where peaks land in q, which must match the evaluation data's convention.
+        qm = float(self._qsrc[np.random.randint(len(self._qsrc))]) if len(self._qsrc) else 4.45
+        return b.astype(np.float32), m, nz.astype(np.float32), cf.astype(np.float32), qm
+
+    def _load_mosaic_donors(self, n_pool, seed):
+        """Build a FRESH pool of mosaic backgrounds for this run.
+
+        Nothing is read from a pre-built bank. Every run re-cuts the 90 clean donor frames into
+        new tiles and new canvases, so no two runs -- and, with `mosaic_refresh`, no two parts of
+        the same run -- train on the same background pixels in the same arrangement.
+        """
+        from realbkg_sim.mosaic_background import MosaicBackground
+        self._mb = MosaicBackground(seed=seed)
+        qp = os.path.join(os.environ.get('GIWAXS_WORK', '/mnt/lustre/work/schreiber/szb389'),
+                          'datasets/realbkg_donors_mm/qmax.npy')
+        self._qsrc = np.load(qp) if os.path.exists(qp) else np.array([], np.float32)
+        e = [self._mosaic_entry() for _ in range(int(n_pool))]
+        self.bkg = np.stack([x[0] for x in e])
+        self.mask = np.stack([x[1] for x in e])
+        self.noise = np.stack([x[2] for x in e])
+        self.coef = np.stack([x[3] for x in e])
+        self.qmax = np.asarray([x[4] for x in e], np.float32)
+        self.meta = [dict(source='mosaic') for _ in e]
+        print(f"[realbkg] mosaic mode: {len(self.bkg)} fresh backgrounds from "
+              f"{len(self._mb.frames)} clean donor frames, one slot replaced every "
+              f"{self.mosaic_refresh} frames", flush=True)
+
+    def _refresh_mosaic_slot(self, d):
+        """Replace one pool slot with a newly assembled mosaic.
+
+        A fixed pool of N backgrounds would be reused 500k/N times even though the tiles behind it
+        are unlimited. Rebuilding one slot every `mosaic_refresh` frames costs ~1 s spread over
+        that many frames (~15 ms/frame against ~300 ms of simulation) and means the pool is fully
+        turned over every N*refresh frames, thousands of times across a full run.
+        """
+        b, m, nz, cf, qm = self._mosaic_entry()
+        self.bkg[d], self.mask[d], self.noise[d], self.coef[d], self.qmax[d] = b, m, nz, cf, qm
 
     # ------------------------------------------------------------------ donors
     def _load_donors(self, path, keep_frac, max_donors):
@@ -293,6 +351,10 @@ class RealBkgSimulation:
     # ------------------------------------------------------------------ frame
     def simulate_img(self):
         d = np.random.randint(len(self.bkg))
+        if getattr(self, '_mb', None) is not None and self.mosaic_refresh > 0:
+            self._frames_made += 1
+            if self._frames_made % self.mosaic_refresh == 0:
+                self._refresh_mosaic_slot(d)
         bkg = self.bkg[d].astype(np.float64); mask = self.mask[d]
         noise = self.noise[d].astype(np.float64); coef = self.coef[d].astype(np.float64)
         qmax = float(self.qmax[d])

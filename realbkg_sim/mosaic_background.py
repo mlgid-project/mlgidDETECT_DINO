@@ -1,9 +1,23 @@
 """Build simulator backgrounds by mosaicking real feature-free detector frames.
 
-WHY A MOSAIC. The donor pool is small -- 64 accepted bare-silicon Lambda modules from two DESY P03
-beamtimes -- and a 500k-image training set would reuse each one ~7,800 times. Cutting every donor
-into tiles and reassembling a fresh canvas per frame turns 64 frames into effectively unlimited
-variety while every pixel stays a real detector measurement.
+WHY A MOSAIC. The donor pool is small -- 90 bare-silicon Lambda modules from two DESY P03
+beamtimes, all that survived the reviewer's pass over 212 candidates -- and a 500k-image training
+set would reuse each one ~5,500 times. Cutting every donor into tiles and reassembling a FRESH
+canvas per frame turns 90 frames into effectively unlimited variety while every pixel stays a real
+detector measurement. Nothing is cached: `background()` builds a new canvas every call, so two
+training runs never see the same background twice even at the same seed offset.
+
+WHICH DONORS. `donors_final.json`, the 90 frames left after the reviewer looked at all 212
+delivered candidates as numbered contact sheets and removed:
+  * frames containing the direct beam and beamstop (a hard localised feature a mosaic would
+    transplant into the middle of an otherwise empty frame),
+  * frames with visible diffraction arcs that the flat_dyn screen had let through,
+  * every ESRF ID10 Eiger frame (IDs 108-211) and both PerkinElmer frames: the ID10 set carries a
+    distinct ring across the whole beamtime, and mixing 75/200 um detectors into one canvas mixes
+    two different noise textures as well.
+The survivors are therefore ONE detector (Lambda, 55 um), one material (bare Si), one facility.
+That is a deliberate narrowing: uniform texture beats variety we cannot vouch for. If the ID10
+frames are ever wanted back, they are still in `master_donors.json` under their IDs.
 
 The donors carry no diffraction at all, which is the whole point: the previous bank removed peaks
 from frames that had them and always left residue, so every frame trained the detector to call
@@ -57,6 +71,7 @@ MASKS come from the old polar bank, because a mosaic has no detector geometry of
 polar frames have a characteristic masked high-q wedge. A mask is pure geometry, so it carries
 none of the peak contamination that made that bank unusable as an image source.
 """
+import hashlib
 import json
 import os
 
@@ -65,9 +80,101 @@ import numpy as np
 
 HEIGHT, WIDTH = 512, 1024
 WORK = os.environ.get('GIWAXS_WORK', '/mnt/lustre/work/schreiber/szb389')
-ACCEPTED = f'{WORK}/tmp_diag/sim2/accepted_donors.json'
-BATCH = f'{WORK}/datasets/raw_backgrounds/batch1'
+ACCEPTED = f'{WORK}/tmp_diag/sim2/donors_final.json'
+BATCH = f'{WORK}/datasets/raw_backgrounds/batch2'
 MASK_BANK = f'{WORK}/datasets/realbkg_donors_mm/mask.npy'
+CACHE = f'{WORK}/tmp_diag/sim2/donor_cache_repaired.npz'
+
+
+def _resolve(row, batch):
+    """Locate a donor frame on disk. Delivered batches nest differently, so try every layout."""
+    if row.get('path') and os.path.exists(row['path']):
+        return row['path']
+    base = row.get('base', batch)
+    for p in (os.path.join(base, row.get('group', ''), 'raw', row['raw_file']),
+              os.path.join(base, 'raw', row['raw_file']),
+              os.path.join(base, row['raw_file']),
+              os.path.join(batch, 'raw', row['raw_file'])):
+        if p and os.path.exists(p):
+            return p
+    return None
+
+
+def repair_lines(img, mask, sig=32.0, lim=(0.5, 2.0)):
+    """Flatten out per-column and per-row gain anomalies in a donor frame.
+
+    WHY THIS IS NOT COSMETIC. A Lambda module has dead and low-gain COLUMNS -- chip boundaries,
+    individual bad channels. A tile keeps its orientation when it is laid into the mosaic, and the
+    mosaic's x axis is q while its y axis is chi, so a donor COLUMN becomes a line of constant q
+    running the full height of the frame. That is precisely the signature of a powder ring. The
+    first 20-frame review file had several of them, thin and black, running through the image with
+    no box on them -- an unlabelled ring-shaped feature, the exact failure the whole background
+    rebuild exists to avoid.
+
+    The fix is a flat field, not interpolation: each column is divided by its own median relative
+    to a smooth version of the median profile, which corrects the LEVEL while leaving that
+    column's own photon noise intact. Interpolating from neighbours would instead copy a
+    neighbour's noise and leave a visibly smoother line. A column too far gone to rescale
+    (dead, or more than 2x hot) is marked invalid instead, so no tile will ever include it.
+    """
+    out = np.array(img, np.float32, copy=True)
+    bad = ~mask
+    for axis in (0, 1):
+        v = np.where(mask, out, np.nan)
+        prof = np.nanmedian(v, axis=axis)
+        good = np.isfinite(prof) & (prof > 0)
+        if good.sum() < 16:
+            continue
+        p = np.interp(np.arange(len(prof)), np.nonzero(good)[0], prof[good]).astype(np.float32)
+        sm = cv2.GaussianBlur(p.reshape(-1, 1), (0, 0), sig).ravel()
+        with np.errstate(divide='ignore', invalid='ignore'):
+            g = sm/np.where(p > 0, p, np.nan)
+        ok = np.isfinite(g) & (g > lim[0]) & (g < lim[1])
+        gg = np.where(ok, g, 1.0).astype(np.float32)
+        if axis == 0:                      # prof is per-column
+            out *= gg[None, :]
+            bad |= ~ok[None, :]
+        else:                              # prof is per-row
+            out *= gg[:, None]
+            bad |= ~ok[:, None]
+    return out, ~bad
+
+
+def repair_defects(img, mask, counts, nsig=6.0, k=5):
+    """Remove isolated bad pixels and short line defects, keeping the noise statistics.
+
+    `repair_lines` is a flat field and can only see a defect that runs the FULL height or width of
+    the frame. Most of them do not: a dead or hot run covering part of a column is invisible to a
+    per-column median over 516 rows, and the first screened tiles still showed one-pixel white and
+    black verticals from donors 16, 23, 54 and 89. In the mosaic those become lines of constant q
+    -- false rings -- so they have to go.
+
+    A 5x5 median is immune to any line up to two pixels wide (at most 10 of its 25 samples sit on
+    the line), so it is a clean reference for what the pixel SHOULD read. A pixel more than `nsig`
+    Poisson sigmas away from it is replaced by that reference plus freshly drawn noise of the
+    right amplitude -- not by the reference itself, which would leave a visibly smooth line where
+    the defect was. `counts` is the frame's median in counts, which is what converts the
+    median-normalised values here into a photon count and therefore into a sigma.
+    """
+    from scipy.ndimage import median_filter
+    ref = median_filter(np.where(mask, img, np.nan_to_num(np.nanmedian(np.where(mask, img, np.nan)))),
+                        size=k, mode='nearest').astype(np.float32)
+    sig = np.sqrt(np.maximum(ref, 0.0)/max(float(counts), 1e-6)).astype(np.float32)
+    bad = mask & (np.abs(img - ref) > nsig*np.maximum(sig, 1e-6))
+    out = np.where(bad, ref + np.random.standard_normal(img.shape).astype(np.float32)*sig, img)
+    return out.astype(np.float32), bad
+
+
+def tile_structure(t, sig=8.0):
+    """How much of a flattened tile is structure rather than noise: std(blur)/std.
+
+    Detector noise is nearly white, so blurring at sigma 8 all but removes it; a shadow edge, a
+    module border or a gain step survives. Measured over 3,963 random tiles of the 90 donors the
+    distribution is p50 0.055, p90 0.118, p95 0.155, p99 0.597 -- a tight noise-only core with a
+    thin tail of genuinely structured tiles, which is what the tail is for.
+    """
+    b = cv2.GaussianBlur(t, (0, 0), float(sig))
+    return float(b.std()/max(t.std(), 1e-9))
 
 
 def _feather(h, w, v):
@@ -86,16 +193,38 @@ class MosaicBackground:
 
     def __init__(self, accepted=ACCEPTED, batch=BATCH, mask_bank=MASK_BANK,
                  tile=128, overlap=16, canvas=(768, 1536), q_locked=False, seed=None,
-                 flatten_sigma=24):
+                 flatten_sigma=24, struct_max=0.12, cache=CACHE):
         self.tile, self.overlap, self.canvas, self.q_locked = tile, overlap, canvas, q_locked
         self.flatten_sigma = flatten_sigma
+        self.struct_max = float(struct_max)
         self.rng = np.random.default_rng(seed)
-        self.frames, self.med = [], []
+        self.frames, self.med, self.rows = [], [], []
         rows = json.load(open(accepted))
+        # Reading and repairing 90 raw frames off lustre costs ~4 minutes, which would be paid at
+        # the start of every run. The REPAIRED donor pixels are a deterministic function of the
+        # donor list, so caching them changes nothing about freshness -- the variety comes from
+        # re-tiling them, which still happens per frame.
+        # hashlib, not hash(): str hashing is salted per process, so hash() would never match
+        sig = '%d:%s' % (len(rows), hashlib.md5(
+            '\n'.join(r['raw_file'] for r in rows).encode()).hexdigest()[:12])
+        if cache and os.path.exists(cache):
+            z = np.load(cache, allow_pickle=True)
+            if str(z['sig']) == sig:
+                self.frames = list(z['frames'])
+                self.med = z['med']
+                self.rows = list(z['rows'])
+                self.med = np.asarray(self.med, np.float32)
+                self.masks = np.load(mask_bank, mmap_mode='r') if os.path.exists(mask_bank) else None
+                env = os.path.join(os.path.dirname(mask_bank), 'bkg.npy')
+                self.env_bank = np.load(env, mmap_mode='r') if os.path.exists(env) else None
+                self._pool = self._target = None
+                print(f'[mosaic] {len(self.frames)} donor frames from cache, tile {tile} '
+                      f'overlap {overlap}, canvas {canvas}, struct_max {struct_max}', flush=True)
+                return
         from realbkg_sim.review_raw_backgrounds import read_frame, valid_mask, _as_index
         for r in rows:
-            p = os.path.join(batch, 'raw', r['raw_file'])
-            if not os.path.exists(p):
+            p = _resolve(r, batch)
+            if p is None:
                 continue
             img, _ = read_frame(p, _as_index(r.get('frame')))
             if img is None:
@@ -103,19 +232,30 @@ class MosaicBackground:
             m = valid_mask(img)
             if m.mean() < 0.5:
                 continue
+            img, m = repair_lines(img, m)
+            if m.mean() < 0.5:
+                continue
             med = float(np.median(img[m]))
             if med <= 0:
                 continue
+            img, _bad = repair_defects(img/med, m, med)
+            img = img*med
             # store as relative texture; NaN marks pixels that must never be sampled
             f = np.where(m, img/med, np.nan).astype(np.float32)
             self.frames.append(f)
             self.med.append(med)
+            self.rows.append(r)
         if not self.frames:
             raise RuntimeError(f'no usable donor frames from {accepted}')
+        self.med = np.asarray(self.med, np.float32)
+        if cache:
+            os.makedirs(os.path.dirname(cache), exist_ok=True)
+            np.savez(cache, frames=np.stack(self.frames), med=self.med,
+                     rows=np.array(self.rows, dtype=object), sig=sig)
+            print(f'[mosaic] cached repaired donors -> {cache}', flush=True)
         self.masks = np.load(mask_bank, mmap_mode='r') if os.path.exists(mask_bank) else None
         env = os.path.join(os.path.dirname(mask_bank), 'bkg.npy')
         self.env_bank = np.load(env, mmap_mode='r') if os.path.exists(env) else None
-        self.med = np.asarray(self.med, np.float32)
         self._pool = None                       # per-canvas subset of donors, set in canvas_image
         self._target = None                     # and the level that subset's noise belongs to
         print(f'[mosaic] {len(self.frames)} donor frames, tile {tile} overlap {overlap}, '
@@ -127,7 +267,7 @@ class MosaicBackground:
         T = self.tile
         pool = self._pool if self._pool is not None and len(self._pool) else range(len(self.frames))
         pool = list(pool)
-        for _ in range(60):
+        for _ in range(200):
             f = self.frames[pool[self.rng.integers(len(pool))]]
             h, w = f.shape
             if h <= T or w <= T:
@@ -148,16 +288,46 @@ class MosaicBackground:
                 # dividing by a smooth field averages nothing, unlike the wide alpha blend which
                 # suppressed noise to 0.58 of Poisson.
                 sm = cv2.GaussianBlur(t, (0, 0), float(self.flatten_sigma))
-                if float(np.median(sm)) > 1e-6:
-                    return (t/np.maximum(sm, 1e-6)).astype(np.float32)
+                if float(np.median(sm)) <= 1e-6:
+                    continue
+                q = (t/np.maximum(sm, 1e-6)).astype(np.float32)
+                # Reject a tile that is still STRUCTURED after flattening. Screening donors frame
+                # by frame is not enough: a frame can be flat overall and still have a shadow
+                # edge, a module border or a gain step somewhere in it, and a 128 px tile that
+                # lands there gets transplanted whole -- the first review file had hard-edged
+                # rectangles from exactly this. sigma 24 flattening removes a gradient, not an
+                # edge of comparable width, so the edge has to be screened out instead.
+                if tile_structure(q) < self.struct_max:
+                    return q
         return np.ones((T, T), np.float32)
 
-    def canvas_image(self):
-        """Assemble the full mosaic canvas (relative units, median ~1)."""
-        # one exposure class per canvas, so tile-to-tile noise character matches
-        target = float(self.med[self.rng.integers(len(self.med))])
-        self._pool = np.nonzero((self.med >= target/2) & (self.med <= target*2))[0]
-        self._target = target       # the level this canvas's NOISE corresponds to
+    def exposure_partition(self, k):
+        """Split the donors into k DISJOINT groups, each internally exposure-matched.
+
+        For a review set we want to be able to say that no two frames share a single source pixel.
+        Sorting by count rate and cutting the sorted list into k contiguous chunks does both jobs
+        at once: the chunks are disjoint by construction, and because they are contiguous in level
+        each chunk is automatically narrow in exposure, which is the property the tile pool needs
+        anyway. Training does NOT use this -- there the pool should be as wide as possible.
+        """
+        order = np.argsort(self.med)
+        return [np.sort(c) for c in np.array_split(order, k) if len(c)]
+
+    def canvas_image(self, pool=None):
+        """Assemble the full mosaic canvas (relative units, median ~1).
+
+        `pool` restricts the tiles to those donor indices, which is how a review set forces every
+        frame onto its own donors. Left None, the canvas picks an exposure class itself.
+        """
+        if pool is not None and len(pool):
+            pool = np.asarray(pool, int)
+            self._pool = pool
+            self._target = float(np.median(self.med[pool]))
+        else:
+            # one exposure class per canvas, so tile-to-tile noise character matches
+            target = float(self.med[self.rng.integers(len(self.med))])
+            self._pool = np.nonzero((self.med >= target/2) & (self.med <= target*2))[0]
+            self._target = target   # the level this canvas's NOISE corresponds to
         H, W = self.canvas
         T, V = self.tile, self.overlap
         step = T - V
@@ -192,9 +362,9 @@ class MosaicBackground:
         return np.maximum(e/max(m, 1e-6), 1e-3).astype(np.float32)
 
     # ------------------------------------------------------------- background
-    def background(self, level=None):
+    def background(self, level=None, pool=None):
         """-> (bkg float32 (512,1024) in counts, mask bool). Random crop of a fresh canvas."""
-        cv = self.canvas_image()
+        cv = self.canvas_image(pool=pool)
         H, W = cv.shape
         r = int(self.rng.integers(0, max(H - HEIGHT, 1)))
         c = int(self.rng.integers(0, max(W - WIDTH, 1)))
