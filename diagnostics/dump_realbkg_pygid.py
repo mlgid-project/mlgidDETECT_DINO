@@ -69,6 +69,13 @@ def main():
     ap.add_argument('--config', default='config/DINO/DINO_4scale_swin_realbkg.py')
     ap.add_argument('--out', default='/mnt/lustre/work/schreiber/szb389/datasets/realbkgsim_raw_20.h5')
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--bank', default=None,
+                    help='override cfg.physics_bank_path, e.g. the hkl bank')
+    ap.add_argument('--spots-cap', default=None, metavar='MIN,MAX',
+                    help='override SPOTS_PER_ORIENTED, the reflections drawn per oriented entry')
+    ap.add_argument('--recipe', default=None, choices=['diverse'],
+                    help='steer each frame so the set spans rings/segments and sparse/crowded, '
+                         'instead of letting ten random draws cluster near the middle')
     ap.add_argument('--donor-cache',
                     default='/mnt/lustre/work/schreiber/szb389/datasets/realbkg_donors_selected.h5')
     args = ap.parse_args()
@@ -94,12 +101,34 @@ def main():
     if os.path.exists(args.donor_cache):
         RealBkgSimulation._load_donors = lambda self, *a, **k: load_into(self, args.donor_cache)
 
+    bank = args.bank or cfg.physics_bank_path
+    # Mirror main.py's construction. mosaic / amplitude_mode / intensity_decades / mask_bank were
+    # previously left at their constructor defaults here, so this script dumped a DIFFERENT
+    # simulator from the one training runs -- modelled donor frames and 'fitted' amplitudes
+    # instead of fresh mosaics and pygidSIM's own intensities.
     sim = RealBkgSimulation(
-        bank_path=cfg.physics_bank_path, donor_path=cfg.realbkg_donor_path,
+        bank_path=bank, donor_path=cfg.realbkg_donor_path,
         stats_path=cfg.realbkg_stats_path, sim_config=sc, device='cpu',
         n_oriented=tuple(getattr(cfg, 'realbkg_n_oriented', (1, 3))),
-        p_ring=float(getattr(cfg, 'realbkg_p_ring', 0.15)))
+        p_ring=float(getattr(cfg, 'realbkg_p_ring', 0.15)),
+        mosaic=bool(getattr(cfg, 'realbkg_mosaic', False)),
+        mosaic_pool=int(getattr(cfg, 'realbkg_mosaic_pool', 48)),
+        mosaic_refresh=int(getattr(cfg, 'realbkg_mosaic_refresh', 64)),
+        mosaic_seed=getattr(cfg, 'realbkg_mosaic_seed', None),
+        intensity_decades=getattr(cfg, 'realbkg_intensity_decades', None),
+        amplitude_mode=getattr(cfg, 'realbkg_amplitude_mode', 'fitted'),
+        mask_bank=bool(getattr(cfg, 'realbkg_mask_bank', True)),
+        mask_keep=getattr(cfg, 'realbkg_mask_keep', 'default'))
     RealBkgSimulation._load_donors = _ld
+    if args.spots_cap:
+        sim.spots_cap = tuple(int(v) for v in args.spots_cap.split(','))
+    print(f'bank         : {bank}')
+    print(f'spots/entry  : {sim.spots_cap}   oriented/frame {sim.n_oriented}   '
+          f'p_ring {sim.p_ring}')
+    print(f'background   : {"fresh mosaic" if getattr(cfg, "realbkg_mosaic", False) else cfg.realbkg_donor_path}'
+          f'   amplitude {getattr(cfg, "realbkg_amplitude_mode", "fitted")}')
+    print(f'label gate   : contrast_min {sim.contrast_min}  snr_min {sim.snr_min}  '
+          f'ring_iou_max {sim.ring_iou_max}')
 
     # ---- intercept the pre-contrast frame and the per-peak parameters -------------
     snap = {}
@@ -138,8 +167,36 @@ def main():
             j = int(np.argmin(d)); out[i] = j; used[j] = True
         return out
 
+    # Each row steers ONE frame: (label, oriented entries, spots per entry, powder entries).
+    # The convention under test is spots ~ U(2,200) over 1-3 oriented entries; these sub-ranges
+    # sample that interval deliberately, because ten free draws cluster near its middle and the
+    # point of this file is to see the ends. n_oriented 0 is OUTSIDE the convention and appears
+    # twice on purpose, to show rings with nothing else in the frame.
+    # NOTE a floor of 3: simulate_img() rejects any frame with fewer than 3 peaks inside the
+    # detector mask, so '2' in the convention can never actually reach the image.
+    RECIPE = [
+        ('segments, very few',  (1, 1), (3,     8), (0, 0)),
+        ('segments, few',       (1, 2), (8,    25), (0, 0)),
+        ('segments, medium',    (2, 2), (30,   70), (0, 0)),
+        ('segments, many',      (3, 3), (120, 200), (0, 0)),
+        ('rings only',          (0, 0), (2,   200), (1, 1)),
+        ('rings only, crowded', (0, 0), (2,   200), (2, 3)),
+        ('both, few segments',  (1, 1), (3,    10), (1, 1)),
+        ('both, medium',        (2, 2), (25,   60), (1, 1)),
+        ('both, many segments', (3, 3), (120, 200), (1, 2)),
+        ('both, everything',    (3, 3), (150, 200), (2, 3)),
+    ]
+    base = (sim.n_oriented, sim.spots_cap, sim.n_powder, sim.p_ring)
+
     frames = []
     while len(frames) < args.frames:
+        if args.recipe == 'diverse':
+            lab, no, sp, npw = RECIPE[len(frames) % len(RECIPE)]
+            sim.n_oriented, sim.spots_cap, sim.n_powder = no, sp, npw
+            sim.p_ring = 1.0 if npw[1] > 0 else 0.0
+        else:
+            lab = 'unsteered'
+            sim.n_oriented, sim.spots_cap, sim.n_powder, sim.p_ring = base
         snap.clear()
         r = sim.simulate_img()
         if r is None:
@@ -152,11 +209,15 @@ def main():
         j = match(boxes, is_ring, c, sc.a_coef, sc.w_coef)
         frames.append(dict(pol=pol, mask=m, boxes=boxes, is_ring=is_ring, qmax=snap['qmax'],
                            amp=c['amp'][j].astype(np.float32), s_q=c['s_q'][j].astype(np.float32),
-                           s_c=c['s_c'][j].astype(np.float32), eta=c['eta']))
+                           s_c=c['s_c'][j].astype(np.float32), eta=c['eta'], lab=lab,
+                           n_drawn=int(len(c['x']))))
         f = frames[-1]
-        print(f"  frame {len(frames)-1:2d}: {len(boxes):3d} boxes ({int(is_ring.sum()):2d} ring) "
-              f"q_max {f['qmax']:.2f}  I range [{pol[m].min():.3g}, {pol[m].max():.3g}]  "
-              f"eta {f['eta']:.2f}", flush=True)
+        # max/median is the number that is 8 in the sim and 96-13116 in real labelled frames
+        dyn = float(pol[m].max()/max(np.median(pol[m]), 1e-12))
+        f['dyn'] = dyn
+        print(f"  frame {len(frames)-1:2d} {lab:<20s}: {len(boxes):3d} boxes "
+              f"({int(is_ring.sum()):2d} ring) of {len(c['x']):4d} drawn  q_max {f['qmax']:.2f}  "
+              f"max/median {dyn:8.1f}  I max {pol[m].max():.3g}", flush=True)
 
     RS.apply_contrast = _ac
     RealBkgSimulation._render = _render
@@ -197,6 +258,9 @@ def main():
             p.create_dataset('sigma_chi', data=fr['s_c'])
             p.attrs['shape'] = [HEIGHT, WIDTH]
             p.attrs['q_max'] = qmax
+            p.attrs['recipe'] = fr['lab']
+            p.attrs['peaks_drawn'] = fr['n_drawn']      # before the contrast/SNR label gate
+            p.attrs['dynamic_range'] = fr['dyn']        # max / median over valid pixels
             p.attrs['note'] = ('boxes are xyxy in polar pixels; x = q/q_max*1024, '
                                'y = chi/90*512. FULL box extent = coef*sigma, coef=(2.80,1.30).')
 
@@ -211,13 +275,20 @@ def main():
                 config=args.config, seed=args.seed, n=n, q_max=qmax, eta=fr['eta'],
                 a_coef=sc.a_coef, w_coef=sc.w_coef,
                 donors=cfg.realbkg_donor_path, stats=cfg.realbkg_stats_path,
-                bank=cfg.physics_bank_path)))
+                bank=bank, recipe=fr['lab'], spots_cap=list(sim.spots_cap),
+                mosaic=bool(getattr(cfg, 'realbkg_mosaic', False)),
+                amplitude_mode=getattr(cfg, 'realbkg_amplitude_mode', 'fitted'),
+                contrast_min=sim.contrast_min, snr_min=sim.snr_min,
+                ring_iou_max=sim.ring_iou_max)))
 
     nb = np.array([len(x['boxes']) for x in frames])
     nr = np.array([int(x['is_ring'].sum()) for x in frames])
     print(f"\nwrote {args.out}  ({os.path.getsize(args.out)/1e6:.1f} MB)")
+    dy = np.array([x['dyn'] for x in frames])
     print(f"  {len(frames)} frames | boxes/frame min {nb.min()} p50 {int(np.median(nb))} max {nb.max()}"
           f" | rings/frame min {nr.min()} p50 {int(np.median(nr))} max {nr.max()}")
+    print(f"  dynamic range (max/median) min {dy.min():.1f} p50 {np.median(dy):.1f} "
+          f"max {dy.max():.1f}   [real labelled frames: 96 to 13116]")
     print(f"  entry_simNN/polar/image  = raw polar frame (lossless, pre-contrast)")
     print(f"  entry_simNN/data/img_gid_q = raw reciprocal frame (lossy resampling)")
     print(f"  entry_simNN/data/analysis/frame00000/fitted_peaks = GT boxes, pygid PEAK_DTYPE")
