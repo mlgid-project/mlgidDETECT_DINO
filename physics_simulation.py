@@ -105,9 +105,27 @@ class PhysicsSimulation(object):
     Default None keeps the single composition, so dino_physics4_1 / dino_physics5_1 are unchanged.
     """
 
+    @staticmethod
+    def _load_bank(path):
+        """Read the .npz whole, then inflate from memory.
+
+        np.load() hands the file to zipfile, which reads it in small chunks. Over Lustre every
+        chunk is a network round trip: measured on the 5.4 GB hkl bank, 1.1 MB/s, i.e. 80 minutes
+        to open it, against 467 MB/s for the same file read in 16 MB blocks. Slurping it first
+        costs one buffer the size of the file, transiently, and turns the open into seconds.
+
+        The real fix is to store the arrays uncompressed as .npy and mmap them, which would also
+        drop the ~7 GB of resident tensors below to near zero per worker. That changes the bank
+        format, so it is not done here.
+        """
+        import io
+        with open(path, 'rb', buffering=0) as fh:
+            buf = fh.read()
+        return np.load(io.BytesIO(buf), allow_pickle=False)
+
     def __init__(self, bank_path, sim_config=None, device='cuda', unify_contrast=False,
                  n_powder=None, real_tail_only=False, frame_types=None):
-        d = np.load(bank_path, allow_pickle=False)
+        d = self._load_bank(bank_path)
         self.q = torch.from_numpy(d['q']).float()
         self.chi = torch.from_numpy(d['chi']).float()
         self.intensity = torch.from_numpy(d['intensity']).float()
