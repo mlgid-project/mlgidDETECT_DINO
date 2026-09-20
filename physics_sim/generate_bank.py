@@ -213,6 +213,12 @@ def main():
     ap.add_argument('--cif-dir', required=True)
     ap.add_argument('--out', required=True, help='output .npz (manifest written alongside)')
     ap.add_argument('--k-orient', type=int, default=8)
+    ap.add_argument('--shard', default=None, metavar='I/N',
+                    help="process only CIFs with index %% N == I, e.g. --shard 0/6. Each shard "
+                         "writes its own npz; merge_bank_shards.py concatenates them. Sharding "
+                         "exists for the SCHEDULER: a 25 h job waits behind whole-node "
+                         "reservations, six 5 h jobs backfill into the gaps, and a failure costs "
+                         "one shard instead of the whole build.")
     ap.add_argument('--orient-mode', default='random', choices=['random', 'hkl'],
                     help="'random' = random fiber axes (the original bank); "
                          "'hkl' = fixed low-index plane normals, see LOW_INDEX_HKL")
@@ -235,6 +241,13 @@ def main():
         # be a biased slice of the library rather than a picture of its distribution
         idx = np.random.default_rng(args.seed).choice(len(names), args.limit, replace=False)
         names = [names[i] for i in sorted(idx)]
+    shard_i = shard_n = None
+    if args.shard:
+        shard_i, shard_n = (int(x) for x in args.shard.split('/'))
+        # stride, not a contiguous block: CIFs are sorted by COD id and cost varies with cell
+        # size, so contiguous blocks would finish at very different times
+        names = names[shard_i::shard_n]
+        print(f'[bank] SHARD {shard_i}/{shard_n}: {len(names)} CIFs')
     powder_excl, orient_excl = load_exclusions(args.exclusions)
     print(f'[bank] {len(names)} CIFs from {args.cif_dir}, {args.jobs} workers')
     print(f'[bank] exclusions: {len(powder_excl)} powder, '
@@ -282,6 +295,7 @@ def main():
                     hkl_list=([list(h) for h in LOW_INDEX_HKL[:args.k_orient]]
                               if args.orient_mode == 'hkl' else None),
                     orient_margin_deg=ORIENT_MARGIN_DEG, q_xy_max=Q_XY_MAX, q_z_max=Q_Z_MAX,
+                    shard=args.shard,
                     top_peaks=TOP_PEAKS, exclusions_applied=not args.no_exclusions,
                     n_sim_errors=len(errors), entries=metas, errors=errors[:2000])
     with open(os.path.splitext(args.out)[0] + '_manifest.json', 'w') as f:

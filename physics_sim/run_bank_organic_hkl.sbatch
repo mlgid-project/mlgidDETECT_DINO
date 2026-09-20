@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=bank_hkl
 #SBATCH --partition=cpu-galvani
-#SBATCH --cpus-per-task=32
-#SBATCH --mem=160G
-#SBATCH --time=24:00:00
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=120G
+#SBATCH --time=30:00:00
 #SBATCH --output=/mnt/lustre/work/schreiber/szb389/datasets/cif_library_organic/bank_hkl-%j.out
 #
 # The organic peak bank again, but with FIXED LOW-INDEX hkl fibre axes instead of random ones.
@@ -34,7 +34,9 @@
 # 526,131, each holding ~700 reflections against ~187, so ~540M peaks and ~3.5 GB. Runtime: the
 # random build took 6-8 h at 9 giwaxs_sim calls per CIF, this one makes 13, so 9-12 h of
 # simulation; the wider store adds concatenate and compression time at the end, call it 10-14 h
-# overall. The 24 h limit is slack, not an estimate.
+# overall AT 32 CORES. This runs on 16, to backfill into a half-empty node rather than wait for a
+# whole one: cpu-galvani had 17 cores idle against a 3-day queue for 32, so ~20-26 h starting now
+# beats 10-14 h starting in 63 h. The 30 h limit is slack, not an estimate.
 #
 # This does NOT replace bank_organic.npz. Both stay on disk so the two can be A/B'd with
 # everything else held fixed.
@@ -53,5 +55,5 @@ srun "$PY" physics_sim/generate_bank.py \
     --out     "$LIB/bank/bank_organic_hkl.npz" \
     --orient-mode hkl \
     --k-orient 12 \
-    --jobs 32 \
+    --jobs 16 \
     --no-exclusions
