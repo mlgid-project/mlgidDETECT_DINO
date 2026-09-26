@@ -558,6 +558,18 @@ def main(args):
 
     print("Start training")
     start_time = time.time()
+    #BUILT ONCE, NOT PER EPOCH. This used to sit inside the loop, so every epoch reconstructed
+    #the simulator: re-reading the peak bank from disk and rebuilding the mosaic pool. That cost
+    #seconds with the 0.9 GB bank and nobody noticed; the 5.4 GB hkl bank makes it ~60 s, which
+    #over 500 epochs is hours of a 72 h budget spent re-reading one unchanging file.
+    #
+    #Safe because __getitem__ ignores its index and draws every image from the module-level RNG,
+    #which the per-epoch reseed below still controls -- the dataset object holds the bank and the
+    #background pool, which are data, not RNG state. Backgrounds stay fresh: mosaic_refresh
+    #replaces one pool slot every 64 frames, so at 1000 images/epoch the 48-slot pool turns over
+    #about every three epochs, which is what the config header already describes ("built fresh at
+    #run start and continuously refreshed").
+    dataset = SimulationDataset(args)
     for epoch in range(args.start_epoch, args.epochs):
         #RESEED PER EPOCH. The seeds are set once, at process start (seed = args.seed + rank,
         #above), and resume restores model/optimizer/lr_scheduler/epoch but NO RNG state. With
@@ -573,7 +585,6 @@ def main(args):
         np.random.seed(_epoch_seed % (2 ** 32))
         torch.manual_seed(_epoch_seed)
 
-        dataset = SimulationDataset(args)
         data_loader = torch.utils.data.DataLoader(
             dataset,
             batch_size=args.batch_size,

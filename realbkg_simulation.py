@@ -299,11 +299,23 @@ class RealBkgSimulation:
         x, y = np.concatenate(xs), np.concatenate(ys)
         I, r = np.maximum(np.concatenate(ii), 1e-12), np.concatenate(rg)
         if self.max_peaks is not None and len(x) > self.max_peaks:
-            # Subsample UNIFORMLY, not by intensity: keeping the brightest would bias the frame
-            # toward its own top end and undo what _pick's random draw is for. Real labelled
-            # frames top out at 168 boxes (organic) and 65 (41), so a few hundred is already
-            # past anything measured.
-            k = np.random.choice(len(x), self.max_peaks, replace=False)
+            # Trim the SEGMENTS only, and keep every ring. Subsampling the combined pool diluted
+            # rings in proportion: measured over 120 frames, a 0.30 ring rate drawing ~8 rings
+            # came out as 1.31 rings/frame with 75% of frames ring-free, instead of the 2.40 and
+            # 70% the rate implies, because segments outnumber rings ~70:1 going into the cap.
+            # Rings are at most rings_cap x n_powder (15 here), far under any sane budget, so
+            # protecting them costs the segment budget almost nothing and keeps the ring rate
+            # meaning what the config says.
+            #
+            # Within the segments, subsample UNIFORMLY rather than by intensity: keeping the
+            # brightest would bias the frame toward its own top end and undo what _pick's random
+            # draw is for. Real frames top out at 168 boxes (organic) and 65 (41).
+            seg = np.flatnonzero(~r)
+            ring = np.flatnonzero(r)
+            budget = max(self.max_peaks - len(ring), 0)
+            if len(seg) > budget:
+                seg = np.random.choice(seg, budget, replace=False)
+            k = np.concatenate([seg, ring])
             x, y, I, r = x[k], y[k], I[k], r[k]
         return x, y, I/I.max(), r
 

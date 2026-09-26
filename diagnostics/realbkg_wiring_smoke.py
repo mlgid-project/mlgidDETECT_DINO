@@ -62,8 +62,9 @@ checks = [
     ('ring_iou_max 0.10', sim.ring_iou_max == 0.10),
     ('max_peaks 200', sim.max_peaks == 200),
     ('spots_cap (2, 200)', tuple(sim.spots_cap) == (2, 200)),
-    ('rings_cap (3, 15)', tuple(sim.rings_cap) == (3, 15)),
+    ('rings_cap (1, 15)', tuple(sim.rings_cap) == (1, 15)),
     ('n_powder (1, 1)', tuple(sim.n_powder) == (1, 1)),
+    ('p_ring 0.30', sim.p_ring == 0.30),
     ('oriented entries 675474', len(sim.phys.oriented_ids) == 675474),
 ]
 bad = [n for n, ok in checks if not ok]

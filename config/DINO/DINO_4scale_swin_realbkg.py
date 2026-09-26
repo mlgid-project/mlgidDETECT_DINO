@@ -68,14 +68,31 @@ realbkg_max_peaks      = 200     # reflections DRAWN per frame, before any gate
 # to reach them from a config, so the label review ran at (2, 200) while a training run would
 # have been pinned at (8, 60) -- and the dynamic-range result depends on which is used.
 realbkg_spots_cap = (2, 200)     # reflections per ORIENTED entry   (constant was (8, 60))
-realbkg_rings_cap = (3, 15)      # rings per POWDER entry           (unchanged from the constant)
+realbkg_rings_cap = (1, 15)      # rings per POWDER entry           (constant was (3, 15))
+#   Lower bound 1, not 3: at 3 a powder entry could never produce a one- or two-ring frame, and
+#   real data has 12% of organic frames and 7% of 41 frames exactly there. Raising the ceiling is
+#   not wanted -- 15 already exceeds organic's observed max of 11.
 
-# RING RATE -- STILL OPEN, not yet set deliberately for this simulator. p_ring is the per-frame
-# probability of any rings at all and n_powder the number of powder entries when they occur, so
-# 0.15 x (1,1) x RINGS_PER_POWDER gives roughly 1.4 rings/frame. Real: organic 3.5 rings/frame,
-# 41 16.9. This is the measured organic-vs-41 lever (see the sim-ring-rate-lever note) and these
-# values are inherited defaults, not a decision.
-realbkg_p_ring     = 0.15
+# RING RATE. Set by the user 2026-09-26: rings in roughly every third frame, about 9 of them
+# when they occur (rings_cap (3,15) has mean 9), so 2.70 rings per frame averaged over all.
+#
+# Measured from the LABELS, not from model predictions -- note that sim-ring-rate-lever's 3.5 and
+# 16.9 were ssl1 predictions at score>0.3, which is the wrong quantity for setting ground truth:
+#     organic   2.12 rings/frame, 62% of frames ring-free, max 11, 63.6 segments/frame
+#     41        8.85 rings/frame,  0% ring-free,           max 31, 16.5 segments/frame
+#     this      2.40 rings/frame, 70% ring-free,           max 15  (rings_cap (1,15), mean 8)
+#
+# So this sits on ORGANIC's ring composition and does not reach 41, which never has a ring-free
+# frame. That is the same position the physics-CIF sim took, and it is why dino_physics3_2 beat
+# the baseline on organic (+0.030) and lost 0.189 on 41. Expect that split again.
+#
+# ONE KNOWN GAP left open on purpose:
+#   * rings and segments are ANTI-correlated in real frames (organic -0.48, 41 -0.25, pooled
+#     -0.40): a frame is either ring-rich and segment-poor or the reverse. Here they are drawn
+#     independently, so the sim makes frames with ~180 segments AND ~20 rings, a combination
+#     neither eval set contains. Fixing it means coupling the powder draw to the oriented draw,
+#     which is a new mechanism rather than a parameter.
+realbkg_p_ring     = 0.30
 realbkg_n_powder   = (1, 1)
 
 # MOSAIC BACKGROUNDS. With this on, `realbkg_donor_path` is not read at all. Every background is
