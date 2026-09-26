@@ -73,7 +73,15 @@ def main():
                     help='override cfg.physics_bank_path, e.g. the hkl bank')
     ap.add_argument('--spots-cap', default=None, metavar='MIN,MAX',
                     help='override SPOTS_PER_ORIENTED, the reflections drawn per oriented entry')
-    ap.add_argument('--recipe', default=None, choices=['diverse'],
+    ap.add_argument('--contrast-min', type=float, default=None)
+    ap.add_argument('--snr-min', type=float, default=None)
+    ap.add_argument('--seg-iou-max', type=float, default=None)
+    ap.add_argument('--ring-iou-max', type=float, default=None)
+    ap.add_argument('--max-peaks', type=int, default=None)
+    ap.add_argument('--unified-labels', action='store_true',
+                    help='render iff labelled: one gate governs drawing and labelling, so no '
+                         'visible peak is left without a box')
+    ap.add_argument('--recipe', default=None, choices=['diverse', 'convention'],
                     help='steer each frame so the set spans rings/segments and sparse/crowded, '
                          'instead of letting ten random draws cluster near the middle')
     ap.add_argument('--donor-cache',
@@ -118,7 +126,11 @@ def main():
         intensity_decades=getattr(cfg, 'realbkg_intensity_decades', None),
         amplitude_mode=getattr(cfg, 'realbkg_amplitude_mode', 'fitted'),
         mask_bank=bool(getattr(cfg, 'realbkg_mask_bank', True)),
-        mask_keep=getattr(cfg, 'realbkg_mask_keep', 'default'))
+        mask_keep=getattr(cfg, 'realbkg_mask_keep', 'default'),
+        unified_labels=args.unified_labels,
+        **{k: v for k, v in dict(contrast_min=args.contrast_min, snr_min=args.snr_min,
+                                 seg_iou_max=args.seg_iou_max, ring_iou_max=args.ring_iou_max,
+                                 max_peaks=args.max_peaks).items() if v is not None})
     RealBkgSimulation._load_donors = _ld
     if args.spots_cap:
         sim.spots_cap = tuple(int(v) for v in args.spots_cap.split(','))
@@ -174,6 +186,24 @@ def main():
     # twice on purpose, to show rings with nothing else in the frame.
     # NOTE a floor of 3: simulate_img() rejects any frame with fewer than 3 peaks inside the
     # detector mask, so '2' in the convention can never actually reach the image.
+    CONVENTION_RECIPE = [
+        ('segments-verysparse', (1, 1), (3,    10), (0, 0)),
+        ('segments-sparse',     (1, 1), (10,   30), (0, 0)),
+        ('segments-light',      (1, 2), (25,   60), (0, 0)),
+        ('segments-medium',     (2, 2), (50,  100), (0, 0)),
+        ('segments-dense',      (2, 3), (100, 200), (0, 0)),
+        ('segments-max',        (3, 3), (150, 200), (0, 0)),
+        ('rings-single',        (0, 0), (2,   200), (1, 1)),
+        ('rings-few',           (0, 0), (2,   200), (2, 2)),
+        ('rings-many',          (0, 0), (2,   200), (3, 3)),
+        ('mixed-sparse',        (1, 1), (5,    15), (1, 1)),
+        ('mixed-light',         (1, 2), (20,   50), (1, 1)),
+        ('mixed-medium',        (2, 2), (40,   90), (1, 2)),
+        ('mixed-dense',         (3, 3), (100, 200), (1, 2)),
+        ('mixed-max',           (3, 3), (150, 200), (2, 3)),
+        ('ringheavy-sparse',    (1, 1), (3,    12), (2, 3)),
+        ('ringheavy-dense',     (2, 3), (80,  200), (3, 3)),
+    ]
     RECIPE = [
         ('segments, very few',  (1, 1), (3,     8), (0, 0)),
         ('segments, few',       (1, 2), (8,    25), (0, 0)),
@@ -190,8 +220,9 @@ def main():
 
     frames = []
     while len(frames) < args.frames:
-        if args.recipe == 'diverse':
-            lab, no, sp, npw = RECIPE[len(frames) % len(RECIPE)]
+        if args.recipe:
+            tbl = CONVENTION_RECIPE if args.recipe == 'convention' else RECIPE
+            lab, no, sp, npw = tbl[len(frames) % len(tbl)]
             sim.n_oriented, sim.spots_cap, sim.n_powder = no, sp, npw
             sim.p_ring = 1.0 if npw[1] > 0 else 0.0
         else:
