@@ -34,11 +34,49 @@
 _base_ = ['DINO_4scale_swin_ssl.py']
 
 use_realbkg_sim    = True
-physics_bank_path  = '/mnt/lustre/work/schreiber/szb389/datasets/cif_library_organic/bank/bank_organic.npz'
+# hkl bank, built 2026-09-20: fixed low-index fibre axes, k-orient 12, TOP_PEAKS 2000 --
+# 733,933 entries (58,459 powder / 675,474 oriented), 584,960,422 peaks, 5.38 GB. The previous
+# bank_organic.npz (random fibre axes, TOP_PEAKS 200) is still on disk beside it. NOTE this makes
+# a run incomparable to the dino_physics* arms, which is already true for other reasons.
+physics_bank_path  = '/mnt/lustre/work/schreiber/szb389/datasets/cif_library_organic/bank/bank_organic_hkl.npz'
 realbkg_donor_path = '/mnt/lustre/work/schreiber/szb389/datasets/sim_background_bank4.h5'
 realbkg_stats_path = '/mnt/lustre/work/schreiber/szb389/datasets/sim_real_stats.npz'
 realbkg_n_oriented = (1, 3)
+
+# LABELLING CONVENTION, agreed with the user 2026-09-21 after reviewing 25 frames
+# (tmp_diag/sim2/images/08_box_convention). A peak is RENDERED IF AND ONLY IF IT GETS A BOX:
+# one gate governs both, so the frame has no visible-but-unlabelled tier. Real labelled frames
+# have no such tier either (organic_labeled.h5 carries no unlabelled peaks), and the old
+# behaviour taught the model to suppress structure that looks exactly like a real peak.
+#
+# Thresholds are measured, not chosen:
+#   * real background sits at 4.1x the local noise, and real labelled peaks at median 3.1x /
+#     p10 1.5x (mlgidFIT fits of 1,926 peaks in 57 frames). So "2x the background" can only mean
+#     2x the NOISE; against the LEVEL it would be 8.2x and would reject most real labels.
+#     2.0 is still stricter than the calibrated p10 of 1.5 -- it labels conservatively on purpose.
+#   * real boxes barely overlap: organic 11 overlapping pairs in 27,734, worst IoU 0.154;
+#     41 segments 19 in 10,705, worst 0.400; 41 rings ONE pair in 2,220.
+#   * real frames carry at most 168 boxes (organic, p50 66) and 65 (41, p50 20).
+realbkg_unified_labels = True
+realbkg_contrast_min   = 2.0     # peak height / LOCAL BACKGROUND NOISE
+realbkg_snr_min        = 6.0     # matched-filter SNR; peaks are arcs, so area counts too
+realbkg_seg_iou_max    = 0.30    # segment-segment; None = the historical no-suppression
+realbkg_ring_iou_max   = 0.10    # rings, tighter: real rings essentially never overlap
+realbkg_max_peaks      = 200     # reflections DRAWN per frame, before any gate
+
+# PEAK COUNTS. Until 2026-09-26 these were module constants in physics_simulation.py with no way
+# to reach them from a config, so the label review ran at (2, 200) while a training run would
+# have been pinned at (8, 60) -- and the dynamic-range result depends on which is used.
+realbkg_spots_cap = (2, 200)     # reflections per ORIENTED entry   (constant was (8, 60))
+realbkg_rings_cap = (3, 15)      # rings per POWDER entry           (unchanged from the constant)
+
+# RING RATE -- STILL OPEN, not yet set deliberately for this simulator. p_ring is the per-frame
+# probability of any rings at all and n_powder the number of powder entries when they occur, so
+# 0.15 x (1,1) x RINGS_PER_POWDER gives roughly 1.4 rings/frame. Real: organic 3.5 rings/frame,
+# 41 16.9. This is the measured organic-vs-41 lever (see the sim-ring-rate-lever note) and these
+# values are inherited defaults, not a decision.
 realbkg_p_ring     = 0.15
+realbkg_n_powder   = (1, 1)
 
 # MOSAIC BACKGROUNDS. With this on, `realbkg_donor_path` is not read at all. Every background is
 # assembled from tiles of the 90 reviewed peak-free bare-silicon Lambda frames

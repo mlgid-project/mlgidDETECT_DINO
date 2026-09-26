@@ -158,10 +158,39 @@ class SimulationDataset(torch.utils.data.Dataset):
                 intensity_decades=getattr(args, 'realbkg_intensity_decades', None),
                 amplitude_mode=getattr(args, 'realbkg_amplitude_mode', 'fitted'),
                 mask_bank=bool(getattr(args, 'realbkg_mask_bank', True)),
-                mask_keep=getattr(args, 'realbkg_mask_keep', 'default'))
+                mask_keep=getattr(args, 'realbkg_mask_keep', 'default'),
+                #LABELLING CONVENTION (agreed 2026-09-21). unified_labels makes one gate govern
+                #drawing AND labelling, so no visible peak is left without a box and no box sits
+                #on nothing -- real labelled frames have no unlabelled-peak tier, and the old
+                #three-tier behaviour taught the model to suppress things that look real.
+                #Defaults keep every earlier run byte-identical.
+                unified_labels=bool(getattr(args, 'realbkg_unified_labels', False)),
+                contrast_min=float(getattr(args, 'realbkg_contrast_min', 1.5)),
+                snr_min=float(getattr(args, 'realbkg_snr_min', 6.0)),
+                ring_iou_max=float(getattr(args, 'realbkg_ring_iou_max', 0.10)),
+                seg_iou_max=getattr(args, 'realbkg_seg_iou_max', None),
+                max_peaks=getattr(args, 'realbkg_max_peaks', None),
+                #PEAK COUNTS. Module constants until now, so this axis could not be reached from
+                #a config at all: the label review ran at (2, 200) and training was pinned at
+                #(8, 60). None keeps the constants.
+                spots_cap=getattr(args, 'realbkg_spots_cap', None),
+                rings_cap=getattr(args, 'realbkg_rings_cap', None),
+                n_powder=tuple(getattr(args, 'realbkg_n_powder', (1, 1))))
             src = ('fresh mosaics of reviewed peak-free frames'
                    if getattr(args, 'realbkg_mosaic', False) else args.realbkg_donor_path)
             print(f"[sim] real-background sim ON -- image source is {src}", flush=True)
+            #WIRING CHECK. Every knob that used to be unreachable prints its effective value, so
+            #a run whose config keys never made it into args is visible at epoch 0 rather than
+            #after 300 epochs of the wrong simulator.
+            print(f"[sim] labels: {'render-iff-labelled' if self.realbkg.unified_labels else 'THREE-TIER (legacy)'}"
+                  f" | contrast>={self.realbkg.contrast_min} snr>={self.realbkg.snr_min}"
+                  f" | IoU seg {self.realbkg.seg_iou_max} ring {self.realbkg.ring_iou_max}"
+                  f" | max_peaks {self.realbkg.max_peaks}", flush=True)
+            print(f"[sim] counts: spots/entry {self.realbkg.spots_cap}"
+                  f" rings/entry {self.realbkg.rings_cap}"
+                  f" | oriented/frame {self.realbkg.n_oriented}"
+                  f" | p_ring {self.realbkg.p_ring} powder/frame {self.realbkg.n_powder}",
+                  flush=True)
 
     def __getitem__(self, idx):
         image = None
