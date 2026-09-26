@@ -55,6 +55,8 @@ class RealBkgSimulation:
     def __init__(self, bank_path, donor_path, stats_path, sim_config=None, device='cuda',
                  n_oriented=(1, 3), p_ring=0.15, n_powder=(1, 1),
                  contrast_min=1.5, snr_min=6.0, ring_iou_max=0.10,
+                 unified_labels=False, seg_iou_max=None, max_peaks=None,
+                 spots_cap=None, rings_cap=None,
                  voigt_eta=(0.6, 1.0), voigt_cut=3.0, donor_keep_frac=0.40,
                  elongate=None, max_donors=None,
                  mosaic=False, mosaic_pool=48, mosaic_refresh=64, mosaic_seed=None,
@@ -66,8 +68,25 @@ class RealBkgSimulation:
         self.w_coef = float(self.sim_config.w_coef)
         self.a_coef = float(self.sim_config.a_coef)
         self.n_oriented, self.p_ring, self.n_powder = n_oriented, p_ring, n_powder
-        self.spots_cap, self.rings_cap = SPOTS_PER_ORIENTED, RINGS_PER_POWDER
+        #: reflections drawn per ORIENTED entry, and rings per POWDER entry. These were module
+        #: constants in physics_simulation.py with no way to reach them from a config, so the
+        #: whole peak-count axis was unreachable from a training run: the 2026-09-21 label
+        #: review ran at (2, 200) while training was pinned at (8, 60), and the dynamic-range
+        #: result depends on which one is used.
+        self.spots_cap = tuple(spots_cap) if spots_cap else SPOTS_PER_ORIENTED
+        self.rings_cap = tuple(rings_cap) if rings_cap else RINGS_PER_POWDER
         self.contrast_min, self.snr_min, self.ring_iou_max = contrast_min, snr_min, ring_iou_max
+        #: RENDER IFF LABELLED. Off, the frame carries three tiers -- labelled, rendered but
+        #: unlabelled, and not rendered -- so a visible peak can sit in the image with no box.
+        #: Real labelled frames have no such tier (organic_labeled.h5 has no unlabelled peaks),
+        #: so that tier teaches the model to suppress peaks that look exactly like real ones.
+        #: On, one decision governs both: a peak is drawn if and only if it gets a box.
+        self.unified_labels = bool(unified_labels)
+        #: IoU ceiling for SEGMENT-SEGMENT pairs. None keeps the historical behaviour, which is
+        #: no segment suppression at all. Rings have always had one (ring_iou_max).
+        self.seg_iou_max = seg_iou_max
+        #: ceiling on reflections drawn per frame, across all entries, before any gate
+        self.max_peaks = max_peaks
         self.voigt_eta, self.voigt_cut = voigt_eta, voigt_cut
         self.elongate = elongate or dict(p_frame=0.30, p_peak=0.30, factor=(2.0, 5.0),
                                          p_chi=0.8, conserve_flux=True)
@@ -279,6 +298,13 @@ class RealBkgSimulation:
             return None
         x, y = np.concatenate(xs), np.concatenate(ys)
         I, r = np.maximum(np.concatenate(ii), 1e-12), np.concatenate(rg)
+        if self.max_peaks is not None and len(x) > self.max_peaks:
+            # Subsample UNIFORMLY, not by intensity: keeping the brightest would bias the frame
+            # toward its own top end and undo what _pick's random draw is for. Real labelled
+            # frames top out at 168 boxes (organic) and 65 (41), so a few hundred is already
+            # past anything measured.
+            k = np.random.choice(len(x), self.max_peaks, replace=False)
+            x, y, I, r = x[k], y[k], I[k], r[k]
         return x, y, I/I.max(), r
 
     def _draw_widths(self, n, is_ring):
@@ -372,10 +398,20 @@ class RealBkgSimulation:
         n_eff = np.where(is_ring, L*s_q*np.sqrt(np.pi), np.pi*s_q*np.minimum(s_c, HEIGHT))
         return contrast, contrast*np.sqrt(np.clip(n_eff, 0, None))
 
-    def _ring_nms(self, bx, rg, amp):
+    def _nms(self, bx, sel, amp, iou_max):
+        """Greedy suppression by amplitude within the subset `sel`, at `iou_max`.
+
+        Measured on the real labelled sets, this is what boxes a human actually leaves
+        overlapping. organic: 27,734 pairs, 11 overlap at all, worst 0.154. 41: 10,705 segment
+        pairs, 19 overlap, worst 0.400, and 2,220 ring pairs of which exactly ONE overlaps
+        (at 0.989, which looks like a duplicated annotation). So real boxes essentially do not
+        overlap, and rings never do.
+        """
         keep = np.ones(len(bx), bool)
-        idx = np.flatnonzero(rg)
-        if len(idx) < 2 or self.ring_iou_max >= 1.0:
+        if iou_max is None:
+            return keep
+        idx = np.flatnonzero(sel)
+        if len(idx) < 2 or iou_max >= 1.0:
             return keep
         b = bx[idx]
         x1 = np.maximum(b[:, None, 0], b[None, :, 0]); y1 = np.maximum(b[:, None, 1], b[None, :, 1])
@@ -387,10 +423,33 @@ class RealBkgSimulation:
         for n in np.argsort(-amp[idx]):
             if not alive[n]:
                 continue
-            hit = (iou[n] > self.ring_iou_max) & alive; hit[n] = False
+            hit = (iou[n] > iou_max) & alive; hit[n] = False
             alive[hit] = False
         keep[idx[~alive]] = False
         return keep
+
+    def _ring_nms(self, bx, rg, amp):
+        return self._nms(bx, rg, amp, self.ring_iou_max)
+
+    def _compose(self, bkg, peaks, mask, coef):
+        """Apply the per-frame intensity scale, add counting noise to the PEAK photons, and lay
+        the peaks on the donor background. Factored out so the unified-label path and the
+        historical path cannot drift apart."""
+        if self.amplitude_mode != 'pygid':
+            self.last_gain = 1.0
+        tgt = self.next_intensity_target
+        if self.amplitude_mode != 'pygid' and (tgt is not None
+                                               or self.intensity_decades is not None):
+            pmax = float(peaks[mask].max()) if mask.any() else 0.0
+            if pmax > 0:
+                R = float(tgt) if tgt is not None else 10.0**random.uniform(*self.intensity_decades)
+                self.last_gain = R/pmax
+                peaks = peaks*self.last_gain
+        # Counting noise on the PEAK photons only: the donor already carries its own noise, and
+        # adding it again would double-count what the real frame already has. c = n/sqrt(B) is
+        # measured on THIS donor, so peaks are exactly as grainy as the background they sit on.
+        peaks = peaks + coef*np.sqrt(np.maximum(peaks, 0))*np.random.standard_normal(peaks.shape)
+        return np.where(mask, np.maximum(bkg + peaks, 0.0), 0.0)
 
     # ------------------------------------------------------------------ frame
     def simulate_img(self):
@@ -443,6 +502,45 @@ class RealBkgSimulation:
                 amp = amp/el['f']          # an arc is the same reflection over a longer footprint
 
         eta = random.uniform(*self.voigt_eta)
+        if self.unified_labels:
+            # ONE DECISION for drawing and labelling. The gate runs BEFORE the render, so the
+            # peaks that fail it are never painted into the image at all -- there is no tier of
+            # visible-but-unlabelled structure for the model to learn to ignore.
+            #
+            # Note this also fixes the suppression path: previously _ring_nms removed a ring's
+            # BOX while the ring stayed in the image. Here suppression removes the peak.
+            con, snr = self._visibility(amp, noise[iy, ix], s_q, s_c, rg, mask, x)
+            keep = (con >= self.contrast_min) & (snr >= self.snr_min)
+            hw, hh = self.w_coef*s_q/2.0, self.a_coef*s_c/2.0
+            bx = np.stack([x-hw, y-hh, x+hw, y+hh], 1).astype(np.float32)
+            bx[rg, 1] = 0.0; bx[rg, 3] = float(HEIGHT)
+            # Clip BEFORE the overlap test, not after. Two boxes that overhang the same frame
+            # edge become more alike once clipped, so suppressing on unclipped geometry lets
+            # pairs through above the threshold -- measured, 6 pairs up to 0.479 under a 0.40
+            # cap. Clipping first makes the threshold mean what it says.
+            bx[:, 0::2] = np.clip(bx[:, 0::2], 0, WIDTH-1)
+            bx[:, 1::2] = np.clip(bx[:, 1::2], 0, HEIGHT-1)
+            keep &= self._nms(bx, rg & keep, amp, self.ring_iou_max)
+            keep &= self._nms(bx, (~rg) & keep, amp, self.seg_iou_max)
+            if keep.sum() < 3:
+                return None
+            x, y, s_q, s_c, amp, rg = (v[keep] for v in (x, y, s_q, s_c, amp, rg))
+            bx = bx[keep]
+            peaks = self._render(x, y, s_q, s_c, amp, eta)
+            total = self._compose(bkg, peaks, mask, coef)
+            ok = (bx[:, 0] < bx[:, 2]) & (bx[:, 1] < bx[:, 3])
+            bx, rgk = bx[ok], rg[ok]
+            if len(bx) == 0:
+                return None
+            img = apply_contrast(total, mask, CHAIN)
+            if not np.isfinite(img).all():
+                return None
+            dev = self.device
+            return (torch.as_tensor(img, dtype=torch.float32, device=dev),
+                    torch.as_tensor(bx, dtype=torch.float32, device=dev),
+                    torch.as_tensor(mask, device=dev),
+                    torch.as_tensor(rgk, device=dev))
+
         # Skip peaks that cannot be seen at all. `_visibility`'s contrast is amp over the local
         # noise, so amp < 0.2*noise puts the peak's BRIGHTEST pixel a fifth of a sigma above the
         # background -- nothing a render would show and nothing the gate would ever keep. Peaks
@@ -466,21 +564,7 @@ class RealBkgSimulation:
         # the same factor relative to the background -- so at a large scale a faint unlabelled
         # peak can look obvious while carrying no box. That is acceptable for LOOKING at frames
         # and is not acceptable for training; see the dynamic-range work before any run.
-        if self.amplitude_mode != 'pygid':
-            self.last_gain = 1.0
-        tgt = self.next_intensity_target
-        if self.amplitude_mode != 'pygid' and (tgt is not None
-                                               or self.intensity_decades is not None):
-            pmax = float(peaks[mask].max()) if mask.any() else 0.0
-            if pmax > 0:
-                R = float(tgt) if tgt is not None else 10.0**random.uniform(*self.intensity_decades)
-                self.last_gain = R/pmax
-                peaks = peaks*self.last_gain
-        # Counting noise on the PEAK photons only: the donor already carries its own noise, and
-        # adding it again would double-count what the real frame already has. c = n/sqrt(B) is
-        # measured on THIS donor, so peaks are exactly as grainy as the background they sit on.
-        peaks = peaks + coef*np.sqrt(np.maximum(peaks, 0))*np.random.standard_normal(peaks.shape)
-        total = np.where(mask, np.maximum(bkg + peaks, 0.0), 0.0)
+        total = self._compose(bkg, peaks, mask, coef)
 
         con, snr = self._visibility(amp, noise[iy, ix], s_q, s_c, rg, mask, x)
         keep = (con >= self.contrast_min) & (snr >= self.snr_min)
