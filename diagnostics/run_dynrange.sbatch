@@ -7,4 +7,4 @@
 #SBATCH --output=/mnt/lustre/work/schreiber/szb389/datasets/dynrange_%j.out
 set -euo pipefail
 /home/schreiber/szb389/.conda/envs/DINO_GIWAXS/bin/python -u \
-  /mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/diagnostics/realbkg_dynrange.py
+  /mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/diagnostics/realbkg_dynrange.py --config config/DINO/DINO_4scale_swin_realbkg_r2.py
