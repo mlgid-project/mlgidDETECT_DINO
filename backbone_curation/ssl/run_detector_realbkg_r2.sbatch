@@ -2,6 +2,7 @@
 #SBATCH --job-name=dino_realbkg2
 #SBATCH --partition=a100-galvani
 #SBATCH --gres=gpu:a100:1
+#SBATCH --exclude=galvani-cn205        # allocates a GPU torch cannot init (jobs 2920327, 2920328)
 #SBATCH --time=3-00:00:00              # 72h = partition max
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=64G
@@ -48,6 +49,11 @@ export PYTHONPATH=$REPO
 for f in "$BB" "$BANK" "$DONORS" "$STATS"; do
     [ -f "$f" ] || { echo "ERROR: missing $f"; exit 1; }
 done
+# Job 2920327 was allocated gres/gpu:a100=1 on galvani-cn205 and torch still raised
+# "No CUDA GPUs are available" 19 s in. Fail here instead, with the node named.
+$PY -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" \
+  || { echo "ERROR: GPU allocated but torch sees no CUDA device on $(hostname)"; exit 1; }
+
 mkdir -p "$OUT_DIR"
 [ -f "$OUT_DIR/checkpoint.pth" ] && echo "[run] resuming from $OUT_DIR/checkpoint.pth" \
   || echo "[run] fresh start (SSL backbone, 1-channel, real-background sim, batch 2, lr 4e-5)"
