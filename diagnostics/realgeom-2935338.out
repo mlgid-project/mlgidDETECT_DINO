@@ -1,0 +1,24 @@
+=== organic: 8 frames, 817 boxes, 30 rings (4%), 787 segments   [ring = height >= 70% of valid chi span]
+  ring box HEIGHT px        p10    188  p50    512  p90    512  max    512
+  valid chi span at its q   p10    115  p50    430  p90    491
+  ring height / 512         p10   0.37  p50   1.00  p90   1.00
+  ring height / valid span  p10   1.03  p50   1.14  p90   1.33
+  rings that are FULL height (>=505 px): 80.0%   >= 0.95 of valid span: 96.7%
+  GT rings a 512-px prediction CANNOT match at IoU 0.5: 16.7% of rings  =  0.6% of all boxes on this set
+  GT rings a 512-px prediction CANNOT match at IoU 0.75: 16.7% of rings  =  0.6% of all boxes on this set
+  segment box  w px         p10    5.3  p50   10.5  p90   20.0
+  segment box  h px         p10    2.2  p50    8.1  p90   28.0
+
+=== 41: 41 frames, 1680 boxes, 701 rings (42%), 979 segments   [ring = height >= 70% of valid chi span]
+  ring box HEIGHT px        p10     77  p50    446  p90    481  max    512
+  valid chi span at its q   p10     74  p50    470  p90    499
+  ring height / 512         p10   0.15  p50   0.87  p90   0.94
+  ring height / valid span  p10   0.90  p50   0.98  p90   1.03
+  rings that are FULL height (>=505 px):  0.6%   >= 0.95 of valid span: 74.9%
+  GT rings a 512-px prediction CANNOT match at IoU 0.5: 24.7% of rings  = 10.3% of all boxes on this set
+  GT rings a 512-px prediction CANNOT match at IoU 0.75: 35.5% of rings  = 14.8% of all boxes on this set
+  segment box  w px         p10    1.4  p50    4.6  p90    9.1
+  segment box  h px         p10    9.0  p50   34.2  p90  117.6
+
+SIMULATOR, for comparison: every ring box is y=0..512, i.e. height 512 and
+height/512 = 1.00 regardless of the valid chi span at that q.

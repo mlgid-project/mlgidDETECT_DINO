@@ -1,0 +1,93 @@
+######## run 1 config (spots 2-200, p_ring 0.30)
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+    25 pairs (25 draws)...
+    50 pairs (50 draws)...
+    75 pairs (75 draws)...
+   100 pairs (100 draws)...
+   125 pairs (125 draws)...
+   150 pairs (150 draws)...
+
+150 paired frames from 150 draws, config config/DINO/DINO_4scale_swin_realbkg.py
+gate: contrast>=2.0 snr>=6.0 | IoU seg 0.3 ring 0.1 | max_peaks 200
+
+FRAMES DISCARDED  (simulate_img returned None)
+  unified      0 / 150      historical    0 / 150
+  unified discards a frame the historical path keeps: 0   (its keep.sum()<3 early return)
+
+PER FRAME, 150 frames both conventions kept
+  peaks drawn inside the mask        mean   119.3  p50   118.5  min     12  max    192
+  pass the brightness gate           mean    98.0  p50   104.5  min      4  max    190
+
+  PAINTED  unified                   mean    93.7  p50    99.0  min      4  max    180
+  PAINTED  historical                mean   111.2  p50   112.0  min     10  max    192
+  BOXES    unified                   mean    93.7  p50    99.0  min      4  max    180
+  BOXES    historical                mean    98.0  p50   104.0  min      4  max    190
+
+  unlabelled-but-painted  unified    mean     0.0  p50     0.0  min      0  max      0
+  unlabelled-but-painted  historical mean    13.3  p50     4.0  min      0  max     94
+
+  historical: 14.1% of painted peaks carry NO box  (median 5.3%)
+  unified:    0.0% -- 0 by construction
+
+BOX COUNT, unified vs historical, same peaks
+  unified keeps -4.2 boxes/frame on average (-4.3%)
+  rings    unified   1.63  historical   1.63
+  segments unified  92.10  historical  96.34
+
+WHAT REMOVED THE BOXES  (mean per frame)
+  unified      gate rejects  21.24   ring NMS  0.06   segment NMS  4.24
+  historical   gate rejects  21.24   ring NMS  0.06   segment NMS  0.00
+
+CONTRAST (amp / local noise) of the peaks in the frame
+  all peaks drawn          p10     0.46  p50    79.22  p90 20429.78
+  gate-passing (labelled)  p10     6.05  p50   221.72  p90 29409.00
+  real labelled peaks      p10     1.50  p50     3.10   (measured, organic+41)
+
+######## run 2 config (spots 6-32, p_ring 1.0)
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+    25 pairs (25 draws)...
+    50 pairs (50 draws)...
+    75 pairs (75 draws)...
+   100 pairs (100 draws)...
+   125 pairs (125 draws)...
+   150 pairs (150 draws)...
+
+150 paired frames from 150 draws, config config/DINO/DINO_4scale_swin_realbkg_r2.py
+gate: contrast>=2.0 snr>=6.0 | IoU seg 0.3 ring 0.1 | max_peaks 200
+
+FRAMES DISCARDED  (simulate_img returned None)
+  unified      0 / 150      historical    0 / 150
+  unified discards a frame the historical path keeps: 0   (its keep.sum()<3 early return)
+
+PER FRAME, 150 frames both conventions kept
+  peaks drawn inside the mask        mean    30.7  p50    29.0  min     10  max     71
+  pass the brightness gate           mean    26.6  p50    25.0  min      3  max     68
+
+  PAINTED  unified                   mean    25.8  p50    24.0  min      3  max     61
+  PAINTED  historical                mean    29.2  p50    28.0  min      9  max     71
+  BOXES    unified                   mean    25.8  p50    24.0  min      3  max     61
+  BOXES    historical                mean    25.9  p50    24.0  min      3  max     65
+
+  unlabelled-but-painted  unified    mean     0.0  p50     0.0  min      0  max      0
+  unlabelled-but-painted  historical mean     3.2  p50     1.5  min      0  max     25
+
+  historical: 11.8% of painted peaks carry NO box  (median 6.1%)
+  unified:    0.0% -- 0 by construction
+
+BOX COUNT, unified vs historical, same peaks
+  unified keeps -0.1 boxes/frame on average (-0.5%)
+  rings    unified   9.21  historical   9.21
+  segments unified  16.61  historical  16.73
+
+WHAT REMOVED THE BOXES  (mean per frame)
+  unified      gate rejects   4.06   ring NMS  0.65   segment NMS  0.12
+  historical   gate rejects   4.06   ring NMS  0.65   segment NMS  0.00
+
+CONTRAST (amp / local noise) of the peaks in the frame
+  all peaks drawn          p10     0.93  p50   182.61  p90 27063.18
+  gate-passing (labelled)  p10     8.81  p50   365.44  p90 35447.27
+  real labelled peaks      p10     1.50  p50     3.10   (measured, organic+41)

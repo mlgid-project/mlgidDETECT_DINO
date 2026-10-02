@@ -1,0 +1,7 @@
+boxconv1 legacy sim, 120 frames: 2085 ring boxes, 3141 segment boxes
+  RING box height px   p10     80  p50    334  p90    511  max    511
+  ring height / 512    p10   0.16  p50   0.65  p90   1.00
+  FULL height (>=505): 27.3%
+  SEG  box height px   p10   11.0  p50   23.9  p90   52.2
+
+[exited with code 0]
