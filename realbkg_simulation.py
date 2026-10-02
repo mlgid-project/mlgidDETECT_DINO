@@ -57,6 +57,8 @@ class RealBkgSimulation:
                  contrast_min=1.5, snr_min=6.0, ring_iou_max=0.10,
                  unified_labels=False, seg_iou_max=None, max_peaks=None,
                  spots_cap=None, rings_cap=None,
+                 ring_box_from_mask=False, seg_wide_frac=0.0,
+                 seg_wide_sigma=((8.1, 0.45), (2.9, 0.45)),
                  voigt_eta=(0.6, 1.0), voigt_cut=3.0, donor_keep_frac=0.40,
                  elongate=None, max_donors=None,
                  mosaic=False, mosaic_pool=48, mosaic_refresh=64, mosaic_seed=None,
@@ -91,6 +93,28 @@ class RealBkgSimulation:
         self.elongate = elongate or dict(p_frame=0.30, p_peak=0.30, factor=(2.0, 5.0),
                                          p_chi=0.8, conserve_flux=True)
         self.sig_clip = ((0.7, 25.0), (2.0, 160.0))
+        #: RING BOX EXTENT. Off, every ring box is the full frame height. Measured on the real
+        #: labels that is right for organic (80% of its ring boxes are full height) and wrong for
+        #: 41, where only 0.6% are: 41's ring boxes track the VALID chi span at their q
+        #: (height/span p10 0.90, p50 0.98, p90 1.03) because the detector wedge leaves most
+        #: columns well short of 512 rows. A full-height box cannot be matched at IoU 0.5 against
+        #: 24.7% of 41's rings, which is 10.3% of every box on that gate. The legacy simulator
+        #: behind 0.748 on 41 did not have this: its ring boxes ran p10 80 / p50 334 / p90 511,
+        #: only 27.3% full height. On, the ring box spans the mask's valid rows at that column,
+        #: which lands at ratio 1.0 and so suits BOTH gates (organic's annotators overshoot the
+        #: span at 1.03-1.14, i.e. they round up to full height).
+        self.ring_box_from_mask = bool(ring_box_from_mask)
+        #: SEGMENT SHAPE IS BIMODAL ACROSS THE TWO GATES and the fitted width lognormal only
+        #: reproduces one mode. Measured medians: organic segments are WIDE AND SHORT
+        #: (sigma_q 8.1, sigma_chi 2.9 px, aspect 0.36), 41's are NARROW AND TALL (3.5, 12.2,
+        #: aspect 3.45). What the simulator emits is 3.81 / 19.49, aspect 5.1 -- close to 41 and
+        #: 14x too elongated for organic, so its segment box height p10 of 11.95 px sits ABOVE
+        #: organic's median of 8.1 and over 90% of simulated segments are taller than a typical
+        #: real organic peak. That gate never sees its own peak shape. This draws a share of
+        #: SEGMENTS (never rings) from the organic-like mode instead. The legacy simulator has
+        #: `seg_q_elongated_frac` for the same purpose; realbkg had no equivalent.
+        self.seg_wide_frac = float(seg_wide_frac)
+        self.seg_wide_sigma = seg_wide_sigma
 
         self.phys = PhysicsSimulation(bank_path, sim_config=self.sim_config, device=device,
                                       unify_contrast=True)
@@ -336,6 +360,17 @@ class RealBkgSimulation:
             else:
                 s_q = s_q*f
             el['f'] = f
+        if self.seg_wide_frac > 0 and random.random() < self.seg_wide_frac:
+            # The organic-like mode: wide in q, short in chi. Chosen PER FRAME, not per peak,
+            # because peak shape is a property of the sample and the detector -- organic's frames
+            # are wide-and-short throughout and 41's are narrow-and-tall throughout, and no real
+            # frame mixes the two. Keeps the same per-frame-centre x per-peak-jitter structure as
+            # the fitted draw above. Segments only: a ring's chi width is overwritten below.
+            (mq, sdq), (mc, sdc) = self.seg_wide_sigma
+            seg = ~np.asarray(is_ring, bool)
+            if seg.any():
+                s_q = np.where(seg, ln(np.log(mq), sdq)*ln(0.0, R['w_sq'], n), s_q)
+                s_c = np.where(seg, ln(np.log(mc), sdc)*ln(0.0, R['w_sc'], n), s_c)
         s_q = np.clip(s_q, *self.sig_clip[0])
         s_c = np.clip(s_c, *self.sig_clip[1])
         return s_q, np.where(is_ring, 1e4, s_c), el
@@ -400,6 +435,31 @@ class RealBkgSimulation:
             prof = eta/(1.0 + u2/ln2) + (1-eta)*torch.exp(-u2/2)
             img[r0:r1, c0:c1] += float(amp[i])*prof*torch.exp(-(u2/uc2)**2)
         return img.cpu().numpy().astype(np.float64)
+
+    def _boxes(self, x, y, s_q, s_c, rg, mask):
+        """Label boxes for every peak. Full extent is `coef * sigma` on each axis, which matches
+        the legacy simulator's `pos +- widths*coef` once its `widths` (= sigma/2) is accounted for
+        -- see MODIFICATIONS.md's box convention entry. Shared by both label paths so the ring
+        extent cannot be fixed in one and left wrong in the other.
+        """
+        hw, hh = self.w_coef*s_q/2.0, self.a_coef*s_c/2.0
+        bx = np.stack([x-hw, y-hh, x+hw, y+hh], 1).astype(np.float32)
+        if not rg.any():
+            return bx
+        if not self.ring_box_from_mask:
+            bx[rg, 1] = 0.0
+            bx[rg, 3] = float(HEIGHT)
+            return bx
+        # A ring spans every chi the DETECTOR actually covers at that q, not every row of the
+        # frame. Take the first and last valid row of the ring's own column.
+        col = np.clip(np.round(x[rg]).astype(int), 0, WIDTH-1)
+        m = np.asarray(mask)[:, col]
+        has = m.any(0)
+        top = np.argmax(m, 0).astype(np.float32)
+        bot = (HEIGHT - 1 - np.argmax(m[::-1], 0)).astype(np.float32)
+        bx[rg, 1] = np.where(has, top, 0.0)
+        bx[rg, 3] = np.where(has, bot + 1.0, float(HEIGHT))
+        return bx
 
     def _visibility(self, amp, noise_at, s_q, s_c, is_ring, mask, x):
         """per-pixel contrast and matched-filter SNR, both from the peak's OWN amplitude, so a
@@ -523,9 +583,7 @@ class RealBkgSimulation:
             # BOX while the ring stayed in the image. Here suppression removes the peak.
             con, snr = self._visibility(amp, noise[iy, ix], s_q, s_c, rg, mask, x)
             keep = (con >= self.contrast_min) & (snr >= self.snr_min)
-            hw, hh = self.w_coef*s_q/2.0, self.a_coef*s_c/2.0
-            bx = np.stack([x-hw, y-hh, x+hw, y+hh], 1).astype(np.float32)
-            bx[rg, 1] = 0.0; bx[rg, 3] = float(HEIGHT)
+            bx = self._boxes(x, y, s_q, s_c, rg, mask)
             # Clip BEFORE the overlap test, not after. Two boxes that overhang the same frame
             # edge become more alike once clipped, so suppressing on unclipped geometry lets
             # pairs through above the threshold -- measured, 6 pairs up to 0.479 under a 0.40
@@ -580,9 +638,7 @@ class RealBkgSimulation:
 
         con, snr = self._visibility(amp, noise[iy, ix], s_q, s_c, rg, mask, x)
         keep = (con >= self.contrast_min) & (snr >= self.snr_min)
-        hw, hh = self.w_coef*s_q/2.0, self.a_coef*s_c/2.0
-        bx = np.stack([x-hw, y-hh, x+hw, y+hh], 1).astype(np.float32)
-        bx[rg, 1] = 0.0; bx[rg, 3] = float(HEIGHT)
+        bx = self._boxes(x, y, s_q, s_c, rg, mask)
         keep &= self._ring_nms(bx, rg & keep, amp)
         bx, rgk = bx[keep], rg[keep]
         bx[:, 0::2] = np.clip(bx[:, 0::2], 0, WIDTH-1)

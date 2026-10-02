@@ -1,15 +1,15 @@
 #!/bin/bash
-#SBATCH --job-name=convab
-#SBATCH --partition=2080-galvani
+#SBATCH --job-name=boxsize
+#SBATCH --partition=a100-galvani
 #SBATCH --time=01:30:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=48G
-#SBATCH --output=/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/diagnostics/convab-%j.out
+#SBATCH --output=/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/diagnostics/boxsize-%j.out
 set -e
 cd /mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO
 export PYTHONPATH=/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO
 PY=/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/bin/python
 echo "######## run 1 config (spots 2-200, p_ring 0.30)"
-$PY -u diagnostics/convention_ab.py --frames 150 --config config/DINO/DINO_4scale_swin_realbkg.py
+$PY -u diagnostics/realbkg_box_sizes.py --frames 120 --config config/DINO/DINO_4scale_swin_realbkg.py
 echo; echo "######## run 2 config (spots 6-32, p_ring 1.0)"
-$PY -u diagnostics/convention_ab.py --frames 150 --config config/DINO/DINO_4scale_swin_realbkg_r2.py
+$PY -u diagnostics/realbkg_box_sizes.py --frames 120 --config config/DINO/DINO_4scale_swin_realbkg_r2.py

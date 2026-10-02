@@ -1,0 +1,40 @@
+######## run 1 config (spots 2-200, p_ring 0.30)
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+  30 frames...
+  60 frames...
+  90 frames...
+  120 frames...
+  150 frames...
+
+150 frames | 6723 segment boxes, 745 ring boxes | config config/DINO/DINO_4scale_swin_realbkg_r3.py
+  sigma_q   of segments      p10    2.17  p50    5.68  p90   14.59
+  sigma_chi of segments      p10    2.00  p50    6.92  p90   48.97
+
+  EMITTED segment box w px   p10    2.82  p50    7.29  p90   18.57
+  EMITTED segment box h px   p10    5.60  p50   18.89  p90  130.95
+  EMITTED ring box    w px   p10    2.01  p50    5.28  p90   11.98
+
+  box w / sigma_q            1.28   (legacy formula gives 2.60)
+  box h / sigma_chi          2.73   (legacy formula gives 5.60)
+
+  EMITTED ring box    h px   p10   358.4  p50   485.0  p90   502.0
+  ring h / valid chi span    p10    1.02  p50    1.05  p90    1.09
+  rings FULL height (>=505):  4.3%
+
+  boxes/frame    p10   13.0  p50   44.0  p90   93.4  mean   49.8
+  segments/frame p10    9.7  p50   37.5  p90   85.2
+  rings/frame    mean  4.97   ring-free frames   38%
+
+REAL GT, measured:
+  organic  rings 80.0% full height, h/span 1.03-1.14 | p50 66 boxes, 2.12 rings, 62% ring-free
+  41       rings  0.6% full height, h/span p50 0.98  | p50 20 boxes, 8.85 rings,  0% ring-free
+  organic segments  w p50 10.5  h p50  8.1
+  41      segments  w p50  4.6  h p50 34.2
+legacy sim segments h p50 23.9
+
+If the /2.0 is wrong, DOUBLING these widths and heights is what the boxes should be:
+  doubled segment box w p50   14.59   h p50   37.78
+
+######## run 2 config (spots 6-32, p_ring 1.0)

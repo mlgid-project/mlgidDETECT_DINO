@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=realgeom
-#SBATCH --partition=cpu-galvani
+#SBATCH --partition=2080-galvani
 #SBATCH --time=00:40:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G

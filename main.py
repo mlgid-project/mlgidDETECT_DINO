@@ -175,7 +175,11 @@ class SimulationDataset(torch.utils.data.Dataset):
                 #(8, 60). None keeps the constants.
                 spots_cap=getattr(args, 'realbkg_spots_cap', None),
                 rings_cap=getattr(args, 'realbkg_rings_cap', None),
-                n_powder=tuple(getattr(args, 'realbkg_n_powder', (1, 1))))
+                n_powder=tuple(getattr(args, 'realbkg_n_powder', (1, 1))),
+                ring_box_from_mask=bool(getattr(args, 'realbkg_ring_box_from_mask', False)),
+                seg_wide_frac=float(getattr(args, 'realbkg_seg_wide_frac', 0.0)),
+                seg_wide_sigma=getattr(args, 'realbkg_seg_wide_sigma',
+                                       ((8.1, 0.45), (2.9, 0.45))))
             src = ('fresh mosaics of reviewed peak-free frames'
                    if getattr(args, 'realbkg_mosaic', False) else args.realbkg_donor_path)
             print(f"[sim] real-background sim ON -- image source is {src}", flush=True)
@@ -191,6 +195,10 @@ class SimulationDataset(torch.utils.data.Dataset):
                   f" | oriented/frame {self.realbkg.n_oriented}"
                   f" | p_ring {self.realbkg.p_ring} powder/frame {self.realbkg.n_powder}",
                   flush=True)
+            print(f"[sim] geometry: ring box "
+                  f"{'VALID CHI SPAN' if self.realbkg.ring_box_from_mask else 'full frame height'}"
+                  f" | organic-like segment frames {self.realbkg.seg_wide_frac:.2f}"
+                  f" sigma {self.realbkg.seg_wide_sigma}", flush=True)
 
     def __getitem__(self, idx):
         image = None
