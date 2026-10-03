@@ -110,6 +110,14 @@ class SimulationDataset(torch.utils.data.Dataset):
         #in (2,50)/(10,50). Off by default; nothing about eval or ONNX changes.
         self.physics = None
         self.physics_fraction = float(getattr(args, 'physics_sim_fraction', 0.0))
+        #REALBKG MIXING. The realbkg branch in __getitem__ used to be unconditional, so
+        #use_realbkg_sim supplied 100% of every epoch's images and `physics_sim_fraction` -- which
+        #only ever mixed PHYSICS with LEGACY -- could not reach it. conv1/conv2/conv3 were all pure
+        #realbkg as a result. That blocked the one lever the 2026-09-15 precision analysis queues
+        #for the 41 gate: the legacy sim scores 0.74-0.77 on 41 and 0.55-0.62 on organic, the
+        #realbkg/physics sims the reverse, so a mixture tests whether the two failure modes cancel
+        #instead of compounding. Default 1.0 keeps every existing config byte-identical.
+        self.realbkg_fraction = float(getattr(args, 'realbkg_fraction', 1.0))
         if getattr(args, 'use_physics_sim', False):
             from physics_simulation import PhysicsSimulation
             bank = getattr(args, 'physics_bank_path', None)
@@ -195,6 +203,9 @@ class SimulationDataset(torch.utils.data.Dataset):
                   f" | oriented/frame {self.realbkg.n_oriented}"
                   f" | p_ring {self.realbkg.p_ring} powder/frame {self.realbkg.n_powder}",
                   flush=True)
+            print(f"[sim] realbkg share of images: {self.realbkg_fraction:.0%}"
+                  f"{' (remainder from the LEGACY sim)' if self.realbkg_fraction < 1.0 else ''}",
+                  flush=True)
             print(f"[sim] geometry: ring box "
                   f"{'VALID CHI SPAN' if self.realbkg.ring_box_from_mask else 'full frame height'}"
                   f" | organic-like segment frames {self.realbkg.seg_wide_frac:.2f}"
@@ -204,7 +215,8 @@ class SimulationDataset(torch.utils.data.Dataset):
         image = None
         while image is None:
             try:
-                if self.realbkg is not None:
+                if self.realbkg is not None and (self.realbkg_fraction >= 1.0
+                                                 or random.random() < self.realbkg_fraction):
                     image, boxes, mask, is_ring = self.realbkg.simulate_img()
                 elif self.physics is not None and random.random() < self.physics_fraction:
                     image, boxes, mask, is_ring = self.physics.simulate_img()

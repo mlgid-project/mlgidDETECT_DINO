@@ -1,0 +1,61 @@
+######## run 1 config (spots 2-200, p_ring 0.30)
+Q-SPACE STRUCTURE OF THE LABELS
+
+  REAL organic
+    box-centre x        p10   286.5  p50   569.7  p90   788.3   (0-1023 = q/qmax)
+    NN gap, all peaks   p10     0.2  p50     1.5  p90     9.9  n 817
+    NN gap, segments    p10     0.2  p50     1.4  p90     6.7
+    NN gap, rings       p10    15.4  p50    38.3  p90   124.9
+    rings 4% of 817 boxes
+
+  REAL 41
+    box-centre x        p10   192.5  p50   504.3  p90   806.9   (0-1023 = q/qmax)
+    NN gap, all peaks   p10     0.2  p50     5.4  p90    34.5  n 1679
+    NN gap, segments    p10     0.2  p50     2.0  p90    19.3
+    NN gap, rings       p10     9.3  p50    27.8  p90    77.7
+    rings 42% of 1680 boxes
+
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+    30 sim frames...
+    60 sim frames...
+    90 sim frames...
+    120 sim frames...
+  SIM (DINO_4scale_swin_realbkg.py)
+    box-centre x        p10   328.4  p50   596.9  p90   805.0   (0-1023 = q/qmax)
+    NN gap, all peaks   p10     0.2  p50     2.1  p90     9.8  n 11326
+    NN gap, segments    p10     0.2  p50     2.1  p90     9.8
+    NN gap, rings       p10    10.8  p50    38.0  p90   157.5
+    rings 2% of 11326 boxes
+
+######## run 2 config (spots 6-32, p_ring 1.0)
+Q-SPACE STRUCTURE OF THE LABELS
+
+  REAL organic
+    box-centre x        p10   286.5  p50   569.7  p90   788.3   (0-1023 = q/qmax)
+    NN gap, all peaks   p10     0.2  p50     1.5  p90     9.9  n 817
+    NN gap, segments    p10     0.2  p50     1.4  p90     6.7
+    NN gap, rings       p10    15.4  p50    38.3  p90   124.9
+    rings 4% of 817 boxes
+
+  REAL 41
+    box-centre x        p10   192.5  p50   504.3  p90   806.9   (0-1023 = q/qmax)
+    NN gap, all peaks   p10     0.2  p50     5.4  p90    34.5  n 1679
+    NN gap, segments    p10     0.2  p50     2.0  p90    19.3
+    NN gap, rings       p10     9.3  p50    27.8  p90    77.7
+    rings 42% of 1680 boxes
+
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+    30 sim frames...
+    60 sim frames...
+    90 sim frames...
+    120 sim frames...
+  SIM (DINO_4scale_swin_realbkg_r2.py)
+    box-centre x        p10   225.2  p50   496.2  p90   782.9   (0-1023 = q/qmax)
+    NN gap, all peaks   p10     1.4  p50     8.8  p90    33.6  n 3280
+    NN gap, segments    p10     1.5  p50    10.7  p90    53.1
+    NN gap, rings       p10     7.2  p50    24.4  p90    97.6
+    rings 35% of 3280 boxes

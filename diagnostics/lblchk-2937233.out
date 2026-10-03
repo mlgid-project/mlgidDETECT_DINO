@@ -1,0 +1,20 @@
+=== organic: 8 frames, 817 GT boxes
+    GT boxes containing a local maximum: 96.7%  (detector sanity -- labels should sit on maxima)
+     z thr   maxima  outside all GT    share  per frame
+       2.0    20248           17227    85.1%     2153.4
+       3.0     4841            4243    87.6%      530.4
+       4.0     1614            1436    89.0%      179.5
+       5.0      676             618    91.4%       77.2
+       6.0      314             290    92.4%       36.2
+
+=== 41: 41 frames, 1680 GT boxes
+    GT boxes containing a local maximum: 97.1%  (detector sanity -- labels should sit on maxima)
+     z thr   maxima  outside all GT    share  per frame
+       2.0   101852           84575    83.0%     2062.8
+       3.0    27421           22054    80.4%      537.9
+       4.0    10879            8148    74.9%      198.7
+       5.0     6144            4176    68.0%      101.9
+       6.0     4074            2748    67.5%       67.0
+
+If 41 shows many significant maxima outside every box and organic does not, then 41 is
+under-labelled and part of its "precision" gap is the gate, not the model.
