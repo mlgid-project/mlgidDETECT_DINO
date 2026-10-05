@@ -342,6 +342,16 @@ class MosaicBackground:
         out = acc/np.maximum(wgt, 1e-6)
         return out[:H, :W]
 
+    #: Draw the envelope from bkg.npy. OFF, and it must stay off for training.
+    #: bkg.npy holds the REJECTED 189-donor bank -- every one of those frames carries unremoved
+    #: real diffraction, which is why the donor set was cut to the 90 clean bare-Si frames the
+    #: TILES come from. The envelope was still being drawn from the 189, so each background
+    #: carried one of their sigma-64 smeared ring systems: measured, that profile DIPS to 0.45 at
+    #: low q where a real background is brightest, bumps at q~400 and falls to 0.04 at high q
+    #: against the clean donors' 0.6, and after the contrast chain it shows as a bright arc across
+    #: the frame with no box on it. See tmp_diag/sim2/images/09_background_v2.
+    USE_ENV_BANK = False
+
     def _envelope(self):
         """Smooth large-scale shape of one real donor, normalised to median 1.
 
@@ -350,9 +360,9 @@ class MosaicBackground:
         from a real frame at sigma 64, far broader than any peak (sigma_q ~ 4 px), which means it
         cannot introduce anything the detector could mistake for a feature.
         """
-        if self.env_bank is not None and len(self.env_bank):
+        if self.USE_ENV_BANK and self.env_bank is not None and len(self.env_bank):
             g = np.asarray(self.env_bank[self.rng.integers(len(self.env_bank))], np.float32)
-        else:                                   # fall back to a donor, oriented low-q bright
+        else:                                   # a CLEAN donor, oriented low-q bright
             g = np.nan_to_num(self.frames[self.rng.integers(len(self.frames))], nan=1.0)
             g = cv2.resize(g, (WIDTH, HEIGHT), interpolation=cv2.INTER_LINEAR)
             if g[:, :WIDTH//4].mean() < g[:, -WIDTH//4:].mean():

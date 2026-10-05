@@ -58,6 +58,8 @@ class RealBkgSimulation:
                  unified_labels=False, seg_iou_max=None, max_peaks=None,
                  spots_cap=None, rings_cap=None,
                  ring_box_from_mask=False, seg_wide_frac=0.0,
+                 bkg_v2=False, surrogate_frac=0.0, v2_canvas=(1536, 3072),
+                 v2_refresh=200, v2_n_pc=6,
                  seg_wide_sigma=((8.1, 0.45), (2.9, 0.45)),
                  voigt_eta=(0.6, 1.0), voigt_cut=3.0, donor_keep_frac=0.40,
                  elongate=None, max_donors=None,
@@ -115,6 +117,26 @@ class RealBkgSimulation:
         #: `seg_q_elongated_frac` for the same purpose; realbkg had no equivalent.
         self.seg_wide_frac = float(seg_wide_frac)
         self.seg_wide_sigma = seg_wide_sigma
+        #: BACKGROUND v2. Off, training sees a 48-slot pool of FINISHED backgrounds, each reused
+        #: ~21 times per epoch, and every realbkg run so far has decayed with training while every
+        #: synthetic-background run improved -- conv3 went organic 0.594 at epochs 60-100 to 0.496
+        #: at plateau with its train loss falling 37% the whole way. Randomisation is not the
+        #: cause: 160/160 distinct frames over four epochs, zero repeats (image_freshness.py).
+        #:
+        #: On, the flat fluctuation canvas is cached and everything else is drawn PER FRAME: a
+        #: fresh crop (free -- the crop was being cached while the 183 ms envelope was recomputed,
+        #: both backwards), a fresh mask, and an envelope SAMPLED from a PCA over the 90 clean
+        #: donors instead of picked from a fixed set. `surrogate_frac` of frames take their
+        #: texture from a random-phase surrogate instead of the real tiles: same measured power
+        #: spectrum, new phases, never repeating, at the cost of the higher-order structure
+        #: (hot pixels, line defects, panel seams) that only real tiles carry -- which is why it
+        #: is a MIX and not a replacement.
+        self.bkg_v2 = bool(bkg_v2)
+        self.surrogate_frac = float(surrogate_frac)
+        self.v2_canvas = tuple(v2_canvas)
+        self.v2_refresh = int(v2_refresh)
+        self.v2_n_pc = int(v2_n_pc)
+        self._bv = None
 
         self.phys = PhysicsSimulation(bank_path, sim_config=self.sim_config, device=device,
                                       unify_contrast=True)
@@ -174,6 +196,24 @@ class RealBkgSimulation:
         qp = os.path.join(os.environ.get('GIWAXS_WORK', '/mnt/lustre/work/schreiber/szb389'),
                           'datasets/realbkg_donors_mm/qmax.npy')
         self._qsrc = np.load(qp) if os.path.exists(qp) else np.array([], np.float32)
+        if self.bkg_v2:
+            from realbkg_sim.background_v2 import BackgroundV2
+            self._bv = BackgroundV2(self._mb, canvas=self.v2_canvas, n_pc=self.v2_n_pc, seed=seed)
+            self._bv.new_canvas()
+            # one entry only: it is never used as a background, it just keeps the array
+            # attributes that the rest of the class expects to exist.
+            e = [self._mosaic_entry()]
+            self.bkg = np.stack([x[0] for x in e]); self.mask = np.stack([x[1] for x in e])
+            self.noise = np.stack([x[2] for x in e]); self.coef = np.stack([x[3] for x in e])
+            self.qmax = np.asarray([x[4] for x in e], np.float32)
+            self.meta = [dict(source='mosaic_v2')]
+            print(f"[realbkg] background v2: fresh crop + PCA envelope PER FRAME from "
+                  f"{len(self._mb.frames)} clean donors, canvas {self.v2_canvas} rebuilt every "
+                  f"{self.v2_refresh} frames, {self.surrogate_frac:.0%} of frames on a "
+                  f"random-phase surrogate texture "
+                  f"({self._bv.env_var_explained:.1%} of donor envelope log-variance in "
+                  f"{self.v2_n_pc} PCs)", flush=True)
+            return
         e = [self._mosaic_entry() for _ in range(int(n_pool))]
         self.bkg = np.stack([x[0] for x in e])
         self.mask = np.stack([x[1] for x in e])
@@ -523,16 +563,38 @@ class RealBkgSimulation:
         peaks = peaks + coef*np.sqrt(np.maximum(peaks, 0))*np.random.standard_normal(peaks.shape)
         return np.where(mask, np.maximum(bkg + peaks, 0.0), 0.0)
 
+    def _frame_background_v2(self):
+        """A background built fresh for THIS frame: new crop, new envelope, new mask."""
+        self._frames_made += 1
+        if self.v2_refresh > 0 and self._frames_made % self.v2_refresh == 0:
+            self._bv.new_canvas()
+        if self._masks is not None:
+            m, md = self._masks.draw()
+            qm = float(md['q_max'])
+        else:
+            m = None
+            qm = (float(self._qsrc[np.random.randint(len(self._qsrc))])
+                  if len(self._qsrc) else 4.45)
+        use_surr = self.surrogate_frac > 0 and np.random.random() < self.surrogate_frac
+        b, m = (self._bv.surrogate(mask=m) if use_surr else self._bv.frame(mask=m))
+        nz = self._noise_map(b.astype(np.float64), m)
+        cf = nz/np.sqrt(np.maximum(cv2.GaussianBlur(b, (0, 0), 16.0), 1e-6))
+        return (b.astype(np.float64), m, nz.astype(np.float64),
+                cf.astype(np.float64), qm)
+
     # ------------------------------------------------------------------ frame
     def simulate_img(self):
-        d = np.random.randint(len(self.bkg))
-        if getattr(self, '_mb', None) is not None and self.mosaic_refresh > 0:
-            self._frames_made += 1
-            if self._frames_made % self.mosaic_refresh == 0:
-                self._refresh_mosaic_slot(d)
-        bkg = self.bkg[d].astype(np.float64); mask = self.mask[d]
-        noise = self.noise[d].astype(np.float64); coef = self.coef[d].astype(np.float64)
-        qmax = float(self.qmax[d])
+        if self.bkg_v2:
+            bkg, mask, noise, coef, qmax = self._frame_background_v2()
+        else:
+            d = np.random.randint(len(self.bkg))
+            if getattr(self, '_mb', None) is not None and self.mosaic_refresh > 0:
+                self._frames_made += 1
+                if self._frames_made % self.mosaic_refresh == 0:
+                    self._refresh_mosaic_slot(d)
+            bkg = self.bkg[d].astype(np.float64); mask = self.mask[d]
+            noise = self.noise[d].astype(np.float64); coef = self.coef[d].astype(np.float64)
+            qmax = float(self.qmax[d])
 
         p = self._draw_peaks(qmax)
         if p is None:

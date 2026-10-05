@@ -187,7 +187,12 @@ class SimulationDataset(torch.utils.data.Dataset):
                 ring_box_from_mask=bool(getattr(args, 'realbkg_ring_box_from_mask', False)),
                 seg_wide_frac=float(getattr(args, 'realbkg_seg_wide_frac', 0.0)),
                 seg_wide_sigma=getattr(args, 'realbkg_seg_wide_sigma',
-                                       ((8.1, 0.45), (2.9, 0.45))))
+                                       ((8.1, 0.45), (2.9, 0.45))),
+                bkg_v2=bool(getattr(args, 'realbkg_bkg_v2', False)),
+                surrogate_frac=float(getattr(args, 'realbkg_surrogate_frac', 0.0)),
+                v2_canvas=tuple(getattr(args, 'realbkg_v2_canvas', (1536, 3072))),
+                v2_refresh=int(getattr(args, 'realbkg_v2_refresh', 200)),
+                v2_n_pc=int(getattr(args, 'realbkg_v2_n_pc', 6)))
             src = ('fresh mosaics of reviewed peak-free frames'
                    if getattr(args, 'realbkg_mosaic', False) else args.realbkg_donor_path)
             print(f"[sim] real-background sim ON -- image source is {src}", flush=True)
@@ -206,6 +211,11 @@ class SimulationDataset(torch.utils.data.Dataset):
             print(f"[sim] realbkg share of images: {self.realbkg_fraction:.0%}"
                   f"{' (remainder from the LEGACY sim)' if self.realbkg_fraction < 1.0 else ''}",
                   flush=True)
+            print(f"[sim] background: "
+                  + (f"v2 -- fresh crop + PCA envelope per frame, "
+                     f"{self.realbkg.surrogate_frac:.0%} surrogate texture"
+                     if self.realbkg.bkg_v2 else
+                     "48-slot cached pool (v1)"), flush=True)
             print(f"[sim] geometry: ring box "
                   f"{'VALID CHI SPAN' if self.realbkg.ring_box_from_mask else 'full frame height'}"
                   f" | organic-like segment frames {self.realbkg.seg_wide_frac:.2f}"
@@ -590,6 +600,11 @@ def main(args):
     #about every three epochs, which is what the config header already describes ("built fresh at
     #run start and continuously refreshed").
     dataset = SimulationDataset(args)
+    #BEST-CHECKPOINT TRACKING. Only checkpoint.pth (latest) and one at lr_drop were ever written,
+    #and the realbkg runs peak EARLY and then decay -- conv4's best organic was 0.613 at epoch 32,
+    #conv3's 0.603 at epoch 68, against plateaus of 0.561 and 0.496. Those weights are gone. Keep
+    #the best of each gate, and of their sum, so a peak can be recovered and resumed from.
+    best = {}
     for epoch in range(args.start_epoch, args.epochs):
         #RESEED PER EPOCH. The seeds are set once, at process start (seed = args.seed + rank,
         #above), and resume restores model/optimizer/lr_scheduler/epoch but NO RNG state. With
@@ -659,15 +674,35 @@ def main(args):
                 if single:
                     eval_targets = {'eval': single}
             model.eval()
+            scores = {}
             for name, path in eval_targets.items():
                 try:
                     eval_ap = evaluate_giwaxs_ap(model, postprocessors, args, path, epoch, output_dir)
+                    scores[name] = float(eval_ap)
                     with open(output_dir / f'exp_ap_{name}.txt', 'a+') as f:
                         f.write(f'{epoch}\t{eval_ap}\n')
                     print(f'[epoch {epoch}] {name} ap_total = {eval_ap}')
                 except Exception as e:
                     print(f'[epoch {epoch}] eval on {name} ({path}) failed: {type(e).__name__}: {e}')
             model.train()
+
+            #Keep the best weights per gate and for the sum. `scores` only holds the gates that
+            #actually evaluated this epoch, so a failed eval never overwrites a good checkpoint.
+            if args.output_dir and scores:
+                cands = dict(scores)
+                if len(scores) > 1:
+                    cands['sum'] = sum(scores.values())
+                for tag, val in cands.items():
+                    if val > best.get(tag, float('-inf')):
+                        best[tag] = val
+                        utils.save_on_master(
+                            {'model': model_without_ddp.state_dict(),
+                             'optimizer': optimizer.state_dict(),
+                             'lr_scheduler': lr_scheduler.state_dict(),
+                             'epoch': epoch, 'args': args, 'metric': tag, 'score': val},
+                            output_dir / f'checkpoint_best_{tag}.pth')
+                        print(f'[epoch {epoch}] new best {tag} = {val:.4f} -> '
+                              f'checkpoint_best_{tag}.pth', flush=True)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

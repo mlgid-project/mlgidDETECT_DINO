@@ -1,0 +1,14 @@
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (1536, 3072) rebuilt every 200 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+construction 57.8 s
+
+WIRING OK: bkg_v2 on, USE_ENV_BANK False, surrogate_frac 50%, canvas (1536, 3072), refresh 200
+
+PER-FRAME COST  median   329.4 ms   mean   331.7 ms
+  (v1 was ~300 ms/frame with the background taken from a cached pool)
+BACKGROUND FRESHNESS  24/24 distinct backgrounds in consecutive frames
+
+COMPOSITION  boxes/frame p50 42  rings/frame mean 3.38  ring-free 46%
+
+wrote run6_frames.png
