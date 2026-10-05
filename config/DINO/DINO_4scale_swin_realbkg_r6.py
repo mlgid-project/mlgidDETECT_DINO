@@ -36,8 +36,20 @@ _base_ = ['DINO_4scale_swin_realbkg_r3.py']
 #       real tiles carry and that the detector should learn to ignore.
 realbkg_bkg_v2        = True
 realbkg_surrogate_frac = 0.5
-realbkg_v2_canvas     = (1536, 3072)
-realbkg_v2_refresh    = 200
+# CANVAS SIZE AND REFRESH RATE ARE THE WHOLE POINT, so they are set from the measured pixel-reuse
+# rate rather than by eye (diagnostics/texture_reuse.py). The crop is free but the canvas behind it
+# is not, so a canvas that lives too long just reproduces v1's problem with extra steps:
+#     canvas          refresh   ms/frame   each canvas pixel used
+#     (1536,3072)       200        3.7           22.2x      <- v1 was ~21x. No better.
+#     (1536,3072)        25       29.8            2.8x
+#     (2048,4096)        50       19.7            3.1x
+#     (2048,4096)        25       39.4            1.6x      <- chosen
+# At (2048,4096) two random crops overlap 8.6% on average, against 69% at (768,1536). With
+# surrogate_frac 0.5 only about half the frames draw on tiles at all, so the effective reuse is
+# nearer 0.8x -- i.e. the real-tile texture is essentially never seen twice.
+# Cost: +39 ms on a 329 ms frame, ~+12%.
+realbkg_v2_canvas     = (2048, 4096)
+realbkg_v2_refresh    = 25
 realbkg_v2_n_pc       = 6
 
 # Verified against the real donors before submitting: A+B2 tracks the real radial profile across

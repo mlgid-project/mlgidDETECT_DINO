@@ -30,9 +30,17 @@
 #     the args dump must show dn_number=100
 # If the background line says "48-slot cached pool (v1)" this is run 3 again -- kill it.
 #
-# PRE-FLIGHT (diagnostics/v2_smoke.py, run before submitting): 329 ms/frame against v1's ~300,
-# so about +10% epoch time; 24/24 distinct backgrounds in consecutive frames; boxes/frame p50 42,
-# rings/frame 3.38, ring-free 46%.
+# PRE-FLIGHT (diagnostics/v2_smoke.py): 329 ms/frame against v1's ~300 at the FIRST settings;
+# boxes/frame p50 42, rings/frame 3.38, ring-free 46%.
+#
+# THEN CORRECTED. That smoke test hashed the finished background, which already carries a fresh
+# envelope and mask, so it reported "24/24 distinct" even though the TEXTURE behind those frames
+# came from one canvas living 200 frames. diagnostics/texture_reuse.py measured the quantity that
+# actually matters -- how often each canvas pixel is reused -- and at canvas (1536,3072) with
+# refresh 200 it was 22.2x against v1's ~21x, i.e. no better. Canvas is now (2048,4096) refreshed
+# every 25 frames: 1.6x reuse, 40 canvases/epoch, two random crops overlapping 8.6% on average,
+# and with surrogate_frac 0.5 only half the frames touch tiles at all. Costs +39 ms/frame (~+12%),
+# so expect roughly 13-14 min/epoch and ~epoch 130 in 24 h.
 #
 # EARLY KILL GATE: loss_giou > 1.2 at epoch 40, or EITHER gate's ap_total < 0.10 at epoch 20.
 #
