@@ -47,3 +47,4 @@ use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
   ring scale 0.50  ap 0.936 | ring recall 0.990 TP score 0.969 preds/ring 2.58 | seg recall 0.949 TP score 0.989 | preds/frame 103
   ring scale 0.25  ap 0.933 | ring recall 0.985 TP score 0.968 preds/ring 2.39 | seg recall 0.951 TP score 0.989 | preds/frame 99
   ring scale 0.12  ap 0.933 | ring recall 0.974 TP score 0.966 preds/ring 2.25 | seg recall 0.949 TP score 0.989 | preds/frame 95
+  ring scale 0.06  ap 0.926 | ring recall 0.941 TP score 0.961 preds/ring 2.08 | seg recall 0.950 TP score 0.989 | preds/frame 91

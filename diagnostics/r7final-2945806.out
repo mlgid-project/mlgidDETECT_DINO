@@ -1,0 +1,85 @@
+##### PREFLIGHT
+
+##### r6: SimulationDataset wiring lines
+[sim] box convention overridden: a_coef=2.8 w_coef=1.3
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+[sim] real-background sim ON -- image source is fresh mosaics of reviewed peak-free frames
+[sim] labels: render-iff-labelled | contrast>=2.0 snr>=6.0 | IoU seg 0.3 ring 0.1 | max_peaks 200
+[sim] counts: spots/entry (2, 70) rings/entry (1, 13) | oriented/frame (1, 3) | p_ring 0.6 powder/frame (1, 2)
+[sim] realbkg share of images: 100%
+[sim] background: v2 -- fresh crop + PCA envelope per frame, 50% surrogate texture
+[sim] geometry: ring box VALID CHI SPAN | organic-like segment frames 0.50 sigma ((8.1, 0.45), (2.9, 0.45))
+[sim] rings: segments kept on rings 1.00 | ring box w_coef 1.3 | ring sigma_q x1.0 | ring min gap 0.0 px | ring chi texture sd 0.0 corr (3.0, 20.0) px
+r6: 120 frames via __getitem__ | ms/frame median 355 mean 395 p90 414 | boxes/frame 42.3 | label-1 (ring flag) /frame 4.8
+
+##### r7: SimulationDataset wiring lines
+[sim] box convention overridden: a_coef=2.8 w_coef=1.3
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+[sim] real-background sim ON -- image source is fresh mosaics of reviewed peak-free frames
+[sim] labels: render-iff-labelled | contrast>=2.0 snr>=6.0 | IoU seg 0.3 ring 0.1 | max_peaks 200
+[sim] counts: spots/entry (2, 100) rings/entry (2, 60) | oriented/frame (1, 4) | p_ring 0.75 powder/frame (1, 3)
+[sim] realbkg share of images: 100%
+[sim] background: v2 -- fresh crop + PCA envelope per frame, 50% surrogate texture
+[sim] geometry: ring box VALID CHI SPAN | organic-like segment frames 0.50 sigma ((8.1, 0.45), (2.9, 0.45))
+[sim] rings: segments kept on rings 0.12 | ring box w_coef 3.0 | ring sigma_q x0.7 | ring min gap 8.0 px | ring chi texture sd 0.45 corr (1.0, 64.0) px
+r7: 120 frames via __getitem__ | ms/frame median 344 mean 381 p90 369 | boxes/frame 52.8 | label-1 (ring flag) /frame 13.1
+
+r7 / r6 per-frame cost: 0.97x  -> run 6 epoch ~15 min, r7 epoch ~15 min if the dataloader is the bottleneck (10 workers vs ~1.8 s/it GPU step at batch 2)
+PREFLIGHT OK
+##### STATS vs 41
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+
+== r7 final: {}
+   rings/frame mean  14.6 p50  15 p90  27 max  60 | 0 / 1-5 / 6-10 / 11-20 / 21-45 / 46+: 0.15 0.11 0.13 0.31 0.30 0.01 | segs/frame 36.4 (ring-free frames 58.3, >=11 rings 25.5)
+   RING box w p50 7.0 | FWHM/box p50 1.67 | contrast p10 0.159 p50 0.425 | with a segment on them 16% | ring gap p10 6.1 p50 14.4
+   SEG box w p50 6.4 | FWHM p50 13.0 | contrast p50 0.114 | unlabelled bands/frame 9.34 vs labelled rings 14.6
+##### REVIEW FIGURES
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+wrote /mnt/lustre/work/schreiber/szb389/tmp_diag/sim2/images/12_ring_fix
+##### RAW H5
+box convention: a_coef (chi) = 2.8, w_coef (q) = 1.3
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+bank         : /mnt/lustre/work/schreiber/szb389/datasets/cif_library_organic/bank/bank_organic_hkl.npz
+spots/entry  : (2, 100)   oriented/frame (1, 4)   p_ring 0.75
+background   : fresh mosaic   amplitude pygid
+label gate   : contrast_min 2.0  snr_min 6.0  ring_iou_max 0.1
+  frame  0 unsteered           :  27 boxes (18 ring) of   27 drawn  q_max 3.71  max/median     58.1  I max 2.6e+05
+  frame  1 unsteered           :  23 boxes ( 0 ring) of   23 drawn  q_max 4.03  max/median  22277.5  I max 5.03e+06
+  frame  2 unsteered           :  30 boxes (22 ring) of   30 drawn  q_max 5.73  max/median      9.9  I max 2.4e+03
+  frame  3 unsteered           :  60 boxes (19 ring) of   60 drawn  q_max 4.03  max/median    572.3  I max 1.61e+06
+  frame  4 unsteered           :  18 boxes ( 9 ring) of   18 drawn  q_max 4.92  max/median     10.3  I max 2.31e+03
+  frame  5 unsteered           :  79 boxes (22 ring) of   79 drawn  q_max 5.64  max/median   1320.2  I max 2.58e+06
+  frame  6 unsteered           :  38 boxes (32 ring) of   38 drawn  q_max 3.71  max/median    709.1  I max 2.03e+05
+  frame  7 unsteered           :  34 boxes (18 ring) of   34 drawn  q_max 3.71  max/median    103.3  I max 4.47e+05
+  frame  8 unsteered           : 148 boxes ( 0 ring) of  148 drawn  q_max 4.77  max/median    113.3  I max 3.29e+05
+  frame  9 unsteered           :  28 boxes ( 9 ring) of   28 drawn  q_max 5.46  max/median    770.0  I max 2.06e+05
+  frame 10 unsteered           :  28 boxes ( 0 ring) of   28 drawn  q_max 5.46  max/median   4233.8  I max 1.07e+06
+  frame 11 unsteered           :  35 boxes (19 ring) of   35 drawn  q_max 3.90  max/median     54.6  I max 1.42e+04
+  frame 12 unsteered           :  93 boxes (10 ring) of   93 drawn  q_max 5.64  max/median    376.5  I max 9.64e+04
+  frame 13 unsteered           :  57 boxes (22 ring) of   57 drawn  q_max 4.03  max/median    108.4  I max 3.28e+04
+  frame 14 unsteered           :  47 boxes ( 0 ring) of   47 drawn  q_max 7.80  max/median     80.7  I max 1.74e+04
+  frame 15 unsteered           :  39 boxes ( 0 ring) of   39 drawn  q_max 3.90  max/median     44.5  I max 1.15e+04
+  frame 16 unsteered           :  19 boxes (18 ring) of   19 drawn  q_max 5.46  max/median     19.5  I max 4.15e+03
+  frame 17 unsteered           :  35 boxes ( 3 ring) of   35 drawn  q_max 4.03  max/median     15.3  I max 3.27e+03
+  frame 18 unsteered           :  19 boxes (12 ring) of   19 drawn  q_max 4.92  max/median      3.2  I max 618
+  frame 19 unsteered           :  37 boxes (29 ring) of   37 drawn  q_max 4.03  max/median    517.2  I max 1.65e+07
+
+wrote /mnt/lustre/work/schreiber/szb389/datasets/realbkgsim_r7_ringfix_raw_20.h5  (89.2 MB)
+  20 frames | boxes/frame min 18 p50 35 max 148 | rings/frame min 0 p50 15 max 32
+  dynamic range (max/median) min 3.2 p50 105.9 max 22277.5   [real labelled frames: 96 to 13116]
+  entry_simNN/polar/image  = raw polar frame (lossless, pre-contrast)
+  entry_simNN/data/img_gid_q = raw reciprocal frame (lossy resampling)
+  entry_simNN/data/analysis/frame00000/fitted_peaks = GT boxes, pygid PEAK_DTYPE

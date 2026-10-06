@@ -67,7 +67,7 @@ class RealBkgSimulation:
                  intensity_decades=None, amplitude_mode='fitted',
                  mask_bank=True, mask_keep='default',
                  seg_on_ring_keep=1.0, ring_w_coef=None, ring_sq_scale=1.0,
-                 ring_min_gap=0.0):
+                 ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0)):
         from physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -166,6 +166,21 @@ class RealBkgSimulation:
         #:     against real 41's 4.2 / 17.9 (legacy 7.2 / 14.6). `ring_min_gap` drops the weaker
         #:     of two rings whose boxes come within that many px radially. 0 = off.
         self.ring_min_gap = float(ring_min_gap)
+        #:   * RING TEXTURE ALONG CHI. realbkg rings render perfectly uniform along chi: on the
+        #:     processed image their patch-scale variation (CV after a 61-row detrend) is 0.003,
+        #:     against real 41's 0.106 and legacy's 0.031 (transplant_probe.py). Real powder rings
+        #:     are spotty from finite crystallite statistics, and their variation is BROADBAND
+        #:     and red: per octave band of chi scale, rms/mean 0.019 (1-2 px) rising to 0.056
+        #:     (32-64 px) on real 41 (ring_texture_spectrum.py); legacy has the same shape at
+        #:     1/4-1/5 the strength and that suffices for its model to handle 41. Even sd 0.15 of
+        #:     texture makes conv3 fragment its own sim's rings (texture_scan.py), so a model
+        #:     trained on smooth rings reads every patch as a segment. Each ring gets a
+        #:     mean-preserving log-normal factor along chi with sd drawn UNIFORMLY in
+        #:     [0, ring_chi_texture] -- so training spans smooth to strongly textured rings -- and a
+        #:     correlation length drawn LOG-uniformly in `ring_chi_corr` (px), which together give a
+        #:     broadband spectrum. 0 = off.
+        self.ring_chi_texture = float(ring_chi_texture)
+        self.ring_chi_corr = tuple(float(v) for v in ring_chi_corr)
 
         self.phys = PhysicsSimulation(bank_path, sim_config=self.sim_config, device=device,
                                       unify_contrast=True)
@@ -504,8 +519,21 @@ class RealBkgSimulation:
             Y = torch.arange(r0, r1, device=dev, dtype=torch.float32).view(-1, 1)
             u2 = ((X - float(x[i]))/float(s_q[i]))**2 + ((Y - float(y[i]))/float(s_c[i]))**2
             prof = eta/(1.0 + u2/ln2) + (1-eta)*torch.exp(-u2/2)
+            if self.ring_chi_texture > 0 and s_c[i] >= 1e3:
+                prof = prof*self._chi_texture(r1 - r0).to(dev).view(-1, 1)
             img[r0:r1, c0:c1] += float(amp[i])*prof*torch.exp(-(u2/uc2)**2)
         return img.cpu().numpy().astype(np.float64)
+
+    def _chi_texture(self, n):
+        """Mean-one log-normal factor along chi for one ring: smooth Gaussian noise of unit sd
+        (correlation length log-uniform in ring_chi_corr), times sd ~ U(0, ring_chi_texture),
+        exponentiated."""
+        from scipy.ndimage import gaussian_filter1d
+        L = math.exp(random.uniform(math.log(self.ring_chi_corr[0]), math.log(self.ring_chi_corr[1])))
+        z = gaussian_filter1d(np.random.standard_normal(n + int(6*L)), L, mode='wrap')[int(3*L):int(3*L) + n]
+        z = (z - z.mean())/max(z.std(), 1e-9)
+        sd = random.uniform(0.0, self.ring_chi_texture)
+        return torch.as_tensor(np.exp(sd*z - 0.5*sd*sd), dtype=torch.float32)
 
     def _boxes(self, x, y, s_q, s_c, rg, mask):
         """Label boxes for every peak. Full extent is `coef * sigma` on each axis, which matches

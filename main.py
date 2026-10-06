@@ -194,11 +194,14 @@ class SimulationDataset(torch.utils.data.Dataset):
                 v2_refresh=int(getattr(args, 'realbkg_v2_refresh', 200)),
                 v2_n_pc=int(getattr(args, 'realbkg_v2_n_pc', 6)),
                 #RING APPEARANCE (realbkg-41-gap-split): segments kept on rings, ring box radial
-                #coefficient, ring sigma_q scale, ring spacing. Defaults reproduce every earlier run.
+                #coefficient, ring sigma_q scale, ring spacing, ring chi texture. Defaults reproduce
+                #every earlier run.
                 seg_on_ring_keep=float(getattr(args, 'realbkg_seg_on_ring_keep', 1.0)),
                 ring_w_coef=getattr(args, 'realbkg_ring_w_coef', None),
                 ring_sq_scale=float(getattr(args, 'realbkg_ring_sq_scale', 1.0)),
-                ring_min_gap=float(getattr(args, 'realbkg_ring_min_gap', 0.0)))
+                ring_min_gap=float(getattr(args, 'realbkg_ring_min_gap', 0.0)),
+                ring_chi_texture=float(getattr(args, 'realbkg_ring_chi_texture', 0.0)),
+                ring_chi_corr=tuple(getattr(args, 'realbkg_ring_chi_corr', (3.0, 20.0))))
             src = ('fresh mosaics of reviewed peak-free frames'
                    if getattr(args, 'realbkg_mosaic', False) else args.realbkg_donor_path)
             print(f"[sim] real-background sim ON -- image source is {src}", flush=True)
@@ -229,7 +232,9 @@ class SimulationDataset(torch.utils.data.Dataset):
             print(f"[sim] rings: segments kept on rings {self.realbkg.seg_on_ring_keep:.2f}"
                   f" | ring box w_coef {self.realbkg.ring_w_coef or self.realbkg.w_coef}"
                   f" | ring sigma_q x{self.realbkg.ring_sq_scale}"
-                  f" | ring min gap {self.realbkg.ring_min_gap} px", flush=True)
+                  f" | ring min gap {self.realbkg.ring_min_gap} px"
+                  f" | ring chi texture sd {self.realbkg.ring_chi_texture}"
+                  f" corr {self.realbkg.ring_chi_corr} px", flush=True)
 
     def __getitem__(self, idx):
         image = None

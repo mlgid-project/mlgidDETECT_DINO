@@ -135,7 +135,9 @@ def build_realbkg(config='config/DINO/DINO_4scale_swin_realbkg_r6.py', overrides
         seg_on_ring_keep=float(getattr(a, 'realbkg_seg_on_ring_keep', 1.0)),
         ring_w_coef=getattr(a, 'realbkg_ring_w_coef', None),
         ring_sq_scale=float(getattr(a, 'realbkg_ring_sq_scale', 1.0)),
-        ring_min_gap=float(getattr(a, 'realbkg_ring_min_gap', 0.0)))
+        ring_min_gap=float(getattr(a, 'realbkg_ring_min_gap', 0.0)),
+        ring_chi_texture=float(getattr(a, 'realbkg_ring_chi_texture', 0.0)),
+        ring_chi_corr=tuple(getattr(a, 'realbkg_ring_chi_corr', (3.0, 20.0))))
 
 
 def realbkg6(n, config='config/DINO/DINO_4scale_swin_realbkg_r6.py', overrides=None):
