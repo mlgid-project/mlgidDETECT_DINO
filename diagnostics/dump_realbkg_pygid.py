@@ -110,27 +110,21 @@ def main():
         RealBkgSimulation._load_donors = lambda self, *a, **k: load_into(self, args.donor_cache)
 
     bank = args.bank or cfg.physics_bank_path
-    # Mirror main.py's construction. mosaic / amplitude_mode / intensity_decades / mask_bank were
-    # previously left at their constructor defaults here, so this script dumped a DIFFERENT
-    # simulator from the one training runs -- modelled donor frames and 'fitted' amplitudes
-    # instead of fresh mosaics and pygidSIM's own intensities.
-    sim = RealBkgSimulation(
-        bank_path=bank, donor_path=cfg.realbkg_donor_path,
-        stats_path=cfg.realbkg_stats_path, sim_config=sc, device='cpu',
-        n_oriented=tuple(getattr(cfg, 'realbkg_n_oriented', (1, 3))),
-        p_ring=float(getattr(cfg, 'realbkg_p_ring', 0.15)),
-        mosaic=bool(getattr(cfg, 'realbkg_mosaic', False)),
-        mosaic_pool=int(getattr(cfg, 'realbkg_mosaic_pool', 48)),
-        mosaic_refresh=int(getattr(cfg, 'realbkg_mosaic_refresh', 64)),
-        mosaic_seed=getattr(cfg, 'realbkg_mosaic_seed', None),
-        intensity_decades=getattr(cfg, 'realbkg_intensity_decades', None),
-        amplitude_mode=getattr(cfg, 'realbkg_amplitude_mode', 'fitted'),
-        mask_bank=bool(getattr(cfg, 'realbkg_mask_bank', True)),
-        mask_keep=getattr(cfg, 'realbkg_mask_keep', 'default'),
-        unified_labels=args.unified_labels,
-        **{k: v for k, v in dict(contrast_min=args.contrast_min, snr_min=args.snr_min,
-                                 seg_iou_max=args.seg_iou_max, ring_iou_max=args.ring_iou_max,
-                                 max_peaks=args.max_peaks).items() if v is not None})
+    # Built by the SAME function the probes use, which mirrors main.py argument for argument
+    # (diagnostics/peak_shape_compare.build_realbkg). The hand-written constructor this replaces
+    # had drifted: no n_powder, rings_cap, v2 background, ring boxes from the mask, wide segments
+    # or ring-appearance knobs, so it dumped a different simulator from the one that trains.
+    sys.path.insert(0, os.path.join(_REPO, 'diagnostics'))
+    from peak_shape_compare import build_realbkg
+    ov = {'physics_bank_path': bank}
+    if args.unified_labels:
+        ov['realbkg_unified_labels'] = True
+    for k, v in dict(contrast_min=args.contrast_min, snr_min=args.snr_min,
+                     seg_iou_max=args.seg_iou_max, ring_iou_max=args.ring_iou_max,
+                     max_peaks=args.max_peaks).items():
+        if v is not None:
+            ov[f'realbkg_{k}'] = v
+    sim = build_realbkg(os.path.join(_REPO, args.config), ov)
     RealBkgSimulation._load_donors = _ld
     if args.spots_cap:
         sim.spots_cap = tuple(int(v) for v in args.spots_cap.split(','))

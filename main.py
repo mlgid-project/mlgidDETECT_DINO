@@ -192,7 +192,13 @@ class SimulationDataset(torch.utils.data.Dataset):
                 surrogate_frac=float(getattr(args, 'realbkg_surrogate_frac', 0.0)),
                 v2_canvas=tuple(getattr(args, 'realbkg_v2_canvas', (1536, 3072))),
                 v2_refresh=int(getattr(args, 'realbkg_v2_refresh', 200)),
-                v2_n_pc=int(getattr(args, 'realbkg_v2_n_pc', 6)))
+                v2_n_pc=int(getattr(args, 'realbkg_v2_n_pc', 6)),
+                #RING APPEARANCE (realbkg-41-gap-split): segments kept on rings, ring box radial
+                #coefficient, ring sigma_q scale, ring spacing. Defaults reproduce every earlier run.
+                seg_on_ring_keep=float(getattr(args, 'realbkg_seg_on_ring_keep', 1.0)),
+                ring_w_coef=getattr(args, 'realbkg_ring_w_coef', None),
+                ring_sq_scale=float(getattr(args, 'realbkg_ring_sq_scale', 1.0)),
+                ring_min_gap=float(getattr(args, 'realbkg_ring_min_gap', 0.0)))
             src = ('fresh mosaics of reviewed peak-free frames'
                    if getattr(args, 'realbkg_mosaic', False) else args.realbkg_donor_path)
             print(f"[sim] real-background sim ON -- image source is {src}", flush=True)
@@ -220,6 +226,10 @@ class SimulationDataset(torch.utils.data.Dataset):
                   f"{'VALID CHI SPAN' if self.realbkg.ring_box_from_mask else 'full frame height'}"
                   f" | organic-like segment frames {self.realbkg.seg_wide_frac:.2f}"
                   f" sigma {self.realbkg.seg_wide_sigma}", flush=True)
+            print(f"[sim] rings: segments kept on rings {self.realbkg.seg_on_ring_keep:.2f}"
+                  f" | ring box w_coef {self.realbkg.ring_w_coef or self.realbkg.w_coef}"
+                  f" | ring sigma_q x{self.realbkg.ring_sq_scale}"
+                  f" | ring min gap {self.realbkg.ring_min_gap} px", flush=True)
 
     def __getitem__(self, idx):
         image = None
@@ -604,7 +614,27 @@ def main(args):
     #and the realbkg runs peak EARLY and then decay -- conv4's best organic was 0.613 at epoch 32,
     #conv3's 0.603 at epoch 68, against plateaus of 0.561 and 0.496. Those weights are gone. Keep
     #the best of each gate, and of their sum, so a peak can be recovered and resumed from.
+    #On RESUME the bests are rebuilt from the exp_ap_*.txt logs, which hold every eval of the run.
+    #Starting from {} would let the first post-resume eval overwrite an early peak with a worse
+    #score -- exactly the weights this exists to keep. 'sum' only counts epochs where every gate
+    #evaluated, matching how it is formed below.
     best = {}
+    if args.output_dir:
+        _hist = {}
+        for _f in Path(args.output_dir).glob('exp_ap_*.txt'):
+            _name = _f.stem[len('exp_ap_'):]
+            for _ln in _f.read_text().split('\n'):
+                _p = _ln.split('\t')
+                if len(_p) == 2 and int(_p[0]) < args.start_epoch:
+                    _hist.setdefault(int(_p[0]), {})[_name] = float(_p[1])
+        for _ep, _s in _hist.items():
+            for _k, _v in _s.items():
+                best[_k] = max(best.get(_k, float('-inf')), _v)
+            if len(_s) > 1 and len(_s) == len(getattr(args, 'eval_files', None) or {}):
+                best['sum'] = max(best.get('sum', float('-inf')), sum(_s.values()))
+        if best:
+            print(f'[resume] best scores restored from exp_ap logs: '
+                  + ', '.join(f'{k} {v:.4f}' for k, v in sorted(best.items())), flush=True)
     for epoch in range(args.start_epoch, args.epochs):
         #RESEED PER EPOCH. The seeds are set once, at process start (seed = args.seed + rank,
         #above), and resume restores model/optimizer/lr_scheduler/epoch but NO RNG state. With

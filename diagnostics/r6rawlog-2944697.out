@@ -1,0 +1,11 @@
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+construction 64.4 s
+
+frame 0: counts p1 69  median 245  p99.5 10417  max 2.82e+05  | 26 labelled peaks, 0 rings
+frame 1: counts p1 155  median 342  p99.5 113997  max 1.36e+05  | 53 labelled peaks, 2 rings
+frame 2: counts p1 129  median 234  p99.5 2023152  max 1.99e+07  | 43 labelled peaks, 0 rings
+frame 3: counts p1 122  median 375  p99.5 493444  max 5.26e+05  | 50 labelled peaks, 13 rings
+frame 4: counts p1 150  median 259  p99.5 321248  max 3.63e+05  | 67 labelled peaks, 8 rings
+wrote run6_raw_vs_log.png + run6_raw_frames.npz

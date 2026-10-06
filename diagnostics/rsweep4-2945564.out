@@ -1,0 +1,40 @@
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+
+== r7: {}
+   rings/frame mean  18.4 p50  18 p90  39 max  57 | 0 / 1-5 / 6-10 / 11-20 / 21-45 / 46+: 0.11 0.13 0.11 0.23 0.37 0.05 | segs/frame 41.0 (ring-free frames 63.6, >=11 rings 31.7)
+   RING box w p50 7.4 | FWHM/box p50 1.77 | contrast p10 0.086 p50 0.324 | with a segment on them 17% | ring gap p10 -1.1 p50 4.5
+   SEG box w p50 6.4 | FWHM p50 14.0 | contrast p50 0.112 | unlabelled bands/frame 8.33 vs labelled rings 18.4
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+
+== r7+gap4: {'realbkg_ring_min_gap': 4.0}
+   rings/frame mean  14.3 p50  15 p90  29 max  51 | 0 / 1-5 / 6-10 / 11-20 / 21-45 / 46+: 0.17 0.14 0.05 0.35 0.27 0.01 | segs/frame 40.0 (ring-free frames 60.5, >=11 rings 30.7)
+   RING box w p50 7.3 | FWHM/box p50 1.81 | contrast p10 0.120 p50 0.385 | with a segment on them 19% | ring gap p10 4.3 p50 11.4
+   SEG box w p50 6.5 | FWHM p50 13.0 | contrast p50 0.110 | unlabelled bands/frame 9.49 vs labelled rings 14.3
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+
+== r7+gap8: {'realbkg_ring_min_gap': 8.0}
+   rings/frame mean  12.9 p50  13 p90  24 max  37 | 0 / 1-5 / 6-10 / 11-20 / 21-45 / 46+: 0.15 0.13 0.11 0.41 0.20 0.00 | segs/frame 43.6 (ring-free frames 69.8, >=11 rings 32.8)
+   RING box w p50 7.0 | FWHM/box p50 1.87 | contrast p10 0.136 p50 0.411 | with a segment on them 20% | ring gap p10 7.0 p50 16.0
+   SEG box w p50 7.0 | FWHM p50 14.0 | contrast p50 0.109 | unlabelled bands/frame 9.47 vs labelled rings 12.9
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+
+== r7+gap8+cap60: {'realbkg_ring_min_gap': 8.0, 'realbkg_rings_cap': (2, 60)}
+   rings/frame mean  16.7 p50  18 p90  30 max  52 | 0 / 1-5 / 6-10 / 11-20 / 21-45 / 46+: 0.10 0.12 0.06 0.33 0.38 0.01 | segs/frame 33.8 (ring-free frames 50.9, >=11 rings 28.8)
+   RING box w p50 7.1 | FWHM/box p50 1.75 | contrast p10 0.152 p50 0.449 | with a segment on them 16% | ring gap p10 4.0 p50 14.2
+   SEG box w p50 5.7 | FWHM p50 13.0 | contrast p50 0.129 | unlabelled bands/frame 8.21 vs labelled rings 16.7
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+
+== r7+gap12+cap80: {'realbkg_ring_min_gap': 12.0, 'realbkg_rings_cap': (2, 80)}
+   rings/frame mean  14.1 p50  15 p90  27 max  40 | 0 / 1-5 / 6-10 / 11-20 / 21-45 / 46+: 0.15 0.09 0.13 0.34 0.29 0.00 | segs/frame 37.3 (ring-free frames 78.1, >=11 rings 22.5)
+   RING box w p50 7.2 | FWHM/box p50 1.78 | contrast p10 0.178 p50 0.453 | with a segment on them 15% | ring gap p10 6.7 p50 18.4
+   SEG box w p50 6.4 | FWHM p50 14.0 | contrast p50 0.111 | unlabelled bands/frame 10.25 vs labelled rings 14.1

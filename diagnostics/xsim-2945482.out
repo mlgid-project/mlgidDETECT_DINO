@@ -1,0 +1,46 @@
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+legacy: 60 frames, 53.7 boxes/frame, 17.0 rings/frame
+realbkg_v1: 60 frames, 48.3 boxes/frame, 6.8 rings/frame
+realbkg_v2: 60 frames, 50.3 boxes/frame, 8.0 rings/frame
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/functional.py:534: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3595.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/models/dino/backbone.py:198: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/diagnostics/gap41_split.py:71: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  ck = torch.load(ckpt, map_location='cpu')
+
+===== lr4e5_1 (epoch 367)
+  on legacy      ap 0.995 | ring recall 0.998 TP score 0.977 preds/ring 1.05 | seg recall 0.995 TP score 0.989 | preds/frame 57
+  on realbkg_v1  ap 0.614 | ring recall 0.775 TP score 0.936 preds/ring 1.15 | seg recall 0.640 TP score 0.866 | preds/frame 48
+  on realbkg_v2  ap 0.637 | ring recall 0.756 TP score 0.913 preds/ring 1.17 | seg recall 0.659 TP score 0.903 | preds/frame 49
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/models/dino/backbone.py:198: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/diagnostics/gap41_split.py:71: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  ck = torch.load(ckpt, map_location='cpu')
+
+===== conv3_final (epoch 400)
+  on legacy      ap 0.612 | ring recall 0.536 TP score 0.355 preds/ring 3.68 | seg recall 0.900 TP score 0.943 | preds/frame 183
+  on realbkg_v1  ap 0.944 | ring recall 0.983 TP score 0.963 preds/ring 3.05 | seg recall 0.968 TP score 0.990 | preds/frame 86
+  on realbkg_v2  ap 0.946 | ring recall 0.967 TP score 0.967 preds/ring 3.19 | seg recall 0.973 TP score 0.989 | preds/frame 93
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/models/dino/backbone.py:198: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/diagnostics/gap41_split.py:71: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  ck = torch.load(ckpt, map_location='cpu')
+
+===== run6_best41 (epoch 30)
+  on legacy      ap 0.570 | ring recall 0.530 TP score 0.220 preds/ring 2.84 | seg recall 0.897 TP score 0.680 | preds/frame 145
+  on realbkg_v1  ap 0.845 | ring recall 0.912 TP score 0.269 preds/ring 2.40 | seg recall 0.898 TP score 0.699 | preds/frame 79
+  on realbkg_v2  ap 0.849 | ring recall 0.890 TP score 0.246 preds/ring 2.33 | seg recall 0.903 TP score 0.696 | preds/frame 83

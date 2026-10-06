@@ -65,7 +65,9 @@ class RealBkgSimulation:
                  elongate=None, max_donors=None,
                  mosaic=False, mosaic_pool=48, mosaic_refresh=64, mosaic_seed=None,
                  intensity_decades=None, amplitude_mode='fitted',
-                 mask_bank=True, mask_keep='default'):
+                 mask_bank=True, mask_keep='default',
+                 seg_on_ring_keep=1.0, ring_w_coef=None, ring_sq_scale=1.0,
+                 ring_min_gap=0.0):
         from physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -137,6 +139,33 @@ class RealBkgSimulation:
         self.v2_refresh = int(v2_refresh)
         self.v2_n_pc = int(v2_n_pc)
         self._bv = None
+        #: RING APPEARANCE (realbkg-41-gap-split, 2026-10-06). The realbkg models fragment 41's
+        #: rings into short segment boxes -- conv3 4.7 boxes per GT ring, ring TP score 0.30 --
+        #: and do exactly the same on LEGACY-sim rings (0.36, 3.7 boxes/ring) while scoring their
+        #: own sim's rings at 0.96. So realbkg rings are a narrow family 41's rings fall outside.
+        #: Measured differences on the processed image, realbkg r6 vs real 41 (legacy):
+        #:   * a segment box sits on 40% of rings, against 15% (2%) -- the model learns to put
+        #:     segment boxes along bright bands. `seg_on_ring_keep` keeps only that fraction of
+        #:     the segments whose box overlaps a ring's box radially; the rest are not drawn.
+        #:   * visible ring FWHM / ring box width 2.46 against 1.48 (1.79): ring boxes are much
+        #:     tighter than the band they label (box p50 5.0 px vs 41's 7.6, same visible width).
+        #:     `ring_w_coef` sets the ring box's radial extent to ring_w_coef*sigma_q instead of
+        #:     the segments' w_coef. None keeps w_coef.
+        #:   (ring contrast read 0.14 against 0.22, but that was the tight box: with ring_w_coef
+        #:   matching 41's box width it reads 0.22-0.24, and a separate ring contrast floor
+        #:   (4x, 8x noise) moved it by <0.02 -- measured in ring_fix_sweep, so no knob for it.)
+        self.seg_on_ring_keep = float(seg_on_ring_keep)
+        self.ring_w_coef = None if ring_w_coef is None else float(ring_w_coef)
+        #:   * at the SAME box width, realbkg rings read ~40% wider on the processed image than
+        #:     41's (FWHM/box 2.12 vs 1.48 at box p50 7.5 vs 7.6 px): rings take the segments'
+        #:     sigma_q draw and the Lorentzian-heavy voigt (eta 0.6-1.0), whose wings the log
+        #:     contrast step widens. `ring_sq_scale` multiplies sigma_q for RINGS only.
+        self.ring_sq_scale = float(ring_sq_scale)
+        #:   * RING SPACING. Drawing many reflections per powder entry packs organic CIF rings
+        #:     edge to edge: with 40 per entry the nearest-ring gap ran p10 -1.0 / p50 4.2 px,
+        #:     against real 41's 4.2 / 17.9 (legacy 7.2 / 14.6). `ring_min_gap` drops the weaker
+        #:     of two rings whose boxes come within that many px radially. 0 = off.
+        self.ring_min_gap = float(ring_min_gap)
 
         self.phys = PhysicsSimulation(bank_path, sim_config=self.sim_config, device=device,
                                       unify_contrast=True)
@@ -411,6 +440,8 @@ class RealBkgSimulation:
             if seg.any():
                 s_q = np.where(seg, ln(np.log(mq), sdq)*ln(0.0, R['w_sq'], n), s_q)
                 s_c = np.where(seg, ln(np.log(mc), sdc)*ln(0.0, R['w_sc'], n), s_c)
+        if self.ring_sq_scale != 1.0:
+            s_q = np.where(is_ring, s_q*self.ring_sq_scale, s_q)
         s_q = np.clip(s_q, *self.sig_clip[0])
         s_c = np.clip(s_c, *self.sig_clip[1])
         return s_q, np.where(is_ring, 1e4, s_c), el
@@ -483,6 +514,8 @@ class RealBkgSimulation:
         extent cannot be fixed in one and left wrong in the other.
         """
         hw, hh = self.w_coef*s_q/2.0, self.a_coef*s_c/2.0
+        if self.ring_w_coef is not None:
+            hw = np.where(rg, self.ring_w_coef*s_q/2.0, hw)
         bx = np.stack([x-hw, y-hh, x+hw, y+hh], 1).astype(np.float32)
         if not rg.any():
             return bx
@@ -538,6 +571,23 @@ class RealBkgSimulation:
             hit = (iou[n] > iou_max) & alive; hit[n] = False
             alive[hit] = False
         keep[idx[~alive]] = False
+        return keep
+
+    def _ring_gap(self, bx, sel, amp):
+        """Greedy by amplitude within `sel` (rings): drop a ring whose radial box extent comes
+        within ring_min_gap px of an already-kept, brighter ring."""
+        keep = np.ones(len(bx), bool)
+        idx = np.flatnonzero(sel)
+        if len(idx) < 2:
+            return keep
+        x0, x1 = bx[idx, 0], bx[idx, 2]
+        kept = []
+        for n in np.argsort(-amp[idx]):
+            if any(x0[n] - x1[k] < self.ring_min_gap and x0[k] - x1[n] < self.ring_min_gap
+                   for k in kept):
+                keep[idx[n]] = False
+            else:
+                kept.append(n)
         return keep
 
     def _ring_nms(self, bx, rg, amp):
@@ -609,6 +659,23 @@ class RealBkgSimulation:
 
         s_q, s_c, el = self._draw_widths(len(x), rg)
 
+        if self.seg_on_ring_keep < 1.0 and rg.any() and (~rg).any():
+            # Segments whose box would overlap a ring's box radially are kept with probability
+            # seg_on_ring_keep and otherwise never drawn -- see the RING APPEARANCE note. Uses the
+            # same radial half-widths _boxes() will assign, so "overlap" means label overlap.
+            hw_s = self.w_coef*s_q/2.0
+            hw_r = (self.ring_w_coef if self.ring_w_coef is not None else self.w_coef)*s_q/2.0
+            seg_i, ring_i = np.flatnonzero(~rg), np.flatnonzero(rg)
+            near = (np.abs(x[seg_i][:, None] - x[ring_i][None, :])
+                    < hw_s[seg_i][:, None] + hw_r[ring_i][None, :]).any(1)
+            drop = np.zeros(len(x), bool)
+            drop[seg_i[near & (np.random.random(len(seg_i)) >= self.seg_on_ring_keep)]] = True
+            if drop.any():
+                k = ~drop
+                x, y, rel, rg, iy, ix, s_q, s_c = (v[k] for v in (x, y, rel, rg, iy, ix, s_q, s_c))
+                if el.get('f') is not None:
+                    el['f'] = el['f'][k]
+
         if self.amplitude_mode == 'pygid':
             # PYGIDSIM INTENSITIES, UNTOUCHED. `rel` is I/I_max straight out of the structure
             # factors; every peak in the frame is multiplied by ONE scale, so the relative
@@ -653,6 +720,8 @@ class RealBkgSimulation:
             bx[:, 0::2] = np.clip(bx[:, 0::2], 0, WIDTH-1)
             bx[:, 1::2] = np.clip(bx[:, 1::2], 0, HEIGHT-1)
             keep &= self._nms(bx, rg & keep, amp, self.ring_iou_max)
+            if self.ring_min_gap > 0:
+                keep &= self._ring_gap(bx, rg & keep, amp)
             keep &= self._nms(bx, (~rg) & keep, amp, self.seg_iou_max)
             if keep.sum() < 3:
                 return None

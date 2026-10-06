@@ -1,0 +1,120 @@
+##### SHAPE + CROWDING (r7 vs real 41)
+
+===== real41: 41 frames, 17.0 rings + 24.0 segments per frame (7 s)
+  RINGS
+    box radial width px     p10    3.30  p50    7.49  p90   13.66   n 674
+    visible FWHM px         p10    4.00  p50   11.00  p90   22.00   n 665
+    FWHM / box width        p10    0.78  p50    1.48  p90    2.80   n 665
+    contrast (0-1 image)    p10    0.07  p50    0.22  p90    0.48   n 674
+    edge steepness /px      p10    0.18  p50    0.33  p90    0.62   n 665
+  SEGMENTS
+    box radial width px     p10    1.35  p50    4.65  p90    9.18   n 982
+    box chi height px       p10    9.03  p50   34.83  p90  120.74   n 982
+    visible FWHM px         p10    2.00  p50    8.00  p90   17.00   n 975
+    FWHM / box width        p10    0.86  p50    1.68  p90    3.54   n 975
+    contrast (0-1 image)    p10    0.08  p50    0.24  p90    0.55   n 982
+    edge steepness /px      p10    0.25  p50    0.53  p90    1.00   n 975
+  RING CROWDING
+    other boxes overlapping radially     p10    0.00  p50    0.00  p90    1.00   n 696
+    of which segments                     p10    0.00  p50    0.00  p90    1.00   n 696
+    ring chi extent covered by segments   p10    0.00  p50    0.00  p90    0.13   n 696
+    gap to nearest ring px (edge-edge)    p10    4.15  p50   17.86  p90   69.29   n 695
+    rings with ANY segment on them        15%
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+
+===== realbkg6: 150 frames, 18.3 rings + 38.2 segments per frame (62 s)
+  RINGS
+    box radial width px     p10    2.97  p50    7.00  p90   17.62   n 2657
+    visible FWHM px         p10    5.00  p50   13.00  p90   29.00   n 2572
+    FWHM / box width        p10    0.85  p50    1.83  p90    3.03   n 2572
+    contrast (0-1 image)    p10    0.10  p50    0.34  p90    0.65   n 2657
+    edge steepness /px      p10    0.12  p50    0.25  p90    0.53   n 2572
+  SEGMENTS
+    box radial width px     p10    2.57  p50    6.44  p90   16.34   n 5219
+    box chi height px       p10    5.60  p50   23.77  p90  133.68   n 5219
+    visible FWHM px         p10    7.00  p50   13.00  p90   32.00   n 4798
+    FWHM / box width        p10    1.41  p50    2.29  p90    3.78   n 4798
+    contrast (0-1 image)    p10    0.03  p50    0.12  p90    0.35   n 5219
+    edge steepness /px      p10    0.12  p50    0.26  p90    0.61   n 4798
+  RING CROWDING
+    other boxes overlapping radially     p10    0.00  p50    0.00  p90    1.00   n 2741
+    of which segments                     p10    0.00  p50    0.00  p90    1.00   n 2741
+    ring chi extent covered by segments   p10    0.00  p50    0.00  p90    0.06   n 2741
+    gap to nearest ring px (edge-edge)    p10   -1.01  p50    4.22  p90   30.48   n 2737
+    rings with ANY segment on them        17%
+##### REVIEW FIGURES
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+wrote /mnt/lustre/work/schreiber/szb389/tmp_diag/sim2/images/12_ring_fix
+##### RAW H5
+box convention: a_coef (chi) = 2.8, w_coef (q) = 1.3
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+bank         : /mnt/lustre/work/schreiber/szb389/datasets/cif_library_organic/bank/bank_organic_hkl.npz
+spots/entry  : (2, 100)   oriented/frame (1, 4)   p_ring 0.75
+background   : fresh mosaic   amplitude pygid
+label gate   : contrast_min 2.0  snr_min 6.0  ring_iou_max 0.1
+  frame  0 unsteered           :  46 boxes (27 ring) of   46 drawn  q_max 5.64  max/median    108.4  I max 1.12e+05
+  frame  1 unsteered           :  59 boxes (27 ring) of   59 drawn  q_max 3.90  max/median   5574.2  I max 3.11e+06
+  frame  2 unsteered           : 179 boxes ( 0 ring) of  179 drawn  q_max 4.77  max/median   3872.1  I max 5.52e+05
+  frame  3 unsteered           :  69 boxes (39 ring) of   69 drawn  q_max 4.77  max/median    280.2  I max 3.25e+04
+  frame  4 unsteered           : 105 boxes ( 0 ring) of  105 drawn  q_max 5.46  max/median     61.2  I max 1.01e+06
+  frame  5 unsteered           :  46 boxes (40 ring) of   46 drawn  q_max 3.71  max/median     23.8  I max 9.13e+03
+  frame  6 unsteered           :  24 boxes ( 9 ring) of   24 drawn  q_max 3.90  max/median    232.0  I max 1.87e+04
+  frame  7 unsteered           :  49 boxes ( 4 ring) of   49 drawn  q_max 5.64  max/median     79.3  I max 6.66e+03
+  frame  8 unsteered           :  37 boxes ( 0 ring) of   37 drawn  q_max 4.92  max/median     15.8  I max 1.23e+03
+  frame  9 unsteered           : 184 boxes ( 0 ring) of  184 drawn  q_max 5.73  max/median 134821.0  I max 1.53e+07
+  frame 10 unsteered           :  26 boxes (12 ring) of   26 drawn  q_max 4.92  max/median      4.8  I max 360
+  frame 11 unsteered           :  57 boxes ( 3 ring) of   57 drawn  q_max 7.80  max/median     88.4  I max 6.46e+03
+  frame 12 unsteered           :  64 boxes (33 ring) of   64 drawn  q_max 4.03  max/median    269.8  I max 8.44e+04
+  frame 13 unsteered           :  16 boxes (15 ring) of   16 drawn  q_max 5.73  max/median     20.4  I max 4.14e+03
+  frame 14 unsteered           :  71 boxes (40 ring) of   71 drawn  q_max 3.61  max/median    596.8  I max 3.84e+06
+  frame 15 unsteered           :  45 boxes (28 ring) of   45 drawn  q_max 3.71  max/median     35.5  I max 3.5e+03
+  frame 16 unsteered           :  31 boxes (19 ring) of   31 drawn  q_max 5.46  max/median     46.8  I max 3.96e+03
+  frame 17 unsteered           :  99 boxes (32 ring) of   99 drawn  q_max 5.73  max/median    104.3  I max 2.44e+06
+  frame 18 unsteered           :  35 boxes (31 ring) of   35 drawn  q_max 3.61  max/median     19.6  I max 2.19e+03
+  frame 19 unsteered           :  45 boxes (30 ring) of   45 drawn  q_max 7.80  max/median    643.3  I max 1.6e+06
+
+wrote /mnt/lustre/work/schreiber/szb389/datasets/realbkgsim_r7_ringfix_raw_20.h5  (89.8 MB)
+  20 frames | boxes/frame min 16 p50 47 max 184 | rings/frame min 0 p50 23 max 40
+  dynamic range (max/median) min 4.8 p50 96.4 max 134821.0   [real labelled frames: 96 to 13116]
+  entry_simNN/polar/image  = raw polar frame (lossless, pre-contrast)
+  entry_simNN/data/img_gid_q = raw reciprocal frame (lossy resampling)
+  entry_simNN/data/analysis/frame00000/fitted_peaks = GT boxes, pygid PEAK_DTYPE
+##### CROSS-SIM (do r7 rings read as legacy/41 rings?)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+legacy: 60 frames, 53.7 boxes/frame, 17.0 rings/frame
+DINO_4scale_swin_realbkg_r7: 60 frames, 60.2 boxes/frame, 17.1 rings/frame
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/functional.py:534: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3595.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/models/dino/backbone.py:198: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/diagnostics/gap41_split.py:71: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  ck = torch.load(ckpt, map_location='cpu')
+
+===== lr4e5_1 (epoch 367)
+  on legacy      ap 0.995 | ring recall 0.998 TP score 0.977 preds/ring 1.05 | seg recall 0.995 TP score 0.989 | preds/frame 57
+  on DINO_4scale_swin_realbkg_r7 ap 0.652 | ring recall 0.867 TP score 0.903 preds/ring 1.21 | seg recall 0.630 TP score 0.813 | preds/frame 61
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/models/dino/backbone.py:198: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/diagnostics/gap41_split.py:71: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  ck = torch.load(ckpt, map_location='cpu')
+
+===== conv3_final (epoch 400)
+  on legacy      ap 0.612 | ring recall 0.536 TP score 0.355 preds/ring 3.68 | seg recall 0.900 TP score 0.943 | preds/frame 183
+  on DINO_4scale_swin_realbkg_r7 ap 0.925 | ring recall 0.974 TP score 0.952 preds/ring 2.80 | seg recall 0.952 TP score 0.989 | preds/frame 108

@@ -1,0 +1,24 @@
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+
+== R: {'realbkg_p_ring': 0.75, 'realbkg_n_powder': (1, 3), 'realbkg_rings_cap': (2, 40), 'realbkg_ring_sq_scale': 0.7, 'realbkg_ring_w_coef': 3.0, 'realbkg_seg_on_ring_keep': 0.12}
+   rings/frame mean  19.7 p50  20 p90  39 max  61 | 0 / 1-5 / 6-10 / 11-20 / 21-45 / 46+: 0.17 0.08 0.05 0.20 0.45 0.04 | segs/frame 24.3 (ring-free frames 34.7, >=11 rings 20.9)
+   RING box w p50 7.3 | FWHM/box p50 1.79 | contrast p10 0.089 p50 0.329 | with a segment on them 10%
+   SEG box w p50 6.7 | FWHM p50 13.0 | contrast p50 0.108 | unlabelled bands/frame 7.46 vs labelled rings 19.7
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+
+== R+spots2-120: {'realbkg_p_ring': 0.75, 'realbkg_n_powder': (1, 3), 'realbkg_rings_cap': (2, 40), 'realbkg_ring_sq_scale': 0.7, 'realbkg_ring_w_coef': 3.0, 'realbkg_seg_on_ring_keep': 0.12, 'realbkg_spots_cap': (2, 120)}
+   rings/frame mean  21.2 p50  22 p90  38 max  66 | 0 / 1-5 / 6-10 / 11-20 / 21-45 / 46+: 0.08 0.09 0.06 0.23 0.49 0.05 | segs/frame 38.5 (ring-free frames 63.5, >=11 rings 35.4)
+   RING box w p50 7.0 | FWHM/box p50 1.84 | contrast p10 0.090 p50 0.336 | with a segment on them 19%
+   SEG box w p50 6.2 | FWHM p50 13.0 | contrast p50 0.122 | unlabelled bands/frame 7.17 vs labelled rings 21.2
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+
+== R+orient1-4+spots2-100: {'realbkg_p_ring': 0.75, 'realbkg_n_powder': (1, 3), 'realbkg_rings_cap': (2, 40), 'realbkg_ring_sq_scale': 0.7, 'realbkg_ring_w_coef': 3.0, 'realbkg_seg_on_ring_keep': 0.12, 'realbkg_n_oriented': (1, 4), 'realbkg_spots_cap': (2, 100)}
+   rings/frame mean  17.9 p50  19 p90  36 max  63 | 0 / 1-5 / 6-10 / 11-20 / 21-45 / 46+: 0.13 0.14 0.10 0.21 0.41 0.02 | segs/frame 42.7 (ring-free frames 68.7, >=11 rings 35.3)
+   RING box w p50 7.2 | FWHM/box p50 1.77 | contrast p10 0.078 p50 0.324 | with a segment on them 17%
+   SEG box w p50 6.0 | FWHM p50 13.0 | contrast p50 0.118 | unlabelled bands/frame 7.59 vs labelled rings 17.9
