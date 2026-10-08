@@ -12,6 +12,8 @@ import torch
 
 from models.heatmap_head import HeatmapNet, decode
 from heatmap.targets_loss import build_targets, heatmap_loss
+if os.environ.get('HM_REF_TARGETS') == '1':      # fallback: the original per-ring-loop target builder (slower)
+    from heatmap.targets_loss_ref import build_targets
 
 SIMMIM = '/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/ssl_runs/simmim1/backbone_export/swin_large_patch4_window12_384_22k.pth'
 SSL1 = '/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_ssl1/checkpoint.pth'
@@ -31,6 +33,7 @@ def get_args():
     p.add_argument('--out_stride', type=int, default=2)
     p.add_argument('--epochs', type=int, default=60)
     p.add_argument('--lr_drop', type=int, default=45)
+    p.add_argument('--lr_drops', type=int, nargs='+', default=None, help='several x0.1 drops (MultiStepLR); overrides --lr_drop')
     p.add_argument('--bs', type=int, default=4)
     p.add_argument('--lr', type=float, default=3e-4)
     p.add_argument('--lr_backbone', type=float, default=1e-5)
@@ -62,12 +65,15 @@ def quick_eval(model, epoch, out):
             dets.append(E.heatmap_dets(cfg, pi, use_nms=False))
             dets_nms.append(E.heatmap_dets(cfg, pi, use_nms=True))      # the deployed pipeline (class-aware NMS)
         r = E.evaluate_dets(dets, gts, cfg)
-        ap_nms = E.evaluate_dets(dets_nms, gts, cfg, thr_list=(0.3,))['ap']
+        rn = E.evaluate_dets(dets_nms, gts, cfg, thr_list=(0.3,)); ap_nms = rn['ap']; tn = rn['thr'][0.3]
         t = r['thr'][0.3]
         line = (f'{epoch}\t{r["ap"]:.4f}\trecall0.3 {t["recall"]:.3f}\tprec0.3 {t["precision"]:.3f}\t'
                 f'chigap<5 {t["chigap"]["<5"][1]:.3f}\teu<5 {t["euclid"]["<5"][1]:.3f}\t'
-                f'n<5 chi={t["chigap"]["<5"][0]} eu={t["euclid"]["<5"][0]}\tapnms {ap_nms:.4f}')
+                f'n<5 chi={t["chigap"]["<5"][0]} eu={t["euclid"]["<5"][0]}\tapnms {ap_nms:.4f}\t'
+                f'nms0.3 rec {tn["recall"]:.3f} prec {tn["precision"]:.3f} ring {tn["ring_recall"]:.3f} fp {tn["fp"]}')
         print(f'[epoch {epoch}] {ds}: {line}', flush=True)
+        print(f'[epoch {epoch}] {ds} +nms (deployed): AP {ap_nms:.4f} | score>0.3 recall {tn["recall"]:.3f} prec {tn["precision"]:.3f} '
+              f'ring recall {tn["ring_recall"]:.3f} FP {tn["fp"]}', flush=True)
         with open(os.path.join(out, f'exp_ap_{ds}.txt'), 'a') as f:
             f.write(line + '\n')
     print(f'[epoch {epoch}] eval took {time.time()-t_eval:.0f}s (both sets)', flush=True)
@@ -94,7 +100,8 @@ def main():
     if a.unfreeze:
         groups.append(dict(params=[p for n, p in model.named_parameters() if n.startswith('backbone.')], lr=a.lr_backbone))
     opt = torch.optim.AdamW(groups, weight_decay=1e-4)
-    sched = torch.optim.lr_scheduler.StepLR(opt, a.lr_drop)
+    sched = (torch.optim.lr_scheduler.MultiStepLR(opt, a.lr_drops) if a.lr_drops
+             else torch.optim.lr_scheduler.StepLR(opt, a.lr_drop))
     start = 0
     ck_path = os.path.join(a.out, 'checkpoint.pth')
     if os.path.exists(ck_path):

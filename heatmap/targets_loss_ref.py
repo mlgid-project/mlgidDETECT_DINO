@@ -1,3 +1,5 @@
+"""REFERENCE copy of heatmap/targets_loss.py from before the ring-target vectorisation (per-ring Python loop).
+Kept only for test_targets.py and as a fallback (HM_REF_TARGETS=1 in train.py). Not edited since."""
 """Label conversion (xyxy boxes -> centre heatmap + regression targets) and the loss."""
 import torch
 import torch.nn.functional as F
@@ -49,32 +51,21 @@ def build_targets(boxes_xyxy, labels, H, W, stride, ring_mode='legacy'):
     g = torch.where(valid & ~ridge[:, None, None], g, torch.zeros_like(g))
     flat = (labels[:, None, None] * h * w + gy.clamp(0, h - 1) * w + gx.clamp(0, w - 1)).reshape(-1)
     heat.view(-1).scatter_reduce_(0, flat, g.reshape(-1), reduce='amax', include_self=True)
-    # ring ridges (ring_mode == 'ridge'): tall Gaussian along chi, peak 1.0 at the centre cell. Vectorised over rings
-    # (same values as the former per-ring loop): window = +-KY rows x +-R cols around each ring's centre cell.
-    ex_t = ey_t = eg_t = None
-    ridx = torch.nonzero(ridge).squeeze(1)
-    if ridx.numel():
-        syr = (bh[ridx] / 6).clamp(4.0, RIDGE_CAP); sxr = sx[ridx]
-        KY = int(3 * RIDGE_CAP / stride) + 1
-        ky = (3 * syr / stride).long() + 1
-        dyg = torch.arange(-KY, KY + 1, device=dev); dxg = torch.arange(-R, R + 1, device=dev)
-        yy_ = iy[ridx][:, None] + dyg[None]; xx_ = ix[ridx][:, None] + dxg[None]            # [M,Y], [M,X]
-        gy_ = torch.exp(-((dyg * stride)[None] ** 2) / (2 * syr[:, None] ** 2))
-        gx_ = torch.exp(-((dxg * stride)[None] ** 2) / (2 * sxr[:, None] ** 2))
-        blk = gy_[:, :, None] * gx_[:, None, :]                                              # [M,Y,X]
-        vld = ((dyg.abs()[None, :, None] <= ky[:, None, None]) & (yy_ >= 0)[:, :, None] & (yy_ < h)[:, :, None]
-               & (xx_ >= 0)[:, None, :] & (xx_ < w)[:, None, :])
-        flat_r = (h * w + yy_.clamp(0, h - 1)[:, :, None] * w + xx_.clamp(0, w - 1)[:, None, :])
-        heat.view(-1).scatter_reduce_(0, flat_r[vld], blk[vld], reduce='amax', include_self=True)
-        # regression cells: ridge cells with target >= 0.5 (|dy| <= 1.1774 sigma_y), +-1 cell in x
-        OY = int(1.1774 * RIDGE_CAP / stride)
-        ky50 = (1.1774 * syr / stride).long()
-        oyg = torch.arange(-OY, OY + 1, device=dev); oxg = torch.tensor([-1, 0, 1], device=dev)
-        ey_t = (iy[ridx][:, None, None] + oyg[None, :, None]).expand(-1, -1, 3)
-        ex_t = (ix[ridx][:, None, None] + oxg[None, None, :]).expand(-1, oyg.numel(), -1)
-        eg_t = ridx[:, None, None].expand(-1, oyg.numel(), 3)
-        mk = ((oyg.abs()[None, :, None] <= ky50[:, None, None]) & (ey_t >= 0) & (ey_t < h) & (ex_t >= 0) & (ex_t < w))
-        ey_t, ex_t, eg_t = ey_t[mk], ex_t[mk], eg_t[mk]
+    # ring ridges (ring_mode == 'ridge'): tall Gaussian along chi, peak 1.0 at the centre cell
+    xc_l, yc_l, gi_l = [], [], []
+    for i in torch.nonzero(ridge).squeeze(1).tolist():
+        syi = float(min(max(bh[i].item() / 6, 4.0), RIDGE_CAP)); sxi = float(sx[i].item())
+        ky = int(3 * syi / stride) + 1
+        ys = torch.arange(max(int(iy[i]) - ky, 0), min(int(iy[i]) + ky + 1, h), device=dev)
+        xs = torch.arange(max(int(ix[i]) - R, 0), min(int(ix[i]) + R + 1, w), device=dev)
+        gy = torch.exp(-((ys - iy[i]) * stride) ** 2 / (2 * syi ** 2))
+        gx = torch.exp(-((xs - ix[i]) * stride) ** 2 / (2 * sxi ** 2))
+        blk = gy[:, None] * gx[None, :]
+        heat[1, ys[0]:ys[-1] + 1, xs[0]:xs[-1] + 1] = torch.maximum(heat[1, ys[0]:ys[-1] + 1, xs[0]:xs[-1] + 1], blk)
+        ky50 = int(1.1774 * syi / stride)                          # cells with target >= 0.5
+        for oy in range(-ky50, ky50 + 1):
+            for ox in (-1, 0, 1):
+                yc_l.append(int(iy[i]) + oy); xc_l.append(int(ix[i]) + ox); gi_l.append(i)
     # regression: 3x3 around each centre cell, nearest GT wins
     offs = torch.tensor([(ox, oy) for oy in (-1, 0, 1) for ox in (-1, 0, 1)], device=dev)   # [9,2]
     nx = ix[None] + offs[:, 0:1]                                   # [9,N]
@@ -82,8 +73,10 @@ def build_targets(boxes_xyxy, labels, H, W, stride, ring_mode='legacy'):
     ok = (nx >= 0) & (nx < w) & (ny >= 0) & (ny < h)
     gi = torch.arange(N, device=dev)[None].expand(9, N)
     cell_x, cell_y, gidx = nx[ok], ny[ok], gi[ok]
-    if ex_t is not None:                                           # extra ridge cells for rings
-        cell_x = torch.cat([cell_x, ex_t]); cell_y = torch.cat([cell_y, ey_t]); gidx = torch.cat([gidx, eg_t])
+    if xc_l:                                                       # extra ridge cells for rings
+        ex = torch.tensor(xc_l, device=dev); ey = torch.tensor(yc_l, device=dev); eg = torch.tensor(gi_l, device=dev)
+        v = (ex >= 0) & (ex < w) & (ey >= 0) & (ey < h)
+        cell_x = torch.cat([cell_x, ex[v]]); cell_y = torch.cat([cell_y, ey[v]]); gidx = torch.cat([gidx, eg[v]])
     cell = cell_y * w + cell_x
     dist = ((cx[gidx] / stride - (cell_x + 0.5)) ** 2 + (cy[gidx] / stride - (cell_y + 0.5)) ** 2)
     best = torch.full((h * w,), float('inf'), device=dev).scatter_reduce(0, cell, dist, 'amin')
