@@ -18,7 +18,10 @@ for t in range(n_trials):
     for mode in ('ridge', 'legacy'):
         t0 = time.time(); a = new.build_targets(b, lab, 512, 1024, 2, mode); tn += time.time() - t0
         t0 = time.time(); c = ref.build_targets(b, lab, 512, 1024, 2, mode); tr += time.time() - t0
-        if not all(torch.equal(p, q) for p, q in zip(a, c)):
+        # heat target: equal up to float rounding (the vectorised exp differs from the loop's by ~1 ulp = 6e-8);
+        # regression targets and weights must match EXACTLY
+        ok = torch.allclose(a[0], c[0], atol=1e-6, rtol=0) and all(torch.equal(p, q) for p, q in zip(a[1:], c[1:]))
+        if not ok:
             bad += 1
             if bad < 4:
                 print('MISMATCH trial', t, mode, [float((p - q).abs().max()) for p, q in zip(a, c)])
