@@ -3,7 +3,7 @@
   python heatmap/visualize.py --ckpt <run_dir>/checkpoint.pth --out <dir> [--sets organic 41] [--thr 0.3]
          [--max_frames N] [--device cuda|cpu]       (--ckpt none = untrained net, for a plumbing test)
 
-Per frame:  <out>/<set>/frame_XX.png  (top: polar image + boxes; bottom: predicted heatmap)
+Per frame:  <out>/<set>/frame_XX.png  (top: polar image + boxes; bottom: predicted heatmap); --decode nms adds the deployed NMS
    boxes: GT green; matched prediction blue; false positive red; missed GT orange (native decode: peak picking, no NMS)
 Per set:    <out>/<set>/closepairs.png  zoomed crops around GT peaks whose nearest GT neighbour is < 5 px away
    (top row: image + boxes, bottom row: heatmap with the picked peaks marked)
@@ -56,7 +56,7 @@ def classify(gt, pb):
     return np.asarray(ci, int), np.asarray(ri, int)
 
 
-def frame_figure(img, heat, gt, pb, sc, ci, ri, thr, title, path):
+def frame_figure(img, heat, gt, pb, sc, ci, ri, thr, title, path, dec='native'):
     tp = np.zeros(len(pb), bool); tp[ci] = True
     miss = np.ones(len(gt), bool); miss[ri] = False
     fig, ax = plt.subplots(2, 1, figsize=(14, 14), facecolor=SURFACE)
@@ -68,7 +68,7 @@ def frame_figure(img, heat, gt, pb, sc, ci, ri, thr, title, path):
                           mp.Patch(fc='none', ec=TP_C, label=f'prediction, matched ({int(tp.sum())})'),
                           mp.Patch(fc='none', ec=FP_C, label=f'prediction, false positive ({int((~tp).sum())})')],
                  loc='lower right', bbox_to_anchor=(1.0, 1.01), ncol=4, fontsize=9, frameon=False)   # outside the image
-    ax[0].set_title(f'{title}   (score > {thr}, native decode)', loc='left', color=INK)
+    ax[0].set_title(f'{title}   (score > {thr}, {dec} decode' + (', +class-aware NMS)' if dec == 'nms' else ', no NMS)'), loc='left', color=INK)
     ax[1].imshow(heat, cmap='Blues', vmin=0, vmax=1, extent=(0, img.shape[1], img.shape[0], 0), aspect='equal')
     ax[1].set_title('predicted heatmap (max over classes)', loc='left', color=INK)
     for a_ in ax:
@@ -101,6 +101,8 @@ def main():
     p.add_argument('--ckpt', required=True); p.add_argument('--out', required=True)
     p.add_argument('--sets', nargs='+', default=['organic', '41'])
     p.add_argument('--thr', type=float, default=0.3)
+    p.add_argument('--decode', choices=['native', 'nms'], default='native',
+                   help="native = peak picking only; nms = + the shared class-aware NMS (the deployed pipeline)")
     p.add_argument('--max_frames', type=int, default=0)
     p.add_argument('--n_crops', type=int, default=6)
     p.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
@@ -116,16 +118,14 @@ def main():
                 o = model(E.frame_inputs(ic, a.device))
             img = np.asarray(ic.converted_polar_image[0, 0])
             g = E.gt_of(ic); gt = g['gt']
-            pb, sc, cls = [t.cpu().numpy() for t in decode(o, model.out_stride, 225)[0]]
-            k = sc > cfg.POSTPROCESSING_SCORE
-            pb_all, sc_all = pb[k], sc[k]
+            pb_all, sc_all = E.heatmap_dets(cfg, decode(o, model.out_stride, 225)[0], use_nms=(a.decode == 'nms'))   # score > 0.1
             sel = sc_all > a.thr
             pb_t = pb_all[sel]
             ci, ri = classify(gt, pb_t)
             heat = torch.nn.functional.interpolate(o['heat'].sigmoid().max(1, keepdim=True)[0], size=img.shape,
                                                    mode='nearest')[0, 0].cpu().numpy()
             frame_figure(img, heat, gt, pb_t, sc_all[sel], ci, ri, a.thr, f'{ds} frame {fi}',
-                         os.path.join(a.out, ds, f'frame_{fi:02d}.png'))
+                         os.path.join(a.out, ds, f'frame_{fi:02d}.png'), a.decode)
             # close-pair crops: GT segments with a neighbour < 5 px (Euclid), ring-free
             eu, _, ring = E.nn_distances(gt, g['mask'])
             found = np.zeros(len(gt), bool); found[ri] = True
