@@ -289,6 +289,27 @@ comparable to the earlier ssl1 figures (different peak sets). (3) The 41 chi-gap
 Euclidean bucket (73). (4) The interrupted run was resumed twice (simulator reseeded), so not bit-identical to an
 uninterrupted run. (5) head lr 3e-4 is an untuned guess (DINO uses 1e-5..4e-5).
 
-**In progress / queued.** Control arm `hm_random_frozen_2.80_1.30` (frozen random-init backbone, same recipe): at epoch
-10 organic 0.484 vs SimMIM 0.533, 41 0.269 vs 0.443. Ring-fix run `hm_simmim_frozen_ridge_2.80_1.30`: `--ring_target ridge`
-(tall ridge target for rings; all ridge cells regress the same box; y-offset unsupervised off-centre). Results to be added.
+**Control arm `hm_random_frozen_2.80_1.30` (frozen random-init backbone, same recipe), final.** Means over epochs 55-59,
+native: organic AP 0.563 (SimMIM 0.601), 41 AP 0.365 (SimMIM 0.578); final train loss 1.78 vs ~1.1. So in this frozen setup
+the SimMIM backbone is worth ~0.04 AP on organic and ~0.21 on 41; close-pair recall (NN<5px, organic) is identical (0.438).
+
+**Run 2: `hm_simmim_frozen_ridge_2.80_1.30` (`--ring_target ridge`, 60 epochs; otherwise identical to run 1).** Ring GT gets a
+tall ridge target (sigma_y = h/6 capped 40 px); all ridge cells regress the same box; y-offset unsupervised off-centre.
+Costs ~28% more time per epoch (Python target loop). Final (epoch 59), `evaluate.py`, same code as the DINO references above:
+
+| | organic AP native / +nms | 41 AP native / +nms | ring recall >0.3 (org / 41) | 41 recall / prec >0.3 (+nms, FP) |
+|---|---|---|---|---|
+| ridge | 0.583 / 0.606 | 0.507 / 0.726 | 0.567 / 0.813 | 0.776 / 0.724 (496) |
+| run 1 (legacy rings) | 0.599 / 0.612 | 0.578 / 0.667 | 0.433 / 0.586 | 0.651 / 0.722 (422) |
+| ssl1 | - / 0.568 | - / 0.744 | 0.733 / 0.853 | 0.772 / 0.705 (543) |
+| dino_lr4e5_1 | - / 0.622 | - / 0.763 | 0.700 / 0.829 | 0.798 / 0.707 (555) |
+
+Recall at score > 0.3 by NN distance (ridge, native): organic <5px 0.421 (ssl1 0.372, lr4e5 0.388; n=121), 5-10 0.506, >10 0.661;
+41 <5px 0.384 (0.370 / 0.397; n=73), 5-10 0.677, >10 0.800. Organic at >0.3 (+nms): recall 0.606, precision 0.739, FP 175 (ssl1 0.537 / 0.841 / 83).
+
+Verdict (single seed): the ridge target is a clear win on 41 (+nms AP 0.667 -> 0.726, ring recall 0.586 -> 0.813, closing most of the
+gap to DINO: -0.018 vs ssl1, -0.037 vs lr4e5) and neutral on organic (0.612 -> 0.606, inside noise). The ridge model emits duplicate
+peaks along rings: native 41 AP 0.507 vs 0.726 with the class-aware NMS, so the +nms number is the deployed one. KEY QUESTION
+(< 5 px close pairs): NOT answered in the heatmap's favour -- organic +0.03..0.05 over the DINO models (4-6 of 121 peaks, under 1 SE),
+41 a tie. The heatmap does not close the close-pair gap; the prize (~+0.06 recall) is not moved. NEGATIVE on the headline hypothesis,
+POSITIVE on "a frozen-backbone heatmap with a 1.2M-parameter head reaches DINO's neighbourhood".
