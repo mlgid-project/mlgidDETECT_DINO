@@ -62,12 +62,12 @@ def frame_figure(img, heat, gt, pb, sc, ci, ri, thr, title, path):
     fig, ax = plt.subplots(2, 1, figsize=(14, 14), facecolor=SURFACE)
     ax[0].imshow(img, cmap='gray', aspect='equal')
     add_boxes(ax[0], gt[~miss], GT_C, 1.6); add_boxes(ax[0], gt[miss], MISS_C, 1.6)
-    add_boxes(ax[0], pb[tp], TP_C, 0.9); add_boxes(ax[0], pb[~tp], FP_C, 0.9)
+    add_boxes(ax[0], pb[tp], TP_C, 1.1, '--'); add_boxes(ax[0], pb[~tp], FP_C, 1.1)   # dashed on top of the GT so both stay visible
     ax[0].legend(handles=[mp.Patch(fc='none', ec=GT_C, label=f'GT found ({int((~miss).sum())})'),
                           mp.Patch(fc='none', ec=MISS_C, label=f'GT missed ({int(miss.sum())})'),
                           mp.Patch(fc='none', ec=TP_C, label=f'prediction, matched ({int(tp.sum())})'),
                           mp.Patch(fc='none', ec=FP_C, label=f'prediction, false positive ({int((~tp).sum())})')],
-                 loc='lower center', ncol=4, fontsize=9, framealpha=0.9)
+                 loc='lower right', bbox_to_anchor=(1.0, 1.01), ncol=4, fontsize=9, frameon=False)   # outside the image
     ax[0].set_title(f'{title}   (score > {thr}, native decode)', loc='left', color=INK)
     ax[1].imshow(heat, cmap='Blues', vmin=0, vmax=1, extent=(0, img.shape[1], img.shape[0], 0), aspect='equal')
     ax[1].set_title('predicted heatmap (max over classes)', loc='left', color=INK)
@@ -78,12 +78,12 @@ def frame_figure(img, heat, gt, pb, sc, ci, ri, thr, title, path):
 
 def closepair_figure(items, thr, title, path):
     n = len(items)
-    fig, ax = plt.subplots(2, n, figsize=(2.6 * n, 5.6), facecolor=SURFACE, squeeze=False)
+    fig, ax = plt.subplots(2, n, figsize=(3.6 * n, 7.4), facecolor=SURFACE, squeeze=False)
     for k, it in enumerate(items):
         x0, x1, y0, y1 = it['win']
         ax[0][k].imshow(it['img'], cmap='gray', aspect='equal')
         ax[0][k].set_xlim(x0, x1); ax[0][k].set_ylim(y1, y0)
-        add_boxes(ax[0][k], it['gt'], GT_C, 1.5); add_boxes(ax[0][k], it['pb'], TP_C, 1.0, '--')
+        add_boxes(ax[0][k], it['gt'], GT_C, 1.6); add_boxes(ax[0][k], it['pb'], TP_C, 1.8, '--')
         ax[1][k].imshow(it['heat'], cmap='Blues', vmin=0, vmax=1, extent=(0, it['img'].shape[1], it['img'].shape[0], 0))
         ax[1][k].set_xlim(x0, x1); ax[1][k].set_ylim(y1, y0)
         for (cx, cy) in it['peaks']:
@@ -102,7 +102,7 @@ def main():
     p.add_argument('--sets', nargs='+', default=['organic', '41'])
     p.add_argument('--thr', type=float, default=0.3)
     p.add_argument('--max_frames', type=int, default=0)
-    p.add_argument('--n_crops', type=int, default=8)
+    p.add_argument('--n_crops', type=int, default=6)
     p.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     a = p.parse_args()
     model = load(a.ckpt, a.device)
@@ -135,7 +135,7 @@ def main():
                 if any(abs(cx - ux) < 30 and abs(cy - uy) < 30 for ux, uy in used):
                     continue
                 used.append((cx, cy))
-                win = (cx - 35, cx + 35, cy - 35, cy + 35)
+                win = (cx - 25, cx + 25, cy - 25, cy + 25)
                 near = [j for j in range(len(gt)) if win[0] < (gt[j, 0] + gt[j, 2]) / 2 < win[1]
                         and win[2] < (gt[j, 1] + gt[j, 3]) / 2 < win[3] and not ring[j]]
                 nf = int(found[near].sum())
