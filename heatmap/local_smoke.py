@@ -23,7 +23,7 @@ def sim_sample(sim):
     while True:
         try:
             img, boxes, mask, is_ring = sim.simulate_img()
-            return img, boxes, is_ring.long()
+            return img[None], boxes, is_ring.long()   # simulate_img gives (H, W); model wants (1, H, W)
         except Exception:
             pass
 
