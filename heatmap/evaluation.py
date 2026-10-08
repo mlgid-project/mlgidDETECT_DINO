@@ -1,6 +1,7 @@
 """Shared eval for ssl1 (DINO) and the heatmap detector -- one code path for both.
 
-Per frame we keep detections down to the eval score floor (0.1), then score them identically:
+Per frame we keep ALL detections (top-K cap and class-aware NMS only, NO score floor: the evaluator builds its own
+precision-recall curve over the scores; a floor would cut the tail of the curve), then score them identically:
   ap_total (Evaluator, same as --eval), recall / precision / FP count at a score threshold,
   and recall bucketed by each GT segment's nearest-neighbour distance.
 Matching = the repo's q-matcher (min_iou 0.1), as in gap41_split.py.
@@ -31,7 +32,9 @@ def make_config(path):
     c = Config()
     c.EVAL_EPOCH = '0'; c.EVAL_OUTPUT_FOLDER = '/tmp'
     c.INPUT_DATASET = path; c.PREPROCESSING_POLAR_SHAPE = list(POLAR)
-    c.POSTPROCESSING_SCORE = 0.1; c.POSTPROCESSING_CLASSAWARE_NMS = True
+    # NO score floor: AP is computed from the precision-recall curve over ALL detection scores (user decision 2026-10-08).
+    # Score cuts belong only to the operating points (recall/precision at >0.1, >0.3) and to the drawn boxes.
+    c.POSTPROCESSING_SCORE = 0.0; c.POSTPROCESSING_CLASSAWARE_NMS = True
     return c
 
 
@@ -60,7 +63,7 @@ def gt_of(ic):
 
 
 def dino_dets(cfg, outputs):
-    """ssl1 path: top-225 + class-aware NMS + score>0.1, exactly as --eval."""
+    """DINO path: top-225 + class-aware NMS, no score floor (the --eval path had score>0.1)."""
     c = filter_boxes(cfg, onnx_to_xyxy(cfg, _P(), [outputs['pred_logits'].detach().cpu().numpy(),
                                                    outputs['pred_boxes'].detach().cpu().numpy()]))
     return np.asarray(c.boxes, np.float32).reshape(-1, 4), np.asarray(c.scores, np.float32)
@@ -73,7 +76,7 @@ def heatmap_dets(cfg, per_image, use_nms):
         c = _P(); c.boxes, c.scores, c.pred_labels = boxes, scores, cls
         c = filter_boxes(cfg, c)
         return np.asarray(c.boxes, np.float32).reshape(-1, 4), np.asarray(c.scores, np.float32)
-    k = scores > cfg.POSTPROCESSING_SCORE        # native: peak picking IS the NMS
+    k = scores > cfg.POSTPROCESSING_SCORE        # native: peak picking IS the NMS (floor 0 = keep every candidate)
     return boxes[k].numpy().astype(np.float32), scores[k].numpy().astype(np.float32)
 
 

@@ -172,7 +172,7 @@ def main():
                 o = model(E.frame_inputs(ic, a.device))
             img = np.asarray(ic.converted_polar_image[0, 0])
             g = E.gt_of(ic); gt = g['gt']
-            pb_all, sc_all = E.heatmap_dets(cfg, decode(o, model.out_stride, 225)[0], use_nms=(a.decode == 'nms'))   # score > 0.1
+            pb_all, sc_all = E.heatmap_dets(cfg, decode(o, model.out_stride, 225)[0], use_nms=(a.decode == 'nms'))   # all dets; drawn: score > --thr
             sel = sc_all > a.thr
             pb_t = pb_all[sel]
             ci, ri = classify(gt, pb_t)
@@ -197,8 +197,8 @@ def main():
                 near = [j for j in range(len(gt)) if win[0] < (gt[j, 0] + gt[j, 2]) / 2 < win[1]
                         and win[2] < (gt[j, 1] + gt[j, 3]) / 2 < win[3] and not ring[j]]
                 nf = int(found[near].sum())
-                pk = [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for b in pb_all
-                      if win[0] < (b[0] + b[2]) / 2 < win[1] and win[2] < (b[1] + b[3]) / 2 < win[3]]
+                pk = [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for b, s_ in zip(pb_all, sc_all)
+                      if s_ > 0.1 and win[0] < (b[0] + b[2]) / 2 < win[1] and win[2] < (b[1] + b[3]) / 2 < win[3]]   # peaks > 0.1 only
                 crops.append(dict(win=win, img=img, heat=heat, gt=gt[near], pb=pb_t, peaks=pk,
                                   label=f'f{fi}: {nf}/{len(near)} GT found, {len(pk)} peaks', nf=nf, n=len(near)))
             print(f'{ds} frame {fi}: GT {len(gt)}, pred>{a.thr} {len(pb_t)}, matched {len(ci)}', flush=True)

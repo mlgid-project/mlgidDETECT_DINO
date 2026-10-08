@@ -313,3 +313,10 @@ peaks along rings: native 41 AP 0.507 vs 0.726 with the class-aware NMS, so the 
 (< 5 px close pairs): NOT answered in the heatmap's favour -- organic +0.03..0.05 over the DINO models (4-6 of 121 peaks, under 1 SE),
 41 a tie. The heatmap does not close the close-pair gap; the prize (~+0.06 recall) is not moved. NEGATIVE on the headline hypothesis,
 POSITIVE on "a frozen-backbone heatmap with a 1.2M-parameter head reaches DINO's neighbourhood".
+
+**Evaluation change (2026-10-08, user decision): no score floor in the evaluator.** Everything above was scored with the
+deployed floor (score > 0.1 dropped before the evaluator). The evaluator builds its own precision-recall curve over all
+scores, so a floor cuts the curve's tail and understates AP. `heatmap/evaluation.py` now keeps ALL detections (top-K cap and
+class-aware NMS only); score cuts apply only to the recall/precision operating points (>0.1, >0.3) and to drawn boxes.
+All earlier AP numbers in this section are floor-0.1 numbers and are superseded by the re-scored ones (DINO references
+re-scored with the same code: `dino_scoring_nofloor.txt`; heatmap runs: `evaluate_final_nofloor.txt` and `score_sweeps/`).
