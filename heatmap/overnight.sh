@@ -28,7 +28,6 @@ run_train() {   # run_train <name> <train.py args...>
 if "$PY" heatmap/test_targets.py 60 >> "$STATUS" 2>&1; then log "targets test ok"; else
   log "TARGETS TEST FAILED -> using the reference (slower) builder, HM_REF_TARGETS=1"; export HM_REF_TARGETS=1; fi
 "$PY" heatmap/check_backbone.py "$SIMMIM" >> "$STATUS" 2>&1 || { log "SimMIM weights check FAILED -> abort"; exit 1; }
-BOX_OK=1; "$PY" heatmap/check_backbone.py "$BOXCONV" backbone.0. >> "$STATUS" 2>&1 || { log "boxconv weights check FAILED -> run B skipped"; BOX_OK=0; }
 
 # 0) smoke: 1 epoch of 8 steps, exercising ridge + tf32 + multi-step lr + the +nms logging + eval
 SM=$RUNS/_interim/smoke_overnight; rm -rf "$SM"; mkdir -p "$SM"
@@ -43,6 +42,9 @@ run_train $A --bb_path "$SIMMIM" --ring_target ridge --tf32 --lr 1e-4 --epochs 6
 
 # 2) boxconv1 backbone (frozen, 2.80/1.30 convention), ridge recipe at the original lr 3e-4
 B=hm_boxconv1_frozen_ridge_tf32_2.80_1.30
+# (checked here, not at start, so the weights file may arrive while run A is training)
+BOX_OK=0; for i in $(seq 1 30); do [ -f "$BOXCONV" ] && break; sleep 60; done
+"$PY" heatmap/check_backbone.py "$BOXCONV" backbone.0. >> "$STATUS" 2>&1 && BOX_OK=1 || log "boxconv weights missing/invalid -> run B skipped"
 [ $BOX_OK = 1 ] && run_train $B --bb ssl1 --bb_path "$BOXCONV" --ring_target ridge --tf32 --lr 3e-4 --epochs 60 --lr_drop 45 --eval_interval 1
 
 # 3) long run: batch 8 (125 steps = 1000 images per epoch), 120 epochs, lr drops at 90 and 112; lr from the lr test
