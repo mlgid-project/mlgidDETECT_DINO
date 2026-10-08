@@ -23,6 +23,8 @@ def get_args():
     p.add_argument('--bb', default='simmim1', choices=['simmim1', 'ssl1', 'random'])
     p.add_argument('--bb_path', default=None, help='override the backbone weights file (SimMIM export, or ssl1 checkpoint)')
     p.add_argument('--box_coef', default='2.80,1.30', help="label convention a_coef,w_coef; 'legacy' = ssl1's 3.5/1.0")
+    p.add_argument('--amp_backbone', action='store_true', help='bf16 autocast for the frozen swin only (opt-in)')
+    p.add_argument('--tf32', action='store_true', help='allow TF32 matmuls/convs (opt-in)')
     p.add_argument('--unfreeze', action='store_true')
     p.add_argument('--out_stride', type=int, default=2)
     p.add_argument('--epochs', type=int, default=60)
@@ -70,6 +72,8 @@ def quick_eval(model, epoch, out):
 def main():
     a = get_args()
     os.makedirs(a.out, exist_ok=True)
+    if a.tf32:
+        torch.backends.cuda.matmul.allow_tf32 = True; torch.backends.cudnn.allow_tf32 = True
     torch.manual_seed(a.seed); np.random.seed(a.seed)
     import random; random.seed(a.seed)
     bb_path, bb_prefix = (SIMMIM, '') if a.bb == 'simmim1' else (SSL1, 'backbone.0.')
@@ -77,9 +81,9 @@ def main():
     if a.bb == 'random':                      # control arm: frozen RANDOM-init swin, no weights loaded
         bb_path, bb_prefix = None, ''
     model = HeatmapNet(backbone_ckpt=bb_path, backbone_prefix=bb_prefix, freeze_backbone=not a.unfreeze,
-                       out_stride=a.out_stride).cuda()
+                       out_stride=a.out_stride, amp_backbone=a.amp_backbone).cuda()
     hm_args = dict(freeze_backbone=not a.unfreeze, out_stride=a.out_stride, bb_path=bb_path,
-                   bb_prefix=bb_prefix, bb=a.bb)
+                   bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32)
     head_params = [p for n, p in model.named_parameters() if p.requires_grad and not n.startswith('backbone.')]
     groups = [dict(params=head_params, lr=a.lr)]
     if a.unfreeze:

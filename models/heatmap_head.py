@@ -24,8 +24,9 @@ def _cbr(i, o, k=3, s=1):
 
 class HeatmapNet(nn.Module):
     def __init__(self, backbone_ckpt=None, backbone_prefix='', freeze_backbone=True,
-                 out_stride=2, dim=128, window_size_h=48, window_size_w=6):
+                 out_stride=2, dim=128, window_size_h=48, window_size_w=6, amp_backbone=False):
         super().__init__()
+        self.amp_backbone = amp_backbone       # bf16 autocast for the swin only; FPN/head stay fp32
         assert out_stride in (1, 2, 4)
         self.out_stride = out_stride
         self.freeze_backbone = freeze_backbone
@@ -68,12 +69,14 @@ class HeatmapNet(nn.Module):
     def forward(self, img):
         B, _, H, W = img.shape
         mask = torch.zeros(B, H, W, dtype=torch.bool, device=img.device)
+        ac = torch.autocast('cuda', dtype=torch.bfloat16, enabled=bool(self.amp_backbone and img.is_cuda))
         if self.freeze_backbone:
-            with torch.no_grad():
+            with torch.no_grad(), ac:
                 feats = self.backbone(NestedTensor(img, mask))
         else:
-            feats = self.backbone(NestedTensor(img, mask))
-        c = [feats[i].tensors for i in range(4)]
+            with ac:
+                feats = self.backbone(NestedTensor(img, mask))
+        c = [feats[i].tensors.float() for i in range(4)]
         p = self.lat[3](c[3])
         for i in (2, 1, 0):
             p = self.lat[i](c[i]) + F.interpolate(p, size=c[i].shape[-2:], mode='nearest')

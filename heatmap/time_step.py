@@ -25,6 +25,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--bb_path', required=True); p.add_argument('--bs', type=int, nargs='+', default=[4, 8])
     p.add_argument('--n', type=int, default=15)
+    p.add_argument('--modes', nargs='+', default=['fp32'], choices=['fp32', 'tf32', 'bf16'],
+                   help='fp32 = current default; tf32 = TF32 matmuls; bf16 = bf16 autocast on the swin only')
     p.add_argument('--box_coef', default='2.80,1.30')
     a = p.parse_args()
     cfg = SimulationConfig(); cfg.a_coef, cfg.w_coef = (float(v) for v in a.box_coef.split(','))
@@ -57,7 +59,10 @@ def main():
         opt.zero_grad(set_to_none=True); loss.backward()
         torch.nn.utils.clip_grad_norm_(params, 1.0); opt.step()
 
-    for bs in a.bs:
+    for mode in a.modes:
+      torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = (mode == 'tf32')
+      model.amp_backbone = (mode == 'bf16')
+      for bs in a.bs:
         torch.cuda.reset_peak_memory_stats()
         imgs = [pool[i][0] for i in range(bs)]; tgs = tg[:bs]
         for _ in range(3):
@@ -71,7 +76,7 @@ def main():
             batch = [sample() for _ in range(bs)]
             step([b[0] for b in batch], [build_targets(b[1], b[2], 512, 1024, 2) for b in batch])
         sync(); t_full = (time.time() - t) / a.n
-        print(f'bs {bs}: network step alone {t_net:.3f} s ({t_net/bs:.3f} s/img) | full step {t_full:.3f} s '
+        print(f'[{mode}] bs {bs}: network step alone {t_net:.3f} s ({t_net/bs:.3f} s/img) | full step {t_full:.3f} s '
               f'({t_full/bs:.3f} s/img) | simulator share of full step ~{bs*t_sim/t_full*100:.0f}% | '
               f'peak mem {torch.cuda.max_memory_allocated()/2**30:.1f} GiB', flush=True)
 
