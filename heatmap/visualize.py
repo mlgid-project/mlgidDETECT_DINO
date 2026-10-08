@@ -64,17 +64,18 @@ def frame_figure(img, heat, gt, pb, sc, ci, ri, thr, title, path, dec='native'):
     ax[0].imshow(img, cmap='gray', aspect='equal')
     add_boxes(ax[0], gt[~miss], GT_C, 1.6); add_boxes(ax[0], gt[miss], MISS_C, 1.6)
     add_boxes(ax[0], pb[tp], TP_C, 1.1, '--'); add_boxes(ax[0], pb[~tp], FP_C, 1.1)   # dashed on top of the GT so both stay visible
-    ax[0].legend(handles=[mp.Patch(fc='none', ec=GT_C, label=f'GT found ({int((~miss).sum())})'),
-                          mp.Patch(fc='none', ec=MISS_C, label=f'GT missed ({int(miss.sum())})'),
-                          mp.Patch(fc='none', ec=TP_C, label=f'prediction, matched ({int(tp.sum())})'),
-                          mp.Patch(fc='none', ec=FP_C, label=f'prediction, false positive ({int((~tp).sum())})')],
-                 loc='lower right', bbox_to_anchor=(1.0, 1.01), ncol=4, fontsize=9, frameon=False)   # outside the image
-    ax[0].set_title(title + ('  [+class-aware NMS]' if dec == 'nms' else '  [no NMS]') + '\nimage + boxes (green = GT found, orange = GT missed, blue = matched prediction, red = false positive)', loc='left', color=INK)
+    handles = [mp.Patch(fc='none', ec=GT_C, label=f'GT found ({int((~miss).sum())})'),
+               mp.Patch(fc='none', ec=MISS_C, label=f'GT missed ({int(miss.sum())})'),
+               mp.Patch(fc='none', ec=TP_C, label=f'prediction, matched ({int(tp.sum())})'),
+               mp.Patch(fc='none', ec=FP_C, label=f'prediction, false positive ({int((~tp).sum())})')]
+    # legend lives in its own band at the TOP of the figure (not on the axes), so it cannot collide with the titles
+    fig.legend(handles=handles, loc='upper center', bbox_to_anchor=(0.5, 0.995), ncol=4, fontsize=10, frameon=False)
+    ax[0].set_title(title + ('  [+class-aware NMS]' if dec == 'nms' else '  [no NMS]'), loc='left', color=INK, fontsize=10)
     ax[1].imshow(heat, cmap='Blues', vmin=0, vmax=1, extent=(0, img.shape[1], img.shape[0], 0), aspect='equal')
     ax[1].set_title('predicted heatmap (max over classes)', loc='left', color=INK)
     for a_ in ax:
         a_.set_xlabel('q pixel'); a_.set_ylabel('chi pixel')
-    fig.tight_layout(); fig.savefig(path, dpi=110, facecolor=SURFACE); plt.close(fig)
+    fig.tight_layout(rect=(0, 0, 1, 0.965)); fig.savefig(path, dpi=110, facecolor=SURFACE); plt.close(fig)
 
 
 def _heat_panel(fig, ax, heat, title):
