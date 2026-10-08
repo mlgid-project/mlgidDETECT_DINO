@@ -27,7 +27,7 @@ from gap41_split import (load_model, _config, is_ring_geom, iou_matrix, matcher,
 from util.postprocessing import onnx_to_xyxy, filter_boxes
 
 FRAMES_TO_DRAW = [33, 39, 28]
-OUT = '/mnt/lustre/work/schreiber/szb389/tmp_diag/sim2/images/11_ring_fragments'
+OUT = os.environ.get('RINGFP_OUT', '/mnt/lustre/work/schreiber/szb389/tmp_diag/sim2/images/11_ring_fragments')
 
 
 def cache41(model, args):
