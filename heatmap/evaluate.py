@@ -2,7 +2,14 @@
   python heatmap/evaluate.py ssl1=dino:<ckpt.pth> hm=heatmap:<ckpt.pth> [...]
 Heatmap checkpoints are scored twice: native (peak picking, no NMS) and `+nms` (shared filter_boxes)."""
 import os, sys, json, argparse
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+if not any(sp.partition('=')[2].startswith('dino:') for sp in sys.argv[1:]):
+    # heatmap-only scoring needs no compiled DINO ops: skip the models package inits (as train.py does).
+    # A run that scores a DINO checkpoint (cluster, ops built) keeps the real package.
+    import types
+    for _n, _s in (('models', 'models'), ('models.dino', 'models/dino')):
+        _m = types.ModuleType(_n); _m.__path__ = [os.path.join(ROOT, _s)]; sys.modules[_n] = _m
 import numpy as np
 import torch
 from heatmap import evaluation as E
