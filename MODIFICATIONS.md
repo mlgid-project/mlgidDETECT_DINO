@@ -235,3 +235,44 @@ Plot: `train_output/ringseg_2class_20260603-142434/ap_curves.png`.
 - Git: phases A–G committed on branch `pygid-eval-ringseg` (pushed). Phase H reverted (not
   committed). Only `MODIFICATIONS.md` is currently modified (this negative-result record) — commit
   when convenient.
+
+
+## Heatmap-first detector (branch `heatmap`, started 2026-10-08)
+
+Standalone alternative to the DINO decoder/matcher/loss, reusing the SSL backbone, the simulator and the labeled eval
+files. Code: `models/heatmap_head.py`, `heatmap/` (targets_loss, train, evaluation, evaluate, visualize, plot_runs,
+time_step, local_smoke, sbatch/). Nothing in the DINO code paths is modified. Question: does it beat ssl1 on close pairs
+(< 5 px apart), where nine box-side mechanisms failed?
+
+**Design.** Frozen SimMIM swin-L (48x6) -> FPN to a stride-2 map (256x512) fused with a small image stem. Outputs: 2 class
+heatmaps (segment, ring) + 4 regression channels (dx, dy sub-cell offset; log w, log h). No angle: boxes are axis-aligned.
+Targets: small Gaussian at each box centre cell (sigma = size/6 clipped 1..4 px), regression on the 3x3 cells around each
+centre. Loss: CenterNet focal on the heatmaps + L1 on the regression (`heat + 4 x reg`). Decode: 3x3 max-pool peak
+picking, top 225, score = heat (replaces NMS); also scored through the shared class-aware `filter_boxes` (`+nms`).
+Training: live simulator (box convention 2.80/1.30), batch 4, 250 steps/epoch (1000 images), AdamW lr 3e-4 on the head,
+60 epochs, lr drop x0.1 at 45, fp32, 1,228,582 trainable parameters. It runs on an RTX 5070 (colorbox1): network step
+0.137 s/img, simulator 0.007 s/img (5% of a step), so a bigger batch buys no speed.
+
+**Run 1: `hm_simmim_frozen` (60 epochs, final epoch 59).** Single model, same Evaluator as `--eval`.
+
+| set | native AP | +nms AP | recall >0.3 (seg / ring) | precision >0.3 | recall NN<5px |
+|---|---|---|---|---|---|
+| organic | 0.599 | 0.612 | 0.580 (0.586 / 0.433) | 0.773 | 0.438 (n=121) |
+| 41 | 0.578 | 0.667 | 0.651 (0.697 / 0.586) | 0.710 | 0.370 (n=73) |
+
+References recorded earlier (NOT rescored with this code): ssl1 organic 0.568 / 41 0.744; `dino_lr4e5_1` organic 0.608 /
+41 0.761. So: organic is level with the best DINO model, 41 is about 0.09 behind. At score > 0.1 ring recall is 0.800 / 0.941
+but at > 0.3 it is 0.433 / 0.586: rings are found with low scores (calibration). Close pairs are still mostly merged into
+one box (images: `images_v2/*/closepairs.png`). bf16 backbone at inference agrees with fp32 to within 0.003 AP.
+Curves were noisy epoch to epoch (recall/precision at the fixed 0.3 cut swing; AP is steadier); training loss was still
+falling at epoch 59, and the lr drop at 45 was probably early.
+
+**Caveats.** (1) The in-training AP is the native decode, not comparable to DINO `exp_ap` logs; use `+nms`. (2) ssl1 and
+`dino_lr4e5_1` have not been rescored with `heatmap/evaluate.py`, so the `<5 px` bucket (my definition) is not
+comparable to the earlier ssl1 figures (different peak sets). (3) The 41 chi-gap `<5 px` bucket holds only 2 peaks; use the
+Euclidean bucket (73). (4) The interrupted run was resumed twice (simulator reseeded), so not bit-identical to an
+uninterrupted run. (5) head lr 3e-4 is an untuned guess (DINO uses 1e-5..4e-5).
+
+**In progress / queued.** Control arm `hm_random_frozen_2.80_1.30` (frozen random-init backbone, same recipe): at epoch
+10 organic 0.484 vs SimMIM 0.533, 41 0.269 vs 0.443. Ring-fix run `hm_simmim_frozen_ridge_2.80_1.30`: `--ring_target ridge`
+(tall ridge target for rings; all ridge cells regress the same box; y-offset unsupervised off-centre). Results to be added.
