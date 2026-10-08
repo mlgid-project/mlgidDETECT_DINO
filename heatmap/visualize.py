@@ -129,8 +129,12 @@ def main():
             # close-pair crops: GT segments with a neighbour < 5 px (Euclid), ring-free
             eu, _, ring = E.nn_distances(gt, g['mask'])
             found = np.zeros(len(gt), bool); found[ri] = True
+            used = []                                                  # one crop per cluster
             for i in np.where(eu < 5)[0]:
                 cx, cy = (gt[i, 0] + gt[i, 2]) / 2, (gt[i, 1] + gt[i, 3]) / 2
+                if any(abs(cx - ux) < 30 and abs(cy - uy) < 30 for ux, uy in used):
+                    continue
+                used.append((cx, cy))
                 win = (cx - 35, cx + 35, cy - 35, cy + 35)
                 near = [j for j in range(len(gt)) if win[0] < (gt[j, 0] + gt[j, 2]) / 2 < win[1]
                         and win[2] < (gt[j, 1] + gt[j, 3]) / 2 < win[3] and not ring[j]]
