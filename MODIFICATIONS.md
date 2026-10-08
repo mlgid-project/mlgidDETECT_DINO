@@ -314,9 +314,10 @@ peaks along rings: native 41 AP 0.507 vs 0.726 with the class-aware NMS, so the 
 41 a tie. The heatmap does not close the close-pair gap; the prize (~+0.06 recall) is not moved. NEGATIVE on the headline hypothesis,
 POSITIVE on "a frozen-backbone heatmap with a 1.2M-parameter head reaches DINO's neighbourhood".
 
-**Evaluation change (2026-10-08, user decision): no score floor in the evaluator.** Everything above was scored with the
-deployed floor (score > 0.1 dropped before the evaluator). The evaluator builds its own precision-recall curve over all
-scores, so a floor cuts the curve's tail and understates AP. `heatmap/evaluation.py` now keeps ALL detections (top-K cap and
-class-aware NMS only); score cuts apply only to the recall/precision operating points (>0.1, >0.3) and to drawn boxes.
-All earlier AP numbers in this section are floor-0.1 numbers and are superseded by the re-scored ones (DINO references
-re-scored with the same code: `dino_scoring_nofloor.txt`; heatmap runs: `evaluate_final_nofloor.txt` and `score_sweeps/`).
+**Evaluation convention (2026-10-08, user decision): headline = score floor 0.1 + top-225, as in the DINO `--eval` path.**
+A no-floor evaluator was tried (`HM_SCORE_FLOOR=0`, files `evaluate_final_nofloor.txt`): it did NOT raise AP (organic +-0.001, 41 -0.014,
+control +0.001 / 41 -0.001...), because the repo evaluator's Hungarian IoU matching ignores scores, so extra low-score boxes steal
+matches. Score sweeps (`hm_runs/score_sweeps/`): at top-K 225 floors 0-0.02 are identical and 0.1-0.2 is best; at top-K 900 floors < 0.05
+collapse AP (ridge 41: 0.453 at floor 0, 0.711 at 0.1). Best floor/K per run (tuned on the eval sets, so optimistic): ridge organic 0.625
+(K 900, floor 0.1) / 41 0.736 (floor 0.2); main 0.616 / 0.667; control 0.587 / 0.447. The 0.3 cut applies only to drawn boxes and the
+recall/precision lines, never inside the evaluator. All AP numbers above are floor-0.1 / top-225 unless stated.

@@ -1,0 +1,70 @@
+
+===== ssl1 (dino) /mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_ssl1/checkpoint.pth
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+  ck = torch.load(ckpt, map_location='cpu')
+  load: <All keys matched successfully>
+  [ssl1] organic: ap_total 0.5705 (AP by GT confidence: high 0.702 / med 0.581 / low 0.387)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.185 recall 0.579 FP/GT 0.19; fp<=0.1/GT: score>=0.333 recall 0.508 FP/GT 0.10; high_recall>=95: score>=0.081 recall 0.645 FP/GT 0.45
+    score>0.1: recall 0.643 (seg 0.637, ring 0.800) precision 0.630 preds 833 FP 308
+      recall by NN Euclid dist  <5:0.380(n=121) 5-10:0.388(n=85) >10:0.726(n=581)
+      recall by same-radius chi-gap  <5:0.406(n=128) 5-10:0.429(n=49) >10:0.685(n=527)
+    score>0.3: recall 0.537 (seg 0.530, ring 0.733) precision 0.841 preds 522 FP 83
+      recall by NN Euclid dist  <5:0.372(n=121) 5-10:0.353(n=85) >10:0.589(n=581)
+      recall by same-radius chi-gap  <5:0.391(n=128) 5-10:0.429(n=49) >10:0.554(n=527)
+  [ssl1] 41: ap_total 0.7391 (AP by GT confidence: high 0.848 / med 0.765 / low 0.622)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.416 recall 0.681 FP/GT 0.24; fp<=0.1/GT: score>=0.702 recall 0.519 FP/GT 0.10; high_recall>=95: score>=0.118 recall 0.838 FP/GT 0.93
+    score>0.1: recall 0.869 (seg 0.820, ring 0.938) precision 0.453 preds 3224 FP 1764
+      recall by NN Euclid dist  <5:0.384(n=73) 5-10:0.629(n=62) >10:0.874(n=846)
+      recall by same-radius chi-gap  <5:0.500(n=2) 5-10:0.250(n=4) >10:0.840(n=550)
+    score>0.3: recall 0.772 (seg 0.714, ring 0.853) precision 0.705 preds 1840 FP 543
+      recall by NN Euclid dist  <5:0.370(n=73) 5-10:0.452(n=62) >10:0.766(n=846)
+      recall by same-radius chi-gap  <5:0.500(n=2) 5-10:0.250(n=4) >10:0.744(n=550)
+
+===== lr4e5 (dino) /mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_lr4e5_1/checkpoint.pth
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+  ck = torch.load(ckpt, map_location='cpu')
+  load: <All keys matched successfully>
+  [lr4e5] organic: ap_total 0.6294 (AP by GT confidence: high 0.767 / med 0.613 / low 0.451)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.234 recall 0.611 FP/GT 0.18; fp<=0.1/GT: score>=0.387 recall 0.552 FP/GT 0.10; high_recall>=95: score>=0.044 recall 0.696 FP/GT 0.61
+    score>0.1: recall 0.681 (seg 0.677, ring 0.767) precision 0.643 preds 865 FP 309
+      recall by NN Euclid dist  <5:0.405(n=121) 5-10:0.459(n=85) >10:0.766(n=581)
+      recall by same-radius chi-gap  <5:0.445(n=128) 5-10:0.449(n=49) >10:0.731(n=527)
+    score>0.3: recall 0.592 (seg 0.588, ring 0.700) precision 0.827 preds 585 FP 101
+      recall by NN Euclid dist  <5:0.388(n=121) 5-10:0.447(n=85) >10:0.651(n=581)
+      recall by same-radius chi-gap  <5:0.422(n=128) 5-10:0.449(n=49) >10:0.634(n=527)
+  [lr4e5] 41: ap_total 0.7507 (AP by GT confidence: high 0.840 / med 0.787 / low 0.644)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.383 recall 0.725 FP/GT 0.28; fp<=0.1/GT: score>=0.708 recall 0.557 FP/GT 0.10; high_recall>=95: score>=0.082 recall 0.874 FP/GT 1.33
+    score>0.1: recall 0.888 (seg 0.857, ring 0.932) precision 0.445 preds 3354 FP 1862
+      recall by NN Euclid dist  <5:0.411(n=73) 5-10:0.823(n=62) >10:0.898(n=846)
+      recall by same-radius chi-gap  <5:0.500(n=2) 5-10:0.500(n=4) >10:0.893(n=550)
+    score>0.3: recall 0.798 (seg 0.775, ring 0.829) precision 0.707 preds 1895 FP 555
+      recall by NN Euclid dist  <5:0.397(n=73) 5-10:0.677(n=62) >10:0.818(n=846)
+      recall by same-radius chi-gap  <5:0.000(n=2) 5-10:0.250(n=4) >10:0.820(n=550)
+
+===== boxconv1 (dino) /mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_boxconv1/checkpoint.pth
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+  ck = torch.load(ckpt, map_location='cpu')
+  load: <All keys matched successfully>
+  [boxconv1] organic: ap_total 0.5905 (AP by GT confidence: high 0.717 / med 0.554 / low 0.435)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.188 recall 0.591 FP/GT 0.20; fp<=0.1/GT: score>=0.334 recall 0.493 FP/GT 0.10; high_recall>=95: score>=0.041 recall 0.668 FP/GT 0.59
+    score>0.1: recall 0.657 (seg 0.653, ring 0.767) precision 0.637 preds 843 FP 306
+      recall by NN Euclid dist  <5:0.380(n=121) 5-10:0.435(n=85) >10:0.742(n=581)
+      recall by same-radius chi-gap  <5:0.414(n=128) 5-10:0.469(n=49) >10:0.710(n=527)
+    score>0.3: recall 0.528 (seg 0.521, ring 0.700) precision 0.840 preds 513 FP 82
+      recall by NN Euclid dist  <5:0.339(n=121) 5-10:0.388(n=85) >10:0.578(n=581)
+      recall by same-radius chi-gap  <5:0.367(n=128) 5-10:0.429(n=49) >10:0.565(n=527)
+  [boxconv1] 41: ap_total 0.7402 (AP by GT confidence: high 0.858 / med 0.758 / low 0.621)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.434 recall 0.696 FP/GT 0.26; fp<=0.1/GT: score>=0.713 recall 0.546 FP/GT 0.10; high_recall>=95: score>=0.123 recall 0.845 FP/GT 1.02
+    score>0.1: recall 0.875 (seg 0.831, ring 0.937) precision 0.418 preds 3520 FP 2050
+      recall by NN Euclid dist  <5:0.384(n=73) 5-10:0.694(n=62) >10:0.881(n=846)
+      recall by same-radius chi-gap  <5:0.500(n=2) 5-10:0.250(n=4) >10:0.844(n=550)
+    score>0.3: recall 0.783 (seg 0.721, ring 0.872) precision 0.671 preds 1960 FP 644
+      recall by NN Euclid dist  <5:0.370(n=73) 5-10:0.516(n=62) >10:0.768(n=846)
+      recall by same-radius chi-gap  <5:0.500(n=2) 5-10:0.250(n=4) >10:0.740(n=550)

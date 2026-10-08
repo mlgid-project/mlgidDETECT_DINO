@@ -1,7 +1,7 @@
 """Shared eval for ssl1 (DINO) and the heatmap detector -- one code path for both.
 
-Per frame we keep ALL detections (top-K cap and class-aware NMS only, NO score floor: the evaluator builds its own
-precision-recall curve over the scores; a floor would cut the tail of the curve), then score them identically:
+Per frame we keep the top-225 detections after class-aware NMS and drop scores <= the floor (default 0.1, HM_SCORE_FLOOR to
+override), then score them identically:
   ap_total (Evaluator, same as --eval), recall / precision / FP count at a score threshold,
   and recall bucketed by each GT segment's nearest-neighbour distance.
 Matching = the repo's q-matcher (min_iou 0.1), as in gap41_split.py.
@@ -32,9 +32,10 @@ def make_config(path):
     c = Config()
     c.EVAL_EPOCH = '0'; c.EVAL_OUTPUT_FOLDER = '/tmp'
     c.INPUT_DATASET = path; c.PREPROCESSING_POLAR_SHAPE = list(POLAR)
-    # NO score floor: AP is computed from the precision-recall curve over ALL detection scores (user decision 2026-10-08).
-    # Score cuts belong only to the operating points (recall/precision at >0.1, >0.3) and to the drawn boxes.
-    c.POSTPROCESSING_SCORE = 0.0; c.POSTPROCESSING_CLASSAWARE_NMS = True
+    # Headline convention (user decision 2026-10-08): score floor 0.1 + top-225, as in the DINO --eval path. A no-floor test
+    # (HM_SCORE_FLOOR=0) did not raise AP: this evaluator's IoU matching ignores scores, so extra low-score boxes can steal
+    # matches (see the score sweeps). HM_SCORE_FLOOR overrides the floor for such experiments.
+    c.POSTPROCESSING_SCORE = float(os.environ.get('HM_SCORE_FLOOR', 0.1)); c.POSTPROCESSING_CLASSAWARE_NMS = True
     return c
 
 
@@ -63,7 +64,7 @@ def gt_of(ic):
 
 
 def dino_dets(cfg, outputs):
-    """DINO path: top-225 + class-aware NMS, no score floor (the --eval path had score>0.1)."""
+    """DINO path: top-225 + class-aware NMS + score floor (default 0.1), exactly as --eval."""
     c = filter_boxes(cfg, onnx_to_xyxy(cfg, _P(), [outputs['pred_logits'].detach().cpu().numpy(),
                                                    outputs['pred_boxes'].detach().cpu().numpy()]))
     return np.asarray(c.boxes, np.float32).reshape(-1, 4), np.asarray(c.scores, np.float32)
@@ -76,7 +77,7 @@ def heatmap_dets(cfg, per_image, use_nms):
         c = _P(); c.boxes, c.scores, c.pred_labels = boxes, scores, cls
         c = filter_boxes(cfg, c)
         return np.asarray(c.boxes, np.float32).reshape(-1, 4), np.asarray(c.scores, np.float32)
-    k = scores > cfg.POSTPROCESSING_SCORE        # native: peak picking IS the NMS (floor 0 = keep every candidate)
+    k = scores > cfg.POSTPROCESSING_SCORE        # native: peak picking IS the NMS
     return boxes[k].numpy().astype(np.float32), scores[k].numpy().astype(np.float32)
 
 
