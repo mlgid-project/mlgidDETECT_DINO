@@ -22,6 +22,7 @@ def get_args():
     p.add_argument('--out', required=True)
     p.add_argument('--bb', default='simmim1', choices=['simmim1', 'ssl1'])
     p.add_argument('--bb_path', default=None, help='override the backbone weights file (SimMIM export, or ssl1 checkpoint)')
+    p.add_argument('--box_coef', default='2.80,1.30', help="label convention a_coef,w_coef; 'legacy' = ssl1's 3.5/1.0")
     p.add_argument('--unfreeze', action='store_true')
     p.add_argument('--out_stride', type=int, default=2)
     p.add_argument('--epochs', type=int, default=60)
@@ -92,7 +93,13 @@ def main():
     print('[train] trainable params:', sum(p.numel() for p in model.parameters() if p.requires_grad), flush=True)
 
     from simulation import FastSimulation
-    sim = FastSimulation(device='cuda')       # default config = ssl1's sim (legacy 3.5/1.0 box convention)
+    cfg_sim = None
+    if a.box_coef != 'legacy':               # current main convention; 'legacy' = ssl1's default 3.5/1.0
+        from simulation import SimulationConfig
+        cfg_sim = SimulationConfig()
+        cfg_sim.a_coef, cfg_sim.w_coef = (float(v) for v in a.box_coef.split(','))
+    print(f'[train] sim box convention: a_coef,w_coef = {a.box_coef}', flush=True)
+    sim = FastSimulation(sim_config=cfg_sim, device='cuda')
 
     def sim_sample():
         while True:                           # same retry-on-failure as main.SimulationDataset
