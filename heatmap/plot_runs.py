@@ -19,7 +19,7 @@ SERIES = ['#2a78d6', '#eb6834', '#1baf7a']          # categorical slots 1-3 (val
 SURFACE, INK, INK2, GRID, REF = '#fcfcfb', '#0b0b0b', '#52514e', '#e6e5e1', '#8a8985'
 SETS = ['organic', '41']
 COLS = [('AP (native, no NMS)', 0), ('recall @ score>0.3', 1), ('precision @ score>0.3', 2),
-        ('recall, chi-gap < 5 px', 3), ('recall, NN dist < 5 px', 4)]
+        ('recall, chi-gap < 5 px', 3), ('recall, NN dist < 5 px', 4), ('AP, +nms (deployed)', 5)]
 # references: (set, column) -> [(label, value)]
 REFS = {('organic', 0): [('ssl1 AP 0.568', 0.568), ('dino_lr4e5_1 AP 0.608', 0.6081)],
         ('41', 0): [('ssl1 AP 0.762', 0.762), ('dino_lr4e5_1 AP 0.761', 0.7613)],
@@ -35,9 +35,9 @@ def read_eval(path):
     if not os.path.exists(path):
         return rows
     for line in open(path):
-        m = re.match(rf'\s*(\d+)\s+{NUM}\s+recall0\.3\s+{NUM}\s+prec0\.3\s+{NUM}\s+chigap<5\s+{NUM}(?:\s+eu<5\s+{NUM})?', line)
+        m = re.match(rf'\s*(\d+)\s+{NUM}\s+recall0\.3\s+{NUM}\s+prec0\.3\s+{NUM}\s+chigap<5\s+{NUM}(?:\s+eu<5\s+{NUM}(?:\s+n<5\s+chi=\d+\s+eu=\d+(?:\s+apnms\s+{NUM})?)?)?', line)
         if m:   # later lines win (resumes); the eu<5 column only exists in newer logs
-            rows[int(m.group(1))] = [float(m.group(i)) for i in range(2, 6)] + [float(m.group(6)) if m.group(6) else float('nan')]
+            rows[int(m.group(1))] = [float(m.group(i)) for i in range(2, 6)] + [float(m.group(6)) if m.group(6) else float('nan'), float(m.group(7)) if m.group(7) else float('nan')]
     return dict(sorted(rows.items()))
 
 
@@ -70,7 +70,7 @@ def main():
     runs = [r.split('=', 1) for r in a.runs]
     if len(runs) > 3:
         raise SystemExit('at most 3 runs (validated palette has 3 all-pairs slots)')
-    fig, axes = plt.subplots(2, 5, figsize=(19, 7), facecolor=SURFACE, sharex=True)
+    fig, axes = plt.subplots(2, 6, figsize=(22, 7), facecolor=SURFACE, sharex=True)
     for si, ds in enumerate(SETS):
         for name_i, (title, ci) in enumerate(COLS):
             ax = axes[si][name_i]; style(ax)

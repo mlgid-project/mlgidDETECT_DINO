@@ -51,19 +51,22 @@ def quick_eval(model, epoch, out):
     model.eval()
     t_eval = time.time()
     for ds, path in E.DATASETS.items():
-        gts, dets = [], []
+        gts, dets, dets_nms = [], [], []
         if not os.path.exists(path):
             print(f'[epoch {epoch}] eval skipped, missing {path}', flush=True)
             continue
         for cfg, ic in E.iter_frames(path):
             o = model(E.frame_inputs(ic, 'cuda'))
             gts.append(E.gt_of(ic))
-            dets.append(E.heatmap_dets(cfg, decode(o, model.out_stride, 225)[0], use_nms=False))
+            pi = decode(o, model.out_stride, 225)[0]
+            dets.append(E.heatmap_dets(cfg, pi, use_nms=False))
+            dets_nms.append(E.heatmap_dets(cfg, pi, use_nms=True))      # the deployed pipeline (class-aware NMS)
         r = E.evaluate_dets(dets, gts, cfg)
+        ap_nms = E.evaluate_dets(dets_nms, gts, cfg, thr_list=(0.3,))['ap']
         t = r['thr'][0.3]
         line = (f'{epoch}\t{r["ap"]:.4f}\trecall0.3 {t["recall"]:.3f}\tprec0.3 {t["precision"]:.3f}\t'
                 f'chigap<5 {t["chigap"]["<5"][1]:.3f}\teu<5 {t["euclid"]["<5"][1]:.3f}\t'
-                f'n<5 chi={t["chigap"]["<5"][0]} eu={t["euclid"]["<5"][0]}')
+                f'n<5 chi={t["chigap"]["<5"][0]} eu={t["euclid"]["<5"][0]}\tapnms {ap_nms:.4f}')
         print(f'[epoch {epoch}] {ds}: {line}', flush=True)
         with open(os.path.join(out, f'exp_ap_{ds}.txt'), 'a') as f:
             f.write(line + '\n')

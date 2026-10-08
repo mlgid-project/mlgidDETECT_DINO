@@ -1,0 +1,43 @@
+
+===== ssl1 (dino) /mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_ssl1/checkpoint.pth
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+  ck = torch.load(ckpt, map_location='cpu')
+  load: <All keys matched successfully>
+  [ssl1] organic: ap_total 0.5683
+    score>0.1: recall 0.643 (seg 0.637, ring 0.800) precision 0.630 preds 833 FP 308
+      recall by NN Euclid dist  <5:0.380(n=121) 5-10:0.388(n=85) >10:0.726(n=581)
+      recall by same-radius chi-gap  <5:0.406(n=128) 5-10:0.429(n=49) >10:0.685(n=527)
+    score>0.3: recall 0.537 (seg 0.530, ring 0.733) precision 0.841 preds 522 FP 83
+      recall by NN Euclid dist  <5:0.372(n=121) 5-10:0.353(n=85) >10:0.589(n=581)
+      recall by same-radius chi-gap  <5:0.391(n=128) 5-10:0.429(n=49) >10:0.554(n=527)
+  [ssl1] 41: ap_total 0.7441
+    score>0.1: recall 0.869 (seg 0.820, ring 0.938) precision 0.453 preds 3224 FP 1764
+      recall by NN Euclid dist  <5:0.384(n=73) 5-10:0.629(n=62) >10:0.874(n=846)
+      recall by same-radius chi-gap  <5:0.500(n=2) 5-10:0.250(n=4) >10:0.840(n=550)
+    score>0.3: recall 0.772 (seg 0.714, ring 0.853) precision 0.705 preds 1840 FP 543
+      recall by NN Euclid dist  <5:0.370(n=73) 5-10:0.452(n=62) >10:0.766(n=846)
+      recall by same-radius chi-gap  <5:0.500(n=2) 5-10:0.250(n=4) >10:0.744(n=550)
+
+===== lr4e5 (dino) /mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_lr4e5_1/checkpoint.pth
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+  ck = torch.load(ckpt, map_location='cpu')
+  load: <All keys matched successfully>
+  [lr4e5] organic: ap_total 0.6222
+    score>0.1: recall 0.681 (seg 0.677, ring 0.767) precision 0.643 preds 865 FP 309
+      recall by NN Euclid dist  <5:0.405(n=121) 5-10:0.459(n=85) >10:0.766(n=581)
+      recall by same-radius chi-gap  <5:0.445(n=128) 5-10:0.449(n=49) >10:0.731(n=527)
+    score>0.3: recall 0.592 (seg 0.588, ring 0.700) precision 0.827 preds 585 FP 101
+      recall by NN Euclid dist  <5:0.388(n=121) 5-10:0.447(n=85) >10:0.651(n=581)
+      recall by same-radius chi-gap  <5:0.422(n=128) 5-10:0.449(n=49) >10:0.634(n=527)
+  [lr4e5] 41: ap_total 0.7631
+    score>0.1: recall 0.888 (seg 0.857, ring 0.932) precision 0.445 preds 3354 FP 1862
+      recall by NN Euclid dist  <5:0.411(n=73) 5-10:0.823(n=62) >10:0.898(n=846)
+      recall by same-radius chi-gap  <5:0.500(n=2) 5-10:0.500(n=4) >10:0.893(n=550)
+    score>0.3: recall 0.798 (seg 0.775, ring 0.829) precision 0.707 preds 1895 FP 555
+      recall by NN Euclid dist  <5:0.397(n=73) 5-10:0.677(n=62) >10:0.818(n=846)
+      recall by same-radius chi-gap  <5:0.000(n=2) 5-10:0.250(n=4) >10:0.820(n=550)
