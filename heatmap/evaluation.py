@@ -118,8 +118,12 @@ def evaluate_dets(dets, gts, cfg, thr_list=(0.1, 0.3)):
     ev = Evaluator()
     for (b, s), g in zip(dets, gts):
         ev.get_exp_metrics(torch.tensor(b), torch.tensor(s), torch.tensor(g['gt']), g['gtconf'])
-    _, df2 = get_full_conf_results(ev.metrics)
-    res = dict(ap=float(df2['ap_total'].values[0]), thr={})
+    df1, df2 = get_full_conf_results(ev.metrics)
+    res = dict(ap=float(df2['ap_total'].values[0]), thr={},
+               ap_strata={k: float(df2[f'ap_{k}'].values[0]) for k in ('high', 'med', 'low')})   # GT confidence 1.0 / 0.5 / 0.1
+    # the evaluator's own operating points on the full PR curve: max accuracy, <=0.1 FP per GT, >=95% recall (high-confidence GT)
+    res['ops'] = {nm: dict(min_score=float(r['min_score']), recall=float(r['recall_total']), fp_per_gt=float(r['fp']))
+                  for nm, (_, r) in zip(('best_accuracy', 'fp<=0.1/GT', 'high_recall>=95'), df1.iterrows())}
     for thr in thr_list:
         n_gt = n_tp = n_pred = 0
         bk = {k: [0, 0] for k, _, _ in BUCKETS}; bkc = {k: [0, 0] for k, _, _ in BUCKETS}
@@ -149,7 +153,10 @@ def evaluate_dets(dets, gts, cfg, thr_list=(0.1, 0.3)):
 
 
 def format_result(name, ds, r):
-    lines = [f'  [{name}] {ds}: ap_total {r["ap"]:.4f}']
+    s = r['ap_strata']
+    lines = [f'  [{name}] {ds}: ap_total {r["ap"]:.4f} (AP by GT confidence: high {s["high"]:.3f} / med {s["med"]:.3f} / low {s["low"]:.3f})']
+    lines.append('    evaluator operating points (full PR curve): ' + '; '.join(
+        f'{k}: score>={v["min_score"]:.3f} recall {v["recall"]:.3f} FP/GT {v["fp_per_gt"]:.2f}' for k, v in r['ops'].items()))
     for thr, t in r['thr'].items():
         eu = ' '.join(f'{k}:{v[1]:.3f}(n={v[0]})' for k, v in t['euclid'].items())
         ch = ' '.join(f'{k}:{v[1]:.3f}(n={v[0]})' for k, v in t['chigap'].items())
