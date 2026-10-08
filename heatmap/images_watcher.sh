@@ -7,7 +7,7 @@ RUNS=${RUNS:-/mnt/DATA/mlgidDETECT_DINO_HEATMAP/hm_runs}
 SIMMIM=${SIMMIM:-/mnt/DATA/mlgidDETECT_DINO_HEATMAP/backbone_export/swin_large_patch4_window12_384_22k.pth}
 BOXCONV=${BOXCONV:-/mnt/DATA/mlgidDETECT_DINO_HEATMAP/backbone_export/boxconv1_backbone.pth}
 export HM_DATA_DIR=${HM_DATA_DIR:-$HOME/Documents/datasets}
-DECODE=${DECODE:-native}; OUTNAME=${OUTNAME:-images}     # DECODE=nms OUTNAME=images_nms for the +nms images
+DECODE=${DECODE:-native}; OUTNAME=${OUTNAME:-images}     # DECODE=nms for the +nms images (both write <run>/images/<decode>/<set>/...)
 STATUS=$RUNS/_tools/overnight_status.txt
 cd "$REPO" || exit 1
 for spec in "hm_ridge_lr1e-4_tf32_2.80_1.30:$SIMMIM" "hm_boxconv1_frozen_ridge_tf32_2.80_1.30:$BOXCONV" "hm_simmim_frozen_ridge_long_tf32_2.80_1.30:$SIMMIM"; do
@@ -18,8 +18,8 @@ for spec in "hm_ridge_lr1e-4_tf32_2.80_1.30:$SIMMIM" "hm_boxconv1_frozen_ridge_t
   done
   if [ -f "$RUNS/$name/final_checkpoint.pth" ]; then
     HM_BB_PATH="$bb" "$PY" -u heatmap/visualize.py --ckpt "$RUNS/$name/final_checkpoint.pth" --out "$RUNS/$name/$OUTNAME" --decode "$DECODE" \
-        --sets organic 41 --thr 0.3 > "$RUNS/$name/visualize_$OUTNAME.log" 2>&1
-    echo "$(date '+%F %T') IMAGES($OUTNAME) $name rc=$?" | tee -a "$STATUS"
+        --sets organic 41 --thr 0.3 > "$RUNS/$name/visualize_$DECODE.log" 2>&1
+    echo "$(date '+%F %T') IMAGES($DECODE) $name rc=$?" | tee -a "$STATUS"
   else
     echo "$(date '+%F %T') IMAGES $name skipped (no final checkpoint)" | tee -a "$STATUS"
   fi
