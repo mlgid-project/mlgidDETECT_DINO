@@ -260,12 +260,28 @@ Training: live simulator (box convention 2.80/1.30), batch 4, 250 steps/epoch (1
 | organic | 0.599 | 0.612 | 0.580 (0.586 / 0.433) | 0.773 | 0.438 (n=121) |
 | 41 | 0.578 | 0.667 | 0.651 (0.697 / 0.586) | 0.710 | 0.370 (n=73) |
 
-References recorded earlier (NOT rescored with this code): ssl1 organic 0.568 / 41 0.744; `dino_lr4e5_1` organic 0.608 /
-41 0.761. So: organic is level with the best DINO model, 41 is about 0.09 behind. At score > 0.1 ring recall is 0.800 / 0.941
-but at > 0.3 it is 0.433 / 0.586: rings are found with low scores (calibration). Close pairs are still mostly merged into
-one box (images: `images_v2/*/closepairs.png`). bf16 backbone at inference agrees with fp32 to within 0.003 AP.
-Curves were noisy epoch to epoch (recall/precision at the fixed 0.3 cut swing; AP is steadier); training loss was still
-falling at epoch 59, and the lr drop at 45 was probably early.
+**Same-code comparison (job 2949416, `heatmap/evaluate.py`, final checkpoints, 2026-10-08).** ssl1 reproduces its recorded
+numbers (organic AP 0.5683, recall 0.537, precision 0.841), so the pipeline is validated. Heatmap = `hm+nms`.
+
+| | organic AP | 41 AP | organic recall/prec >0.3 | 41 recall/prec >0.3 | ring recall >0.3 (org / 41) | ring recall >0.1 (org / 41) |
+|---|---|---|---|---|---|---|
+| heatmap (frozen SimMIM) | 0.612 | 0.667 | 0.580 / 0.773 (FP 139) | 0.651 / 0.710 (FP 447) | 0.433 / 0.586 | 0.800 / 0.941 |
+| ssl1 | 0.568 | 0.744 | 0.537 / 0.841 (FP 83) | 0.772 / 0.705 (FP 543) | 0.733 / 0.853 | 0.800 / 0.938 |
+| dino_lr4e5_1 | 0.622 | 0.763 | 0.592 / 0.827 (FP 101) | 0.798 / 0.707 (FP 555) | 0.700 / 0.829 | 0.767 / 0.932 |
+
+Recall at score > 0.3 by nearest-neighbour (Euclid) distance of the GT peak (n peaks in brackets):
+
+| | organic <5 (121) | organic 5-10 (85) | organic >10 (581) | 41 <5 (73) | 41 5-10 (62) | 41 >10 (846) |
+|---|---|---|---|---|---|---|
+| heatmap | 0.438 | 0.424 | 0.640 | 0.370 | 0.629 | 0.733 |
+| ssl1 | 0.372 | 0.353 | 0.589 | 0.370 | 0.452 | 0.766 |
+| dino_lr4e5_1 | 0.388 | 0.447 | 0.651 | 0.397 | 0.677 | 0.818 |
+
+Reading: organic AP is above ssl1 (+0.044) and 0.010 below dino_lr4e5_1; 41 AP is 0.077 / 0.096 below. The `<5 px` bucket
+on organic is +0.066 / +0.050 over ssl1 / lr4e5 (121 peaks, about 1 SE: weak evidence); on 41 it is a tie / below. In
+absolute terms +0.05..0.07 of 121 peaks is about 8 peaks, ~1% of organic recall, far from the ~+0.06 prize. Rings are found
+as often as DINO finds them at score > 0.1 (0.800 / 0.941) but score lower, so they drop out at > 0.3: a ring SCORE
+calibration problem, which explains most of the 41 gap (rings are 41% of its objects).
 
 **Caveats.** (1) The in-training AP is the native decode, not comparable to DINO `exp_ap` logs; use `+nms`. (2) ssl1 and
 `dino_lr4e5_1` have not been rescored with `heatmap/evaluate.py`, so the `<5 px` bucket (my definition) is not
