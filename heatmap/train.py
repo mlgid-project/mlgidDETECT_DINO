@@ -45,6 +45,7 @@ def quick_eval(model, epoch, out):
         print(f'[epoch {epoch}] eval skipped: {type(e).__name__}: {e}', flush=True)
         return
     model.eval()
+    t_eval = time.time()
     for ds, path in E.DATASETS.items():
         gts, dets = [], []
         if not os.path.exists(path):
@@ -57,10 +58,12 @@ def quick_eval(model, epoch, out):
         r = E.evaluate_dets(dets, gts, cfg)
         t = r['thr'][0.3]
         line = (f'{epoch}\t{r["ap"]:.4f}\trecall0.3 {t["recall"]:.3f}\tprec0.3 {t["precision"]:.3f}\t'
-                f'chigap<5 {t["chigap"]["<5"][1]:.3f}')
+                f'chigap<5 {t["chigap"]["<5"][1]:.3f}\teu<5 {t["euclid"]["<5"][1]:.3f}\t'
+                f'n<5 chi={t["chigap"]["<5"][0]} eu={t["euclid"]["<5"][0]}')
         print(f'[epoch {epoch}] {ds}: {line}', flush=True)
         with open(os.path.join(out, f'exp_ap_{ds}.txt'), 'a') as f:
             f.write(line + '\n')
+    print(f'[epoch {epoch}] eval took {time.time()-t_eval:.0f}s (both sets)', flush=True)
     model.train()
 
 
