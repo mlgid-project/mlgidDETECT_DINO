@@ -22,6 +22,10 @@ run_train() {   # run_train <name> <train.py args...>
   [ -f "$RUNS/$name/checkpoint.pth" ] && cp "$RUNS/$name/checkpoint.pth" "$RUNS/$name/final_checkpoint.pth"
   "$PY" -u heatmap/evaluate.py hm=heatmap:"$RUNS/$name/final_checkpoint.pth" > "$RUNS/$name/evaluate_final.txt" 2>&1
   log "EVAL  $name rc=$?"
+  # images on the real frames (GT / matches / false positives, heatmaps, close-pair crops); non-fatal
+  HM_BB_PATH="${HM_BB_OVERRIDE:-$SIMMIM}" "$PY" -u heatmap/visualize.py --ckpt "$RUNS/$name/final_checkpoint.pth" \
+      --out "$RUNS/$name/images" --sets organic 41 --thr 0.3 > "$RUNS/$name/visualize.log" 2>&1
+  log "IMAGES $name rc=$?"
 }
 
 # -1) checks: vectorised ring targets == reference (else fall back to the slow reference builder); weights really load
@@ -45,7 +49,7 @@ B=hm_boxconv1_frozen_ridge_tf32_2.80_1.30
 # (checked here, not at start, so the weights file may arrive while run A is training)
 BOX_OK=0; for i in $(seq 1 30); do [ -f "$BOXCONV" ] && break; sleep 60; done
 "$PY" heatmap/check_backbone.py "$BOXCONV" backbone.0. >> "$STATUS" 2>&1 && BOX_OK=1 || log "boxconv weights missing/invalid -> run B skipped"
-[ $BOX_OK = 1 ] && run_train $B --bb ssl1 --bb_path "$BOXCONV" --ring_target ridge --tf32 --lr 3e-4 --epochs 60 --lr_drop 45 --eval_interval 1
+[ $BOX_OK = 1 ] && HM_BB_OVERRIDE="$BOXCONV" run_train $B --bb ssl1 --bb_path "$BOXCONV" --ring_target ridge --tf32 --lr 3e-4 --epochs 60 --lr_drop 45 --eval_interval 1
 
 # 3) long run: batch 8 (125 steps = 1000 images per epoch), 120 epochs, lr drops at 90 and 112; lr from the lr test
 LRL=$("$PY" heatmap/pick_lr.py "$RUNS/$A/evaluate_final.txt" 2>> "$STATUS" | tail -1)
