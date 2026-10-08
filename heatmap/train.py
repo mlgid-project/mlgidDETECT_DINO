@@ -20,7 +20,7 @@ SSL1 = '/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detect
 def get_args():
     p = argparse.ArgumentParser()
     p.add_argument('--out', required=True)
-    p.add_argument('--bb', default='simmim1', choices=['simmim1', 'ssl1'])
+    p.add_argument('--bb', default='simmim1', choices=['simmim1', 'ssl1', 'random'])
     p.add_argument('--bb_path', default=None, help='override the backbone weights file (SimMIM export, or ssl1 checkpoint)')
     p.add_argument('--box_coef', default='2.80,1.30', help="label convention a_coef,w_coef; 'legacy' = ssl1's 3.5/1.0")
     p.add_argument('--unfreeze', action='store_true')
@@ -71,6 +71,8 @@ def main():
     import random; random.seed(a.seed)
     bb_path, bb_prefix = (SIMMIM, '') if a.bb == 'simmim1' else (SSL1, 'backbone.0.')
     bb_path = a.bb_path or bb_path
+    if a.bb == 'random':                      # control arm: frozen RANDOM-init swin, no weights loaded
+        bb_path, bb_prefix = None, ''
     model = HeatmapNet(backbone_ckpt=bb_path, backbone_prefix=bb_prefix, freeze_backbone=not a.unfreeze,
                        out_stride=a.out_stride).cuda()
     hm_args = dict(freeze_backbone=not a.unfreeze, out_stride=a.out_stride, bb_path=bb_path,
@@ -135,8 +137,9 @@ def main():
         n = a.steps_per_epoch
         print(f'[epoch {epoch}] loss {agg["loss"]/n:.4f} heat {agg["loss_heat"]/n:.4f} reg {agg["loss_reg"]/n:.4f} '
               f'({time.time()-t0:.0f}s)', flush=True)
+        # (a random-init backbone can't be re-read from a file, so that arm saves it)
         torch.save(dict(model={k: v for k, v in model.state_dict().items()
-                               if not (k.startswith('backbone.') and not a.unfreeze)},
+                               if not (k.startswith('backbone.') and not a.unfreeze and a.bb != 'random')},
                         optimizer=opt.state_dict(), lr_scheduler=sched.state_dict(), epoch=epoch, hm_args=hm_args),
                    ck_path)
         if epoch % a.eval_interval == 0 or epoch == a.epochs - 1:
