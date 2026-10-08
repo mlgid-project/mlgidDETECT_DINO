@@ -16,7 +16,8 @@ from util.postprocessing import onnx_to_xyxy, filter_boxes
 from util.evaluation import Evaluator, get_full_conf_results
 from util.matchers import get_matcher
 
-CUR = '/mnt/lustre/work/schreiber/szb389/datasets'
+import os
+CUR = os.environ.get('HM_DATA_DIR', '/mnt/lustre/work/schreiber/szb389/datasets')   # dir holding organic_labeled.h5 + 41.h5
 DATASETS = {'organic': f'{CUR}/organic_labeled.h5', '41': f'{CUR}/41.h5'}
 POLAR = (512, 1024)
 matcher = get_matcher('q', min_iou=0.1)

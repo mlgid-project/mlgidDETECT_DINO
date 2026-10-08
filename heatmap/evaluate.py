@@ -28,7 +28,7 @@ def load_heatmap(ckpt):
     model = HeatmapNet(backbone_ckpt=None, freeze_backbone=a['freeze_backbone'], out_stride=a['out_stride'])
     print('  load:', model.load_state_dict(ck['model'], strict=False).unexpected_keys[:3])
     # backbone weights are re-read from their source file (frozen => identical to training)
-    bb = torch.load(a['bb_path'], map_location='cpu')
+    bb = torch.load(os.environ.get('HM_BB_PATH', a['bb_path']), map_location='cpu')
     from util.misc import clean_state_dict
     bb = clean_state_dict(bb.get('model', bb))
     pre = a['bb_prefix']

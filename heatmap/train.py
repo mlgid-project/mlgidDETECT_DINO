@@ -2,13 +2,16 @@
   python heatmap/train.py --out <dir> [--bb simmim1|ssl1] [--unfreeze] ...
 Resumable (reads <out>/checkpoint.pth)."""
 import os, sys, time, json, argparse
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+import types
+for _n, _s in (('models', 'models'), ('models.dino', 'models/dino')):   # skip DINO package inits (compiled ops)
+    _m = types.ModuleType(_n); _m.__path__ = [os.path.join(ROOT, _s)]; sys.modules[_n] = _m
 import numpy as np
 import torch
 
 from models.heatmap_head import HeatmapNet, decode
 from heatmap.targets_loss import build_targets, heatmap_loss
-from heatmap import evaluation as E
 
 SIMMIM = '/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/ssl_runs/simmim1/backbone_export/swin_large_patch4_window12_384_22k.pth'
 SSL1 = '/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_ssl1/checkpoint.pth'
@@ -18,6 +21,7 @@ def get_args():
     p = argparse.ArgumentParser()
     p.add_argument('--out', required=True)
     p.add_argument('--bb', default='simmim1', choices=['simmim1', 'ssl1'])
+    p.add_argument('--bb_path', default=None, help='override the backbone weights file (SimMIM export, or ssl1 checkpoint)')
     p.add_argument('--unfreeze', action='store_true')
     p.add_argument('--out_stride', type=int, default=2)
     p.add_argument('--epochs', type=int, default=60)
@@ -34,10 +38,17 @@ def get_args():
 
 @torch.no_grad()
 def quick_eval(model, epoch, out):
-    from heatmap.evaluate import DEV  # noqa
+    try:
+        from heatmap import evaluation as E
+    except Exception as e:                       # e.g. eval deps (h5py/cv2/pandas) missing
+        print(f'[epoch {epoch}] eval skipped: {type(e).__name__}: {e}', flush=True)
+        return
     model.eval()
     for ds, path in E.DATASETS.items():
         gts, dets = [], []
+        if not os.path.exists(path):
+            print(f'[epoch {epoch}] eval skipped, missing {path}', flush=True)
+            continue
         for cfg, ic in E.iter_frames(path):
             o = model(E.frame_inputs(ic, 'cuda'))
             gts.append(E.gt_of(ic))
@@ -58,6 +69,7 @@ def main():
     torch.manual_seed(a.seed); np.random.seed(a.seed)
     import random; random.seed(a.seed)
     bb_path, bb_prefix = (SIMMIM, '') if a.bb == 'simmim1' else (SSL1, 'backbone.0.')
+    bb_path = a.bb_path or bb_path
     model = HeatmapNet(backbone_ckpt=bb_path, backbone_prefix=bb_prefix, freeze_backbone=not a.unfreeze,
                        out_stride=a.out_stride).cuda()
     hm_args = dict(freeze_backbone=not a.unfreeze, out_stride=a.out_stride, bb_path=bb_path,
@@ -79,9 +91,16 @@ def main():
     json.dump(vars(a), open(os.path.join(a.out, 'args.json'), 'w'), indent=2)
     print('[train] trainable params:', sum(p.numel() for p in model.parameters() if p.requires_grad), flush=True)
 
-    from main import SimulationDataset
-    sim_args = argparse.Namespace(num_channels=1, box_coef_override=None)   # ssl1's sim: legacy 3.5/1.0
-    sim = SimulationDataset(sim_args)
+    from simulation import FastSimulation
+    sim = FastSimulation(device='cuda')       # default config = ssl1's sim (legacy 3.5/1.0 box convention)
+
+    def sim_sample():
+        while True:                           # same retry-on-failure as main.SimulationDataset
+            try:
+                img, boxes, _mask, is_ring = sim.simulate_img()
+                return img[None], boxes.float(), is_ring.long()
+            except Exception:
+                pass
     stride = model.out_stride
     model.train()
     step = 0
@@ -90,12 +109,9 @@ def main():
         for it in range(a.steps_per_epoch):
             imgs, hs, rs, ws = [], [], [], []
             for _ in range(a.bs):
-                img, tg = sim[0]
+                img, xyxy, lab = sim_sample()
                 H, W = img.shape[-2:]
-                bx = tg['boxes']
-                xyxy = torch.stack([(bx[:, 0] - bx[:, 2] / 2) * W, (bx[:, 1] - bx[:, 3] / 2) * H,
-                                    (bx[:, 0] + bx[:, 2] / 2) * W, (bx[:, 1] + bx[:, 3] / 2) * H], -1)
-                h, r, w = build_targets(xyxy, tg['labels'], H, W, stride)
+                h, r, w = build_targets(xyxy, lab, H, W, stride)
                 imgs.append(img); hs.append(h); rs.append(r); ws.append(w)
             out = model(torch.stack(imgs))
             loss, parts = heatmap_loss(out, torch.stack(hs), torch.stack(rs), torch.stack(ws))
