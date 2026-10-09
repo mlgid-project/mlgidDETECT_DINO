@@ -32,7 +32,7 @@ def load_heatmap(ckpt):
     from models.heatmap_head import HeatmapNet
     ck = torch.load(ckpt, map_location='cpu')
     a = ck['hm_args']
-    model = HeatmapNet(backbone_ckpt=None, freeze_backbone=a['freeze_backbone'], out_stride=a['out_stride'], amp_backbone=bool(a.get('amp_backbone', False) or os.environ.get('HM_AMP') == '1'), chan_mode=a.get('chan_mode', 'he'), zero_invalid=a.get('zero_invalid', False), dim=a.get('dim', 128), tower_ch=a.get('tower_ch', 64), tower_depth=a.get('tower_depth', 2), stem_ch=a.get('stem_ch', 32))
+    model = HeatmapNet(backbone_ckpt=None, freeze_backbone=a['freeze_backbone'], out_stride=a['out_stride'], amp_backbone=bool(a.get('amp_backbone', False) or os.environ.get('HM_AMP') == '1'), chan_mode=a.get('chan_mode', 'he'), zero_invalid=a.get('zero_invalid', False), dim=a.get('dim', 128), tower_ch=a.get('tower_ch', 64), tower_depth=a.get('tower_depth', 2), stem_ch=a.get('stem_ch', 32), ring_head_stride=a.get('ring_head_stride', 0))
     print('  load:', model.load_state_dict(ck['model'], strict=False).unexpected_keys[:3])
     # backbone weights are re-read from their source file (frozen => identical to training)
     if a.get('bb') == 'random':               # backbone weights are inside the checkpoint
@@ -55,8 +55,9 @@ def run(name, kind, ckpt):
     else:
         model, a = load_heatmap(ckpt); nch = 1
     out = {}
+    from models.heatmap_head import RING_DECODE_MODES
     for ds, path in E.DATASETS.items():
-        gts, d_main, d_nms = [], [], []
+        gts, d_main, d_nms, d_modes = [], [], [], {}
         for cfg, ic in E.iter_frames(path):
             img = E.frame_inputs(ic, DEV, nch, chan_mode=getattr(model, 'chan_mode', 'he'))
             o = model(img) if kind == 'dino' else model(img, E.frame_mask(ic, DEV))
@@ -64,15 +65,20 @@ def run(name, kind, ckpt):
             if kind == 'dino':
                 d_main.append(E.dino_dets(cfg, o))
             else:
-                pi = decode(o, model.out_stride, num_select=225)[0]
+                pi = decode(o, model.out_stride, num_select=225)[0]           # with a ring head: the default decode (coarse_rings)
                 d_main.append(E.heatmap_dets(cfg, pi, use_nms=False))
                 d_nms.append(E.heatmap_dets(cfg, pi, use_nms=True))
+                if 'ring_heat' in o:
+                    for m_ in RING_DECODE_MODES:
+                        d_modes.setdefault(m_, []).append(E.heatmap_dets(cfg, decode(o, model.out_stride, num_select=225, mode=m_)[0], use_nms=True))
         r = E.evaluate_dets(d_main, gts, cfg)
         print(E.format_result(name if kind == 'dino' else name + ' (native)', ds, r), flush=True)
         out[(name, ds)] = r
         if d_nms:
             r2 = E.evaluate_dets(d_nms, gts, cfg)
             print(E.format_result(name + '+nms', ds, r2), flush=True)
+        for m_, d_ in d_modes.items():                                       # ring-head runs: all three decode modes, +nms
+            print(E.format_result(f'{name}+nms ring-head decode={m_}', ds, E.evaluate_dets(d_, gts, cfg)), flush=True)
     return out
 
 

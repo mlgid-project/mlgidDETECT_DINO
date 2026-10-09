@@ -22,6 +22,11 @@ def _cbr(i, o, k=3, s=1):
     return nn.Sequential(nn.Conv2d(i, o, k, s, k // 2, bias=False), _gn(o), nn.ReLU(inplace=True))
 
 
+def _cbd(i, o, d):
+    """3x3 conv with dilation d (wider context at the same cost)"""
+    return nn.Sequential(nn.Conv2d(i, o, 3, 1, d, dilation=d, bias=False), _gn(o), nn.ReLU(inplace=True))
+
+
 CHAN_N = {'he': 1, 'he_mask': 2, 'full': 4, 'contrast': 4}
 
 
@@ -56,7 +61,7 @@ def build_channels(img, mask, mode):
 class HeatmapNet(nn.Module):
     def __init__(self, backbone_ckpt=None, backbone_prefix='', freeze_backbone=True,
                  out_stride=2, dim=128, window_size_h=48, window_size_w=6, amp_backbone=False,
-                 chan_mode='he', zero_invalid=False, tower_ch=64, tower_depth=2, stem_ch=32):
+                 chan_mode='he', zero_invalid=False, tower_ch=64, tower_depth=2, stem_ch=32, ring_head_stride=0):
         super().__init__()
         self.zero_invalid = zero_invalid       # invalid (masked) pixels are set to 0 in EVERY input incl. the swin's (sim images are gray there, eval files 0)
         self.chan_mode = chan_mode             # extra input channels feed the stem only; backbone input is unchanged
@@ -93,6 +98,19 @@ class HeatmapNet(nn.Module):
         # typical box ~ 10 px: start log w/h there
         with torch.no_grad():
             self.reg.bias[2:] = 2.3
+        # optional extra RING head on a coarse merged FPN map (stride 8 or 16): rings are as tall as the image but only a few px
+        # wide, so a coarse map with a large receptive field (dilated convs) sees a whole ring at once. Rings only (1 class).
+        self.ring_head_stride = ring_head_stride
+        if ring_head_stride:
+            assert ring_head_stride in (8, 16), ring_head_stride
+            self.ring_level = {8: 1, 16: 2}[ring_head_stride]
+            self.ring_tower = nn.Sequential(_cbd(dim, tc, 1), _cbd(tc, tc, 2), _cbd(tc, tc, 4), _cbd(tc, tc, 1))
+            self.ring_heat = nn.Conv2d(tc, 1, 1)
+            self.ring_reg = nn.Conv2d(tc, 4, 1)
+            nn.init.constant_(self.ring_heat.bias, -2.19)
+            nn.init.zeros_(self.ring_reg.weight); nn.init.zeros_(self.ring_reg.bias)
+            with torch.no_grad():
+                self.ring_reg.bias[2:] = 2.3
 
     def train(self, mode=True):
         super().train(mode)
@@ -126,9 +144,12 @@ class HeatmapNet(nn.Module):
                 feats = self.backbone(NestedTensor(img, mask))
         c = [feats[i].tensors.float() for i in range(4)]
         p = self.lat[3](c[3])
+        mid = None
         for i in (2, 1, 0):
             p = self.lat[i](c[i]) + F.interpolate(p, size=c[i].shape[-2:], mode='nearest')
             p = self.smooth[i](p)
+            if self.ring_head_stride and i == self.ring_level:
+                mid = p                                  # merged map at the ring head's stride (carries levels deeper than itself)
         # p is at stride 4; bring to out_stride and fuse with the image stem
         s = self.stem(side)
         p = F.interpolate(p, size=s.shape[-2:], mode='bilinear', align_corners=False)
@@ -136,11 +157,51 @@ class HeatmapNet(nn.Module):
             p = F.interpolate(p, size=(H // 4, W // 4), mode='bilinear', align_corners=False)
             s = F.adaptive_avg_pool2d(s, p.shape[-2:])
         x = self.fuse(torch.cat([p, s], 1))
-        return dict(heat=self.heat(self.tower_h(x)), reg=self.reg(self.tower_r(x)))
+        out = dict(heat=self.heat(self.tower_h(x)), reg=self.reg(self.tower_r(x)))
+        if self.ring_head_stride:
+            sc = self.ring_head_stride
+            if mid.shape[-2:] != (H // sc, W // sc):
+                mid = F.interpolate(mid, size=(H // sc, W // sc), mode='bilinear', align_corners=False)
+            t = self.ring_tower(mid)
+            out['ring_heat'] = self.ring_heat(t); out['ring_reg'] = self.ring_reg(t)
+        return out
+
+
+RING_DECODE_MODES = ('fine', 'coarse_rings', 'union')
+N_RING_PEAKS = 75
 
 
 @torch.no_grad()
-def decode(out, stride, num_select=225, score_floor=0.0):
+def decode(out, stride, num_select=225, score_floor=0.0, mode=None):
+    """Peak decoding. Without a ring head this is exactly decode_fine. With one (out has 'ring_heat'), `mode` (default env
+    HM_RING_DECODE, else 'coarse_rings') selects:
+      fine          segments AND rings from the fine map (the ring head is ignored; the plain model's decode)
+      coarse_rings  segments from the fine map, rings ONLY from the coarse ring head
+      union         fine map (both classes) + rings from the coarse head, the shared class-aware NMS removes duplicates
+    Returns per-image lists of (boxes_xyxy_px [N,4], scores [N], labels [N]) sorted by score, at most num_select."""
+    if 'ring_heat' not in out:
+        return decode_fine(out, stride, num_select, score_floor)
+    import os
+    mode = mode or os.environ.get('HM_RING_DECODE', 'coarse_rings')
+    assert mode in RING_DECODE_MODES, mode
+    if mode == 'fine':
+        return decode_fine(out, stride, num_select, score_floor)
+    sc = stride * out['heat'].shape[-1] // out['ring_heat'].shape[-1]            # stride of the coarse map
+    rings = decode_fine(dict(heat=out['ring_heat'], reg=out['ring_reg']), sc, N_RING_PEAKS, score_floor)
+    if mode == 'coarse_rings':
+        base = decode_fine(dict(heat=out['heat'][:, :1], reg=out['reg']), stride, num_select, score_floor)
+    else:
+        base = decode_fine(out, stride, num_select, score_floor)
+    res = []
+    for (b0, s0, c0), (b1, s1, _) in zip(base, rings):
+        b = torch.cat([b0, b1]); s_ = torch.cat([s0, s1]); c = torch.cat([c0, torch.ones_like(s1, dtype=c0.dtype)])
+        o = s_.argsort(descending=True)[:num_select]
+        res.append((b[o], s_[o], c[o]))
+    return res
+
+
+@torch.no_grad()
+def decode_fine(out, stride, num_select=225, score_floor=0.0):
     """3x3 max-pool peak picking (replaces NMS). Returns per-image lists of
     (boxes_xyxy_px [N,4], scores [N], labels [N]) sorted by score."""
     heat = out['heat'].sigmoid()

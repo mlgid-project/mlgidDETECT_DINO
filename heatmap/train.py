@@ -10,7 +10,7 @@ for _n, _s in (('models', 'models'), ('models.dino', 'models/dino')):   # skip D
 import numpy as np
 import torch
 
-from models.heatmap_head import HeatmapNet, decode
+from models.heatmap_head import HeatmapNet, decode, RING_DECODE_MODES
 from heatmap.targets_loss import build_targets, heatmap_loss
 if os.environ.get('HM_REF_TARGETS') == '1':      # fallback: the original per-ring-loop target builder (slower)
     from heatmap.targets_loss_ref import build_targets
@@ -39,6 +39,9 @@ def get_args():
     p.add_argument('--tower_ch', type=int, default=64, help='channels of the two head towers')
     p.add_argument('--tower_depth', type=int, default=2, help='3x3 conv layers per head tower')
     p.add_argument('--stem_ch', type=int, default=32, help='channels of the image stem')
+    p.add_argument('--ring_head', action='store_true', help='extra ring-only head on a coarse merged FPN map (needs --ring_target ridge)')
+    p.add_argument('--ring_head_stride', type=int, default=8, choices=[8, 16])
+    p.add_argument('--ring_coef', type=float, default=1.0, help='weight of the ring-head loss')
     p.add_argument('--epochs', type=int, default=60)
     p.add_argument('--lr_drop', type=int, default=45)
     p.add_argument('--lr_drops', type=int, nargs='+', default=None, help='several x0.1 drops (MultiStepLR); overrides --lr_drop')
@@ -73,7 +76,7 @@ def quick_eval(model, epoch, out):
     model.eval()
     t_eval = time.time()
     for ds, path in E.DATASETS.items():
-        gts, dets, dets_nms = [], [], []
+        gts, dets, dets_nms, extra = [], [], [], {}
         if not os.path.exists(path):
             print(f'[epoch {epoch}] eval skipped, missing {path}', flush=True)
             continue
@@ -83,6 +86,9 @@ def quick_eval(model, epoch, out):
             pi = decode(o, model.out_stride, 225)[0]
             dets.append(E.heatmap_dets(cfg, pi, use_nms=False))
             dets_nms.append(E.heatmap_dets(cfg, pi, use_nms=True))      # the deployed pipeline (class-aware NMS)
+            if 'ring_heat' in o:                                        # ring head: also the other decode modes (AP only)
+                for m_ in RING_DECODE_MODES:
+                    extra.setdefault(m_, []).append(E.heatmap_dets(cfg, decode(o, model.out_stride, 225, mode=m_)[0], use_nms=True))
         r = E.evaluate_dets(dets, gts, cfg)
         rn = E.evaluate_dets(dets_nms, gts, cfg, thr_list=(0.3,)); ap_nms = rn['ap']; tn = rn['thr'][0.3]
         t = r['thr'][0.3]
@@ -93,6 +99,10 @@ def quick_eval(model, epoch, out):
         print(f'[epoch {epoch}] {ds}: {line}', flush=True)
         print(f'[epoch {epoch}] {ds} +nms (deployed): AP {ap_nms:.4f} | score>0.3 recall {tn["recall"]:.3f} prec {tn["precision"]:.3f} '
               f'ring recall {tn["ring_recall"]:.3f} FP {tn["fp"]}', flush=True)
+        for m_, d_ in extra.items():
+            rm = E.evaluate_dets(d_, gts, cfg, thr_list=(0.3,)); tm = rm['thr'][0.3]
+            print(f'[epoch {epoch}] {ds} +nms ring-head decode={m_}: AP {rm["ap"]:.4f} | score>0.3 recall {tm["recall"]:.3f} prec {tm["precision"]:.3f} '
+                  f'ring recall {tm["ring_recall"]:.3f} FP {tm["fp"]}', flush=True)
         with open(os.path.join(out, f'exp_ap_{ds}.txt'), 'a') as f:
             f.write(line + '\n')
     print(f'[epoch {epoch}] eval took {time.time()-t_eval:.0f}s (both sets)', flush=True)
@@ -110,12 +120,15 @@ def main():
     bb_path = a.bb_path or bb_path
     if a.bb == 'random':                      # control arm: frozen RANDOM-init swin, no weights loaded
         bb_path, bb_prefix = None, ''
+    ring_stride = a.ring_head_stride if a.ring_head else 0
+    assert not ring_stride or a.ring_target == 'ridge', '--ring_head needs --ring_target ridge'
     model = HeatmapNet(backbone_ckpt=bb_path, backbone_prefix=bb_prefix, freeze_backbone=not a.unfreeze,
                        out_stride=a.out_stride, amp_backbone=a.amp_backbone, chan_mode=a.chan, zero_invalid=a.zero_invalid,
-                       dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch).cuda()
+                       dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch,
+                       ring_head_stride=ring_stride).cuda()
     hm_args = dict(freeze_backbone=not a.unfreeze, out_stride=a.out_stride, bb_path=bb_path,
                    bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan, zero_invalid=a.zero_invalid,
-                   dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch)
+                   dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch, ring_head_stride=ring_stride)
     head_params = [p for n, p in model.named_parameters() if p.requires_grad and not n.startswith('backbone.')]
     groups = [dict(params=head_params, lr=a.lr)]
     if a.unfreeze:
@@ -158,14 +171,23 @@ def main():
     for epoch in range(start, a.epochs):
         t0 = time.time(); agg = dict(loss=0, loss_heat=0, loss_reg=0)
         for it in range(a.steps_per_epoch):
-            imgs, hs, rs, ws, ms = [], [], [], [], []
+            imgs, hs, rs, ws, ms, rh, rr, rw = [], [], [], [], [], [], [], []
             for _ in range(a.bs):
                 img, xyxy, lab, msk = sim_sample()
                 H, W = img.shape[-2:]
                 h, r, w = build_targets(xyxy, lab, H, W, stride, a.ring_target)
                 imgs.append(img); hs.append(h); rs.append(r); ws.append(w); ms.append(msk)
+                if ring_stride:                                   # ring-only targets on the coarse grid
+                    k = lab == 1
+                    h2, r2, w2 = build_targets(xyxy[k], lab[k], H, W, ring_stride, 'ridge')
+                    rh.append(h2[1:2]); rr.append(r2); rw.append(w2)
             out = model(torch.stack(imgs), torch.stack(ms))
             loss, parts = heatmap_loss(out, torch.stack(hs), torch.stack(rs), torch.stack(ws))
+            if ring_stride:
+                l2, p2 = heatmap_loss(dict(heat=out['ring_heat'], reg=out['ring_reg']), torch.stack(rh), torch.stack(rr), torch.stack(rw))
+                loss = loss + a.ring_coef * l2
+                parts['loss_ring'] = p2['loss_heat'] + p2['loss_reg']
+                agg['loss_ring'] = agg.get('loss_ring', 0) + parts['loss_ring']
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(head_params, 1.0)
@@ -178,7 +200,7 @@ def main():
         sched.step()
         n = a.steps_per_epoch
         print(f'[epoch {epoch}] loss {agg["loss"]/n:.4f} heat {agg["loss_heat"]/n:.4f} reg {agg["loss_reg"]/n:.4f} '
-              f'({time.time()-t0:.0f}s)', flush=True)
+              + (f'ring {agg["loss_ring"]/n:.4f} ' if ring_stride else '') + f'({time.time()-t0:.0f}s)', flush=True)
         # (a random-init backbone can't be re-read from a file, so that arm saves it)
         torch.save(dict(model={k: v for k, v in model.state_dict().items()
                                if not (k.startswith('backbone.') and not a.unfreeze and a.bb != 'random')},
