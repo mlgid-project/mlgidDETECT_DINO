@@ -56,8 +56,8 @@ def iter_frames(path):
 # ch0 is the deployed contrast, so it must equal converted_polar_image (check: heatmap/check_contrast.py)
 CONTRAST_CHANNELS = [
     {'name': 'log_he',           'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': True,  'clahe': None},
+    {'name': 'log_only',         'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': False, 'clahe': None},
     {'name': 'log_clahe4_16x16', 'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': False, 'clahe': (4.0, 16, 16)},
-    {'name': 'log_gamma0.7',     'clip': (5.0, 99.5), 'log': True, 'gamma': 0.7,  'he': False, 'clahe': None},
 ]
 
 

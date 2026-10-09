@@ -337,11 +337,11 @@ class FastSimulation(object):
         """Three contrasts of the same simulated image, matching util.channels.CONTRAST_CHANNELS.
 
             ch0  clip 5/99.5 + log + HE             (deployed default; the SSL-init channel)
-            ch1  clip 5/99.5 + log + CLAHE 4@16x16  (best organic of the 74-setting sweep)
-            ch2  clip 5/99.5 + log + gamma 0.7      (the 41-facing channel)
+            ch1  clip 5/99.5 + log, NO equalisation (plain log contrast)
+            ch2  clip 5/99.5 + log + CLAHE 4@16x16  (best organic of the 74-setting sweep)
 
         All three share the 5/99.5 clip AND the log, so both are applied once and only the
-        last stage differs per channel: HE, CLAHE, or a plain gamma.
+        last stage differs per channel: HE, nothing (plain log), or CLAHE.
 
         Two deliberate differences from the real-data side (util.exp_preprocess.apply_contrast):
 
@@ -361,8 +361,8 @@ class FastSimulation(object):
 
         logged = apply_log(clipped)                     #shared log trunk (p=0.9, single draw)
         chans = [apply_he(logged),
-                 clahe_torch(normalize(logged), 4.0, (16, 16)),
-                 normalize(logged) ** 0.7]
+                 normalize(logged),
+                 clahe_torch(normalize(logged), 4.0, (16, 16))]
 
         def safe_norm(t):
             #normalize() is (t - min) / (max - min): a channel that goes FLAT (digitalize with

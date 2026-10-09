@@ -31,7 +31,7 @@ def build_channels(img, mask, mode):
       he       : img unchanged (the original single-channel pipeline, byte-identical)
       he_mask  : [HE, valid-pixel mask]
       full     : [HE, B1 = HE - per-q-column masked median over chi, B2 = that column median, mask]
-      contrast : img is already the [B,3,H,W] stack (log+HE, log+CLAHE, log+gamma 0.7) -> [stack, mask]
+      contrast : img is already the [B,3,H,W] stack (log+HE, plain log, log+CLAHE) -> [stack, mask]
     Invalid pixels are 0 in every channel except the mask (same definition as the multi-channel branch)."""
     if mode == 'he':
         return img[:, None]
