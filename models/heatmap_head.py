@@ -56,7 +56,7 @@ def build_channels(img, mask, mode):
 class HeatmapNet(nn.Module):
     def __init__(self, backbone_ckpt=None, backbone_prefix='', freeze_backbone=True,
                  out_stride=2, dim=128, window_size_h=48, window_size_w=6, amp_backbone=False,
-                 chan_mode='he', zero_invalid=False):
+                 chan_mode='he', zero_invalid=False, tower_ch=64, tower_depth=2, stem_ch=32):
         super().__init__()
         self.zero_invalid = zero_invalid       # invalid (masked) pixels are set to 0 in EVERY input incl. the swin's (sim images are gray there, eval files 0)
         self.chan_mode = chan_mode             # extra input channels feed the stem only; backbone input is unchanged
@@ -81,14 +81,13 @@ class HeatmapNet(nn.Module):
         chs = self.backbone.num_features            # [192, 384, 768, 1536]
         self.lat = nn.ModuleList([nn.Conv2d(c, dim, 1) for c in chs])
         self.smooth = nn.ModuleList([_cbr(dim, dim) for _ in chs[:3]])
-        self.stem = nn.Sequential(_cbr(in_ch, 32, 3, 1 if out_stride == 1 else 2), _cbr(32, 32))
-        if out_stride == 1:
-            self.stem = nn.Sequential(_cbr(in_ch, 32), _cbr(32, 32))
-        self.fuse = _cbr(dim + 32, dim)
-        self.tower_h = nn.Sequential(_cbr(dim, 64), _cbr(64, 64))
-        self.tower_r = nn.Sequential(_cbr(dim, 64), _cbr(64, 64))
-        self.heat = nn.Conv2d(64, 2, 1)
-        self.reg = nn.Conv2d(64, 4, 1)
+        sc, tc = stem_ch, tower_ch                  # defaults (32 / 64 / depth 2) = the original head, same state-dict keys
+        self.stem = nn.Sequential(_cbr(in_ch, sc, 3, 1 if out_stride == 1 else 2), _cbr(sc, sc))
+        self.fuse = _cbr(dim + sc, dim)
+        self.tower_h = nn.Sequential(_cbr(dim, tc), *[_cbr(tc, tc) for _ in range(tower_depth - 1)])
+        self.tower_r = nn.Sequential(_cbr(dim, tc), *[_cbr(tc, tc) for _ in range(tower_depth - 1)])
+        self.heat = nn.Conv2d(tc, 2, 1)
+        self.reg = nn.Conv2d(tc, 4, 1)
         nn.init.constant_(self.heat.bias, -2.19)    # prior p = 0.1 (CenterNet)
         nn.init.zeros_(self.reg.weight); nn.init.zeros_(self.reg.bias)
         # typical box ~ 10 px: start log w/h there

@@ -32,7 +32,7 @@ def load_heatmap(ckpt):
     from models.heatmap_head import HeatmapNet
     ck = torch.load(ckpt, map_location='cpu')
     a = ck['hm_args']
-    model = HeatmapNet(backbone_ckpt=None, freeze_backbone=a['freeze_backbone'], out_stride=a['out_stride'], amp_backbone=bool(a.get('amp_backbone', False) or os.environ.get('HM_AMP') == '1'), chan_mode=a.get('chan_mode', 'he'), zero_invalid=a.get('zero_invalid', False))
+    model = HeatmapNet(backbone_ckpt=None, freeze_backbone=a['freeze_backbone'], out_stride=a['out_stride'], amp_backbone=bool(a.get('amp_backbone', False) or os.environ.get('HM_AMP') == '1'), chan_mode=a.get('chan_mode', 'he'), zero_invalid=a.get('zero_invalid', False), dim=a.get('dim', 128), tower_ch=a.get('tower_ch', 64), tower_depth=a.get('tower_depth', 2), stem_ch=a.get('stem_ch', 32))
     print('  load:', model.load_state_dict(ck['model'], strict=False).unexpected_keys[:3])
     # backbone weights are re-read from their source file (frozen => identical to training)
     if a.get('bb') == 'random':               # backbone weights are inside the checkpoint

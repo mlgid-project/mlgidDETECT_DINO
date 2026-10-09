@@ -35,6 +35,10 @@ def get_args():
                    help='set invalid (masked) pixels to 0 in every model input incl. the frozen swin, in training AND eval (sim images are gray there, the eval files are exactly 0)')
     p.add_argument('--unfreeze', action='store_true')
     p.add_argument('--out_stride', type=int, default=2)
+    p.add_argument('--dim', type=int, default=128, help='FPN width')
+    p.add_argument('--tower_ch', type=int, default=64, help='channels of the two head towers')
+    p.add_argument('--tower_depth', type=int, default=2, help='3x3 conv layers per head tower')
+    p.add_argument('--stem_ch', type=int, default=32, help='channels of the image stem')
     p.add_argument('--epochs', type=int, default=60)
     p.add_argument('--lr_drop', type=int, default=45)
     p.add_argument('--lr_drops', type=int, nargs='+', default=None, help='several x0.1 drops (MultiStepLR); overrides --lr_drop')
@@ -96,9 +100,11 @@ def main():
     if a.bb == 'random':                      # control arm: frozen RANDOM-init swin, no weights loaded
         bb_path, bb_prefix = None, ''
     model = HeatmapNet(backbone_ckpt=bb_path, backbone_prefix=bb_prefix, freeze_backbone=not a.unfreeze,
-                       out_stride=a.out_stride, amp_backbone=a.amp_backbone, chan_mode=a.chan, zero_invalid=a.zero_invalid).cuda()
+                       out_stride=a.out_stride, amp_backbone=a.amp_backbone, chan_mode=a.chan, zero_invalid=a.zero_invalid,
+                       dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch).cuda()
     hm_args = dict(freeze_backbone=not a.unfreeze, out_stride=a.out_stride, bb_path=bb_path,
-                   bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan, zero_invalid=a.zero_invalid)
+                   bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan, zero_invalid=a.zero_invalid,
+                   dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch)
     head_params = [p for n, p in model.named_parameters() if p.requires_grad and not n.startswith('backbone.')]
     groups = [dict(params=head_params, lr=a.lr)]
     if a.unfreeze:
