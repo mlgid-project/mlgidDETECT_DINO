@@ -52,6 +52,17 @@ def get_args():
     return p.parse_args()
 
 
+def eval_interval(a):
+    """Epochs between in-training evals. An integer in <out>/eval_interval.txt (this run) or <out>/../_tools/eval_interval.txt
+    (all runs) overrides --eval_interval, read at every epoch end, so it can be changed while a run trains."""
+    for f in (os.path.join(a.out, 'eval_interval.txt'), os.path.join(os.path.dirname(os.path.abspath(a.out)), '_tools', 'eval_interval.txt')):
+        try:
+            return max(1, int(open(f).read().strip()))
+        except (OSError, ValueError):
+            pass
+    return a.eval_interval
+
+
 @torch.no_grad()
 def quick_eval(model, epoch, out):
     try:
@@ -173,7 +184,7 @@ def main():
                                if not (k.startswith('backbone.') and not a.unfreeze and a.bb != 'random')},
                         optimizer=opt.state_dict(), lr_scheduler=sched.state_dict(), epoch=epoch, hm_args=hm_args),
                    ck_path)
-        if epoch % a.eval_interval == 0 or epoch == a.epochs - 1:
+        if epoch % eval_interval(a) == 0 or epoch == a.epochs - 1:
             quick_eval(model, epoch, a.out)
 
 
