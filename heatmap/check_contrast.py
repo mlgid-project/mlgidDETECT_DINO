@@ -23,6 +23,7 @@ def main():
             assert np.isfinite(x).all()
             assert (x[:, ~m] == 0).all(), 'invalid pixels must be 0 in every channel'
             agg.append(np.array([[x[i][m].mean(), x[i][m].std()] for i in range(3)]))
+        assert worst < 1e-3, f'contrast ch0 differs from converted_polar_image by {worst}'   # exit code != 0 stops an unattended queue
         a = np.mean(agg, 0)
         print(f'[{ds}] frames {len(agg)}: max|ch0 - converted_polar_image| = {worst:.2e} (expect ~0); '
               + ' | '.join(f'ch{i} {a[i,0]:.3f}+-{a[i,1]:.3f}' for i in range(3)), flush=True)
