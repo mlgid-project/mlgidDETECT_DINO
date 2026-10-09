@@ -43,7 +43,7 @@ def badge(ax, x, y, text, style):
 
 def header(ax, x, y, w, title, style, tag):
     ax.text(x + 1.8, y, title, ha='left', va='center', fontsize=10.5, fontweight='bold', color=INK, zorder=6)
-    badge(ax, x + w - 5.2, y, tag, style)
+    badge(ax, x + w - 5.6, y + 2.6, tag, style)      # sits on the top edge of the box, never on the title
 
 
 def body(ax, x, y, text, size=8.2, color=INK, ha='left', va='top', weight='normal', ls=1.35):
@@ -99,18 +99,21 @@ def main():
 
     box(ax, 32, 56, 26, 24, FROZEN)
     header(ax, 32, 77.4, 26, 'Swin-L backbone', FROZEN, 'FROZEN')
-    for i, (wd, c) in enumerate(zip([20, 16, 12, 8], ['#9db4cf', '#86a1c2', '#6f8fb6', '#587ba8'])):
-        ax.add_patch(Rectangle((45 - wd / 2, 71.4 - i * 2.55), wd, 2.1, fc=c, ec='white', lw=0.8, zorder=5))
-    body(ax, 33.8, 70.8, 'stride\n4\n8\n16\n32', size=5.6, color=MUTED, va='top', ls=1.1)
-    body(ax, 57, 70.8, '192\n384\n768\n1536', size=5.6, color=MUTED, ha='right', va='top', ls=2.28)
-    body(ax, 45, 61.2, 'four feature maps\nSimMIM self-supervised, window 48 x 6\n195.5 M parameters', size=7.0, color=INK, ha='center', ls=1.3)
+    body(ax, 35.0, 74.7, 'stride', size=5.6, color=MUTED, ha='center', va='center')
+    body(ax, 55.2, 74.7, 'channels', size=5.6, color=MUTED, ha='center', va='center')
+    for i, (wd, c, st, ch) in enumerate(zip([15, 12, 9, 6], ['#9db4cf', '#86a1c2', '#6f8fb6', '#587ba8'], ['4', '8', '16', '32'], ['192', '384', '768', '1536'])):
+        yb = 71.4 - i * 2.55
+        ax.add_patch(Rectangle((45 - wd / 2, yb), wd, 2.1, fc=c, ec='white', lw=0.8, zorder=5))
+        body(ax, 35.0, yb + 1.05, st, size=6.2, color=MUTED, ha='center', va='center')
+        body(ax, 55.2, yb + 1.05, ch, size=6.2, color=MUTED, ha='center', va='center')
+    body(ax, 45, 61.0, 'four feature maps\nSimMIM pre-trained, window 48 x 6\n195.5 M parameters', size=6.8, color=INK, ha='center', ls=1.3)
     arrow(ax, (58, 68), (63, 68))
 
     box(ax, 63, 56, 26, 24, TRAIN)
     header(ax, 63, 77.4, 26, 'Feature pyramid (FPN)', TRAIN, 'TRAINED')
     body(ax, 64.8, 74.6, 'merges the four maps top-down:\n1 x 1 conv to 128 channels,\nupsample, add, 3 x 3 conv\n+ GroupNorm + ReLU', size=7.6)
     box(ax, 65.2, 57.6, 21.6, 4.6, dict(fc='#fff6e6', ec=TRAIN['ec']), lw=1.0, r=0.9)
-    body(ax, 76, 59.9, 'one 128-channel map, stride 4', size=7.4, ha='center', va='center', weight='bold')
+    body(ax, 76, 59.9, '128-channel map, stride 4', size=7.2, ha='center', va='center', weight='bold')
 
     # ---- stat cards (right of row A)
     box(ax, 94, 66, 20, 14, dict(fc='#eef3f9', ec=FROZEN['ec']), lw=1.2)
@@ -119,9 +122,8 @@ def main():
     box(ax, 118, 66, 20, 14, dict(fc='#fef5e6', ec=TRAIN['ec']), lw=1.2)
     body(ax, 128, 74.8, '1.23 M', size=19, ha='center', va='center', weight='bold', color=TRAIN['ec'])
     body(ax, 128, 69.6, 'trained parameters\n(FPN, stem, towers)', size=7.8, ha='center', va='center', color=INK)
-    box(ax, 94, 57, 44, 6.4, IO, lw=1.0, r=1.0)
-    body(ax, 96, 60.2, 'Frozen = weights copied from self-supervised pre-training, never updated.\n'
-                       'Trained = starts random, learns from simulated images only.', size=7.2, color=MUTED, va='center', ls=1.3)
+    box(ax, 94, 56.0, 44, 8.0, IO, lw=1.0, r=1.0)
+    body(ax, 96, 60.0, 'Frozen: weights copied from self-supervised pre-training,\nnever updated.\nTrained: starts random, learns from simulated images only.', size=6.9, color=MUTED, va='center', ls=1.3)
 
     # ---- row B: stem, fuse, towers, outputs
     box(ax, 32, 30, 26, 20, TRAIN)
@@ -182,9 +184,10 @@ def main():
     body(ax, 100.4, 2.8, 'teal = segment (spot)    orange = ring', size=6.8, color=MUTED, va='center')
 
     # ---- training line
-    box(ax, 3, 2.0, 90, 6.6, dict(fc='#f6f4ee', ec='#c9c4b5'), lw=1.0, r=1.0)
-    body(ax, 4.6, 5.3, 'Training: simulated GIWAXS images only (the same generator as the DINO detector). Targets: a small Gaussian bump per segment, a tall ridge per ring.\n'
-                       'Loss = focal loss (heatmap) + 4 x L1 (box maps). AdamW, learning rate 3e-4, 60 epochs of 1000 images, the backbone is never updated.',
+    box(ax, 3, 1.3, 90, 8.2, dict(fc='#f6f4ee', ec='#c9c4b5'), lw=1.0, r=1.0)
+    body(ax, 4.6, 5.4, 'Training: simulated GIWAXS images only (the same generator as the DINO detector).\n'
+                       'Targets: a small Gaussian bump per segment, a tall ridge per ring.\n'
+                       'Loss: focal loss (heatmap) + 4 x L1 (box maps). AdamW, lr 3e-4, 60 epochs of 1000 images. The backbone is never updated.',
          size=6.9, color=INK, va='center', ls=1.4)
     ax.text(UW - 1.5, 0.9, 'illustration is synthetic, not model output  |  models/heatmap_head.py', fontsize=5.8, color=MUTED, ha='right', va='center')
 
