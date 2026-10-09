@@ -34,7 +34,7 @@ def load(ckpt, device):
         return HeatmapNet(None, freeze_backbone=True, out_stride=2).to(device).eval(), None
     ck = torch.load(ckpt, map_location='cpu')
     a = ck['hm_args']
-    model = HeatmapNet(None, freeze_backbone=a['freeze_backbone'], out_stride=a['out_stride'], amp_backbone=a.get('amp_backbone', False), chan_mode=a.get('chan_mode', 'he'))
+    model = HeatmapNet(None, freeze_backbone=a['freeze_backbone'], out_stride=a['out_stride'], amp_backbone=a.get('amp_backbone', False), chan_mode=a.get('chan_mode', 'he'), zero_invalid=a.get('zero_invalid', False))
     model.load_state_dict(ck['model'], strict=False)
     if a.get('bb') != 'random' and a['freeze_backbone']:        # frozen backbone is not stored in the checkpoint
         bb = torch.load(os.environ.get('HM_BB_PATH', a['bb_path']), map_location='cpu')

@@ -56,8 +56,9 @@ def build_channels(img, mask, mode):
 class HeatmapNet(nn.Module):
     def __init__(self, backbone_ckpt=None, backbone_prefix='', freeze_backbone=True,
                  out_stride=2, dim=128, window_size_h=48, window_size_w=6, amp_backbone=False,
-                 chan_mode='he'):
+                 chan_mode='he', zero_invalid=False):
         super().__init__()
+        self.zero_invalid = zero_invalid       # invalid (masked) pixels are set to 0 in EVERY input incl. the swin's (sim images are gray there, eval files 0)
         self.chan_mode = chan_mode             # extra input channels feed the stem only; backbone input is unchanged
         in_ch = CHAN_N[chan_mode]
         self.amp_backbone = amp_backbone       # bf16 autocast for the swin only; FPN/head stay fp32
@@ -104,6 +105,9 @@ class HeatmapNet(nn.Module):
         """img [B,1,H,W] (HE image; [B,3,H,W] contrast stack when chan_mode == 'contrast');
         mask [B,H,W] bool (True = valid), needed unless chan_mode == 'he'. The swin sees channel 0 only."""
         B, _, H, W = img.shape
+        if self.zero_invalid:
+            assert mask is not None, 'zero_invalid needs the valid-pixel mask'
+            img = img.masked_fill(~mask.to(img.device).bool()[:, None], 0.)
         if self.chan_mode == 'he':
             side = img
         elif self.chan_mode == 'contrast':

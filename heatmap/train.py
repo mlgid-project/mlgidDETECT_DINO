@@ -31,6 +31,8 @@ def get_args():
                    help="'ridge': tall ridge target for rings, all ridge cells regress the same box")
     p.add_argument('--chan', default='he', choices=['he', 'he_mask', 'full', 'contrast'],
                    help='stem input channels (swin always sees the HE image only): he | he_mask | full = HE, B1 ring-subtracted, B2 column median, mask | contrast = log+HE, log+CLAHE, log+gamma0.7 of the same image, mask')
+    p.add_argument('--zero_invalid', action='store_true',
+                   help='set invalid (masked) pixels to 0 in every model input incl. the frozen swin, in training AND eval (sim images are gray there, the eval files are exactly 0)')
     p.add_argument('--unfreeze', action='store_true')
     p.add_argument('--out_stride', type=int, default=2)
     p.add_argument('--epochs', type=int, default=60)
@@ -94,9 +96,9 @@ def main():
     if a.bb == 'random':                      # control arm: frozen RANDOM-init swin, no weights loaded
         bb_path, bb_prefix = None, ''
     model = HeatmapNet(backbone_ckpt=bb_path, backbone_prefix=bb_prefix, freeze_backbone=not a.unfreeze,
-                       out_stride=a.out_stride, amp_backbone=a.amp_backbone, chan_mode=a.chan).cuda()
+                       out_stride=a.out_stride, amp_backbone=a.amp_backbone, chan_mode=a.chan, zero_invalid=a.zero_invalid).cuda()
     hm_args = dict(freeze_backbone=not a.unfreeze, out_stride=a.out_stride, bb_path=bb_path,
-                   bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan)
+                   bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan, zero_invalid=a.zero_invalid)
     head_params = [p for n, p in model.named_parameters() if p.requires_grad and not n.startswith('backbone.')]
     groups = [dict(params=head_params, lr=a.lr)]
     if a.unfreeze:
