@@ -371,3 +371,17 @@ recall at floor 0.1 falls with q (C 0.835/0.763/0.603; 41 does not), but the TP 
 peaks never found, not found peaks scored low. (4) The two sets prefer different constant floors (organic ~0.1-0.15, 41 0.2-0.3; B 0.3-0.4), a set-level
 calibration difference, not a q effect. The simulator flips images left-right, so the net cannot learn q from position and a position-based correction is the only way
 to use it. Headline stays floor 0.1 + top-225; the tuned numbers are optimistic (tuned on the eval sets).
+
+**Later options and runs (2026-10-09/10).** New code, all default-off (default path unchanged):
+`--chan {he,he_mask,full,contrast}` extra stem channels (swin sees channel 0 only), `--zero_invalid` (masked pixels = 0 in every input, train and eval),
+head size `--dim/--tower_ch/--tower_depth/--stem_ch` (wide 256/128/4/64 = 4.76 M trainable vs 1.23 M), `--out_stride 1` (512x1024 map, bs 2 x 500 steps because bs 4 OOMs),
+`--ring_head [--ring_head_stride 8|16]` (ring-only dilated head on the merged FPN map, decode modes fine / coarse_rings (pre-declared headline) / union),
+`heatmap/predict.py` (boxes for unlabeled h5), `heatmap/summarize_runs.py` (Markdown results table), `heatmap/make_architecture_pdf.py`, eval every 2 epochs via `eval_interval.txt`.
+
+Results so far (+nms, floor 0.1, top-225; organic / 41; single seeds, eval-to-eval noise about +-0.03):
+- chanfull (4 channels, TF32): 0.5792 / 0.7048 vs ridge 0.6057 / 0.7259 (-0.027 / -0.021; ridge was fp32, chanfull TF32, so confounded). NN<5px at >0.3: 0.430 / 0.397 (ridge 0.421 / 0.384). chanhemask stopped at epoch 2.
+- stride 1 (`--out_stride 1`, bs 2 x 500, 196 s/epoch vs about 121 for stride 2, peak 10.1 GB): 0.6106 / 0.7298 = within noise of the stride-2 ridge run. Score>0.3: organic recall 0.546 prec 0.812 ring recall 0.500;
+  41 recall 0.745 prec 0.765 ring recall 0.784. NN<5px at >0.3: 0.438 (n=121) / 0.397 (n=73) vs ridge 0.421 / 0.384 and DINO ssl1 0.372 / 0.370, lr4e5 0.388 / 0.397: +0.017 / +0.013 over ridge, i.e. 2 and 1 peaks, not significant.
+  Native decode is the lowest of all ridge-family runs on 41 (0.4381 vs 0.4606-0.5784), so NMS helps stride 1 more (+0.292 vs +0.219 for ridge); plain reading, no explanation. Organic ring recall >0.3 is 0.500, lower than the earlier 0.53-0.57.
+  Verdict: output stride 1 does not help AP and does not clearly move the close-pair bucket, at 1.6x the training time.
+Still running or queued: contrast channels, TF32 plain control, zeroinv, wide head, ring head.
