@@ -44,7 +44,9 @@ def title_of(run):
 
 
 def drops_of(run):
-    return (90, 112) if 'long' in run else (45,)
+    if 'long120' in run:
+        return (90,)
+    return (90, 112) if 'ridge_long' in run else (45,)
 
 
 def load(runs_dir):

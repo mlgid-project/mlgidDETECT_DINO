@@ -16,7 +16,10 @@ LABELS = [  # run-dir tag -> readable name, in reading order (unknown runs are a
     ('ridge_long_tf32', 'C: long (bs 8, 120 ep, lr 4.2e-4)'), ('ridge_chanfull_tf32', 'chanfull: HE, B1, B2, mask'),
     ('ridge_stride1_tf32', 'stride-1 output (bs 2)'), ('ridge_chancontrast_tf32', 'contrast channels: log+HE, log, log+CLAHE, mask'),
     ('ridge_he_tf32', 'TF32 plain control'), ('ridge_zeroinv_tf32', 'invalid pixels zeroed'), ('ridge_wide_tf32', 'wide head (4.8 M params)'),
-    ('ridge_ringhead_tf32', 'ring head (stride 8)')]
+    ('ridge_ringhead_tf32', 'ring head (stride 8)'),
+    ('ridge_he_tf32_seed1', 'TF32 plain control, seed 1'), ('ridge_he_tf32_seed2', 'TF32 plain control, seed 2'),
+    ('ridge_ringhead16_tf32', 'ring head (stride 16)'), ('ridge_he_tf32_lr5e-4', 'TF32 plain control, lr 5e-4'),
+    ('ridge_he_tf32_long120', 'TF32 plain control, 120 epochs (lr drop 90)')]
 NAME = dict(LABELS)
 DINO = [('DINO ssl1', '0.568', '0.744', '0.372', '0.370'), ('DINO lr 4e-5', '0.622', '0.763', '0.388', '0.397'),
         ('DINO boxconv1', '0.588', '0.752', '0.339', '0.370')]
