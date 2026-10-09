@@ -159,7 +159,7 @@ def main():
     body(ax, 123.5, 52.0, 'segment | ring', size=6.6, color=MUTED, ha='center', va='center')
 
     # ---- row C: decoding
-    body(ax, 3, 25.0, 'Decoding  (no learned part)', size=11, weight='bold', va='center')
+    body(ax, 3, 25.0, 'Decoding  (no learned part): reads both output maps above', size=11, weight='bold', va='center')
     chips = [('3 x 3 max-pool\npeak picking', 'a cell is a peak if it\nis the largest nearby'),
              ('keep the top 225\npeaks', 'score = heatmap value\nat the peak'),
              ('read the box', 'centre = cell + offset\nsize = exp(log w, log h)'),
@@ -172,7 +172,6 @@ def main():
         if i < 3:
             arrow(ax, (x0 + 20.4, 16.3), (x0 + 23.8, 16.3), lw=1.6, ms=12)
     arrow(ax, (92.4, 16.3), (99.5, 16.3), lw=1.6, ms=12)
-    arrow(ax, (129.5, 28), (129.5, 25.6), color=MUTED, lw=1.2, ms=10)
 
     # result thumbnail (boxes on the image)
     body(ax, 119, 24.0, 'Result: boxes on the image', size=8.2, ha='center', va='center', weight='bold')
