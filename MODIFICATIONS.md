@@ -384,4 +384,7 @@ Results so far (+nms, floor 0.1, top-225; organic / 41; single seeds, eval-to-ev
   41 recall 0.745 prec 0.765 ring recall 0.784. NN<5px at >0.3: 0.438 (n=121) / 0.397 (n=73) vs ridge 0.421 / 0.384 and DINO ssl1 0.372 / 0.370, lr4e5 0.388 / 0.397: +0.017 / +0.013 over ridge, i.e. 2 and 1 peaks, not significant.
   Native decode is the lowest of all ridge-family runs on 41 (0.4381 vs 0.4606-0.5784), so NMS helps stride 1 more (+0.292 vs +0.219 for ridge); plain reading, no explanation. Organic ring recall >0.3 is 0.500, lower than the earlier 0.53-0.57.
   Verdict: output stride 1 does not help AP and does not clearly move the close-pair bucket, at 1.6x the training time.
-Still running or queued: contrast channels, TF32 plain control, zeroinv, wide head, ring head.
+- contrast channels (`--chan contrast`: log+HE, plain log, log+CLAHE 4@16x16, as stem channels beside the swin's channel 0; bs 4 x 250, 121 s/epoch, TF32): 0.5873 / 0.7236 = no better than plain ridge (organic -0.018, 41 -0.002, both within noise); below stride 1 on both sets.
+  Score>0.3: organic recall 0.600 prec 0.697 ring recall 0.533 (ridge 0.606 / 0.739); 41 recall 0.805 prec 0.668 ring recall 0.858 (ridge 0.776 / 0.724): more recall on 41, lower precision. NN<5px at >0.3: 0.446 (n=121) / 0.384 (n=73) vs ridge 0.421 / 0.384.
+  Native 41 AP 0.5434 (higher than ridge 0.5071). 41 AP at floor 0.2 is 0.7396 (headline floor 0.1: 0.7236, convention unchanged). Compare with chanfull: both multi-channel variants fail to beat the plain input; the plain-log channel was a possible out-of-distribution risk on organic and organic does end lower.
+Still running or queued: TF32 plain control (`--chan he --tf32`), zeroinv, wide head, ring head.
