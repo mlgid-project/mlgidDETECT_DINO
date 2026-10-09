@@ -101,24 +101,23 @@ def overview(runs, path, ci, what):
         ax = axes[si]; style(ax)
         if ci == 5:
             for lab, v in REFS[ds]:
-                ax.axhline(v, color=REF, ls='--', lw=1)
-                ax.text(0.995, v + 0.004, 'DINO ' + lab, fontsize=8, color=INK2, ha='right', transform=ax.get_yaxis_transform())
+                ax.axhline(v, color=REF, ls='--', lw=1, label='DINO ' + lab + ' (final +nms)')
         for ri, r in enumerate(has):
             ep, ys = finite(*series(r['ev'][ds], ci))
             if ep:
                 ax.plot(ep, ys, color=PALETTE[ri % len(PALETTE)], lw=1.6, label=title_of(r['run']) + suffix(r))
-        ax.set_ylim(0.3, 0.8); ax.set_xlabel('epoch', color=INK2)
+        ax.set_ylim(0.2 if ci == 5 else 0.0, 0.8); ax.set_xlabel('epoch', color=INK2)
         ax.set_title(f'{ds}: AP, {what}', loc='left', color=INK, fontsize=11)
         ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
     axes[0].set_ylabel('AP', color=INK2)
     h, l = axes[1].get_legend_handles_labels()
     if h:
-        axes[1].legend(h, l, frameon=False, fontsize=8, loc='lower right', labelcolor=INK)
-    note = ('' if not missing else 'Not drawn (older logs without this column; see overview_native.png): ' + ', '.join(missing) + '.   ')
+        fig.legend(h, l, frameon=False, fontsize=8, loc='lower center', ncol=4, labelcolor=INK, bbox_to_anchor=(0.5, 0.03))
+    note = ('' if not missing else 'Not drawn (older logs without this column; see overview_native.png): ' + ', '.join(missing) + '.')
     fig.suptitle(f'Heatmap detector: AP ({what}) per evaluation epoch, all runs (single seeds; evaluation noise ~0.03 before the lr drop)',
                  x=0.01, ha='left', color=INK, fontsize=12)
-    fig.text(0.01, 0.012, note + 'Dashed grey = final DINO +nms numbers (ssl1, lr 4e-5), not per-epoch curves.', fontsize=8, color=INK2)
-    fig.tight_layout(rect=(0, 0.03, 1, 0.95)); fig.savefig(path, dpi=130, facecolor=SURFACE); plt.close(fig)
+    fig.text(0.01, 0.008, note + ('   Dashed grey = final DINO +nms numbers, not per-epoch curves.' if ci == 5 else ''), fontsize=8, color=INK2)
+    fig.tight_layout(rect=(0, 0.14, 1, 0.95)); fig.savefig(path, dpi=130, facecolor=SURFACE); plt.close(fig)
 
 
 def small_multiples(runs, path):
@@ -133,17 +132,16 @@ def small_multiples(runs, path):
                 ax.axhline(v, color=col, ls=':', lw=0.8, alpha=0.6)
             ep, ys = finite(*series(r['ev'][ds], 0))
             if ep:
-                ax.plot(ep, ys, color=col, lw=1.2, ls='--', alpha=0.55)
+                ax.plot(ep, ys, color=col, lw=1.5, ls='--', alpha=0.85)
             ep, ys = finite(*series(r['ev'][ds], 5))
             if ep:
                 has_nms = True
                 ax.plot(ep, ys, color=col, lw=1.8, label=ds); ax.annotate(f'{ys[-1]:.3f}', (ep[-1], ys[-1]), textcoords='offset points', xytext=(3, 3), fontsize=8, color=col)
-        if not has_nms:
-            ax.text(0.5, 0.08, 'no +nms column in this older log:\nnative AP only (dashed)', transform=ax.transAxes, ha='center', fontsize=8, color=INK2)
         for dp in drops_of(r['run']):
             ax.axvline(dp, color=GRID, lw=1.2, zorder=0)
         ax.set_xlim(-1, max(last_epoch(r), 1) + 2)
-        ax.set_ylim(0.3, 0.8); ax.set_title(title_of(r['run']) + suffix(r), loc='left', fontsize=9, color=INK)
+        ax.set_ylim(0.0, 0.8)
+        ax.set_title(title_of(r['run']) + suffix(r) + ('' if has_nms else '\n(older log: native AP only, dashed)'), loc='left', fontsize=9, color=INK)
         ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
         if k % cols == 0:
             ax.set_ylabel('AP', color=INK2, fontsize=9)
