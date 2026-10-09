@@ -391,4 +391,7 @@ Results so far (+nms, floor 0.1, top-225; organic / 41; single seeds, eval-to-ev
   Versus the fp32 ridge run: organic +0.026, 41 +0.0001. Two single runs of the same recipe therefore differ by 0.026 on organic; TF32 and seed were changed together and were not separated, so the gap cannot be attributed.
   Score>0.3: organic recall 0.605 prec 0.758 ring recall 0.500; 41 recall 0.779 prec 0.725 ring recall 0.818. NN<5px at >0.3: 0.430 / 0.384 (ridge 0.421 / 0.384). Native 41 AP 0.4947, native organic 0.6097.
   Consequence: differences below about 0.03 between single runs (stride 1, contrast, chanfull) are inside the run-to-run spread and should not be read as effects.
-Still running or queued: zeroinv, wide head, ring head; on galvani (job 2952426, pending): run C recipe with the swin unfrozen (lr 1e-5, drop path 0), output in datasets/DINO_HEATMAP.
+- zeroinv (`--chan he --zero_invalid`, bs 4 x 250, 117 s/epoch): 0.6097 / 0.7169. Versus the TF32 plain control (0.6320 / 0.7260): organic -0.022, 41 -0.009; versus fp32 ridge (0.6057 / 0.7259): +0.004 / -0.009. Both differences are inside the ~0.03 spread between the two plain runs: no clear +nms gain from zeroing invalid pixels.
+  Score>0.3: organic recall 0.583 prec 0.746 ring recall 0.567; 41 recall 0.793 prec 0.690 ring recall 0.851. NN<5px at >0.3: 0.455 / 0.356 (plain TF32 0.430 / 0.384). Native 41 AP 0.5529 (plain TF32 0.4947, ridge 0.5071), native organic 0.5839; the native-decode 41 gain is unexplained.
+  41 AP at floor 0.2 is 0.7262 (headline floor 0.1: 0.7169).
+Still running or queued: wide head (started 20:46, ends ~23:55), ring head; on galvani (job 2952426, pending): run C recipe with the swin unfrozen (lr 1e-5, drop path 0), output in datasets/DINO_HEATMAP.

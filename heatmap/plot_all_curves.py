@@ -28,7 +28,7 @@ from summarize_runs import NAME                                                 
 ORG, V41 = '#2a78d6', '#eb6834'
 EXTRA_NAME = {'ridge_chanhemask_tf32': 'chanhemask: HE, mask (stopped at epoch 2)'}
 STOPPED = {'ridge_chanhemask_tf32'}          # stopped by the user after epoch 2: kept in the CSV, left out of the figures
-PALETTE = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#000000', '#7f7f7f']
+PALETTE = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#000000', '#7f7f7f', '#3b0f70', '#00a6a6', '#a65628', '#e6ab02']
 SETS = [('organic', ORG), ('41', V41)]
 REFS = {'organic': [('ssl1 0.568', 0.568), ('lr 4e-5 0.622', 0.622)], '41': [('ssl1 0.744', 0.744), ('lr 4e-5 0.763', 0.763)]}
 COLNAMES = ['ap_native', 'recall_0.3', 'precision_0.3', 'recall_chigap_lt5', 'recall_nn_lt5', 'ap_nms']
