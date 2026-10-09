@@ -61,7 +61,8 @@ def build_channels(img, mask, mode):
 class HeatmapNet(nn.Module):
     def __init__(self, backbone_ckpt=None, backbone_prefix='', freeze_backbone=True,
                  out_stride=2, dim=128, window_size_h=48, window_size_w=6, amp_backbone=False,
-                 chan_mode='he', zero_invalid=False, tower_ch=64, tower_depth=2, stem_ch=32, ring_head_stride=0):
+                 chan_mode='he', zero_invalid=False, tower_ch=64, tower_depth=2, stem_ch=32, ring_head_stride=0,
+                 drop_path_rate=0.0, grad_ckpt=False):
         super().__init__()
         self.zero_invalid = zero_invalid       # invalid (masked) pixels are set to 0 in EVERY input incl. the swin's (sim images are gray there, eval files 0)
         self.chan_mode = chan_mode             # extra input channels feed the stem only; backbone input is unchanged
@@ -72,7 +73,7 @@ class HeatmapNet(nn.Module):
         self.freeze_backbone = freeze_backbone
         self.backbone = build_swin_transformer(
             'swin_L_384_22k', pretrain_img_size=384, out_indices=(0, 1, 2, 3), dilation=False,
-            use_checkpoint=False, window_size_h=window_size_h, window_size_w=window_size_w,
+            use_checkpoint=bool(grad_ckpt), drop_path_rate=drop_path_rate, window_size_h=window_size_h, window_size_w=window_size_w,
             patch_size_h=4, patch_size_w=4, in_chans=1)
         if backbone_ckpt:
             sd = torch.load(backbone_ckpt, map_location='cpu')

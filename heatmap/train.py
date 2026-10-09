@@ -33,7 +33,9 @@ def get_args():
                    help='stem input channels (swin always sees the HE image only): he | he_mask | full = HE, B1 ring-subtracted, B2 column median, mask | contrast = log+HE, plain log, log+CLAHE of the same image, mask')
     p.add_argument('--zero_invalid', action='store_true',
                    help='set invalid (masked) pixels to 0 in every model input incl. the frozen swin, in training AND eval (sim images are gray there, the eval files are exactly 0)')
-    p.add_argument('--unfreeze', action='store_true')
+    p.add_argument('--unfreeze', action='store_true', help='train the swin too (lr --lr_backbone); the frozen runs never used stochastic depth')
+    p.add_argument('--bb_drop_path', type=float, default=0.0, help='swin stochastic-depth rate when --unfreeze (0 = off, like the frozen runs)')
+    p.add_argument('--grad_ckpt', action='store_true', help='gradient checkpointing in the swin (less memory, ~30%% slower; --unfreeze only)')
     p.add_argument('--out_stride', type=int, default=2)
     p.add_argument('--dim', type=int, default=128, help='FPN width')
     p.add_argument('--tower_ch', type=int, default=64, help='channels of the two head towers')
@@ -125,7 +127,7 @@ def main():
     model = HeatmapNet(backbone_ckpt=bb_path, backbone_prefix=bb_prefix, freeze_backbone=not a.unfreeze,
                        out_stride=a.out_stride, amp_backbone=a.amp_backbone, chan_mode=a.chan, zero_invalid=a.zero_invalid,
                        dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch,
-                       ring_head_stride=ring_stride).cuda()
+                       ring_head_stride=ring_stride, drop_path_rate=a.bb_drop_path, grad_ckpt=a.grad_ckpt).cuda()
     hm_args = dict(freeze_backbone=not a.unfreeze, out_stride=a.out_stride, bb_path=bb_path,
                    bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan, zero_invalid=a.zero_invalid,
                    dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch, ring_head_stride=ring_stride)
