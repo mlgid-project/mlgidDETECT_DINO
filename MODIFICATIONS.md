@@ -352,3 +352,22 @@ Organic ring recall at >0.3 fell with the long run (0.533 vs 0.567), so ring cal
 C score sweep (`hm_runs/.../score_sweep/`, AP at top-K 225): organic floors 0-0.05 0.625, 0.1 0.6237, 0.2 0.606, 0.3 0.565; 41 floors 0-0.05 0.7045-0.705,
 0.1 0.7178, 0.2 0.7274, 0.3 0.698. At top-K 900 floors < 0.05 collapse AP (organic 0.532, 41 0.517 at floor 0). Best F1 0.670 (organic, thr 0.3), 0.747 (41, thr 0.4).
 Images (+nms only) for A, B, C are in `hm_runs/<run>/images/nms/`. Run B's sweep OOM'd (GPU shared with C) and was re-run by hand.
+
+**q-dependent (gradient) score threshold on existing checkpoints (2026-10-09, `heatmap/q_threshold.py`, no training).**
+thr(x) = t0 + (t1 - t0) x/1024 on the box-centre column (t0 = low q, t1 = high q; t0 = t1 is the constant control). Two uses:
+`filter` (keep score > thr(x), scores unchanged) and `norm` (also rescale s' = (s - thr)/(1 - thr)). Files: `hm_runs/q_threshold/hm_{C,ridge,B}_q_threshold.txt/.json`.
+Best AP (organic / 41) vs constant 0.1 and the best constant:
+
+| run | constant 0.1 | best gradient | best constant (41) |
+|---|---|---|---|
+| C (long) | 0.6237 / 0.7178 | 0.6336 (0.15->0.03) / 0.7279 (0.3->0.15) | 0.7274 (0.2) |
+| ridge | 0.6057 / 0.7259 | 0.6145 (0.15->0.03) / 0.7361 (0.2->0.15) | 0.7357 (0.2) |
+| B (boxconv1) | 0.5732 / 0.7489 | 0.5876 (0.15->0.03) / 0.7653 (0.4->0.1) | 0.7592 (0.3) |
+
+Reading: (1) gains are +0.009..+0.014 AP on organic and on 41 the gradient is within 0.0005 of the best constant (C, ridge) or +0.006 over constant 0.3 (B).
+(2) Cross-set (best on one set, scored on the other) is below the constant 0.1 headline in AP for every run, e.g. ridge 0.7210/0.7221 on 41 vs 0.7259 and
+0.5855/0.5937 on organic vs 0.6057: the optima are tuned to the set. (3) Premise only half true: faint GT share rises with q (organic 0.20/0.33/0.48), organic
+recall at floor 0.1 falls with q (C 0.835/0.763/0.603; 41 does not), but the TP score does not (C median TP 0.475/0.551/0.487 vs FP ~0.2): the high-q loss is
+peaks never found, not found peaks scored low. (4) The two sets prefer different constant floors (organic ~0.1-0.15, 41 0.2-0.3; B 0.3-0.4), a set-level
+calibration difference, not a q effect. The simulator flips images left-right, so the net cannot learn q from position and a position-based correction is the only way
+to use it. Headline stays floor 0.1 + top-225; the tuned numbers are optimistic (tuned on the eval sets).
