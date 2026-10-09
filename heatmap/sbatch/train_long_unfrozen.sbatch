@@ -2,7 +2,7 @@
 #SBATCH --job-name=hm_long_unfrozen
 #SBATCH --partition=a100-galvani
 #SBATCH --gres=gpu:a100:1
-#SBATCH --time=2-12:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --ntasks=1
