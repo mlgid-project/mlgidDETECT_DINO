@@ -52,7 +52,21 @@ def iter_frames(path):
             ds.close()
 
 
-def frame_inputs(ic, device, num_channels=1):
+# three contrasts of the SAME raw polar image (same specs as the multi-channel branch's CONTRAST_CHANNELS);
+# ch0 is the deployed contrast, so it must equal converted_polar_image (check: heatmap/check_contrast.py)
+CONTRAST_CHANNELS = [
+    {'name': 'log_he',           'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': True,  'clahe': None},
+    {'name': 'log_clahe4_16x16', 'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': False, 'clahe': (4.0, 16, 16)},
+    {'name': 'log_gamma0.7',     'clip': (5.0, 99.5), 'log': True, 'gamma': 0.7,  'he': False, 'clahe': None},
+]
+
+
+def frame_inputs(ic, device, num_channels=1, chan_mode='he'):
+    if chan_mode == 'contrast':               # [1,3,H,W]: starts from the PRE-contrast raw polar image
+        from util.exp_preprocess import apply_contrast
+        raw = np.asarray(ic.raw_polar_image, np.float32).reshape(*POLAR)
+        m = np.asarray(ic.converted_mask).reshape(*POLAR).astype(bool)
+        return torch.tensor(np.stack([apply_contrast(raw, m, c) for c in CONTRAST_CHANNELS]))[None].to(device)
     img = torch.tensor(ic.converted_polar_image[:, 0]).unsqueeze(0).to(device)
     return img.repeat(1, num_channels, 1, 1)
 

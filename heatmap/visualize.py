@@ -169,7 +169,7 @@ def main():
             if a.max_frames and fi >= a.max_frames:
                 break
             with torch.no_grad():
-                o = model(E.frame_inputs(ic, a.device), E.frame_mask(ic, a.device))
+                o = model(E.frame_inputs(ic, a.device, chan_mode=model.chan_mode), E.frame_mask(ic, a.device))
             img = np.asarray(ic.converted_polar_image[0, 0])
             g = E.gt_of(ic); gt = g['gt']
             pb_all, sc_all = E.heatmap_dets(cfg, decode(o, model.out_stride, 225)[0], use_nms=(a.decode == 'nms'))   # all dets; drawn: score > --thr

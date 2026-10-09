@@ -22,7 +22,7 @@ def _cbr(i, o, k=3, s=1):
     return nn.Sequential(nn.Conv2d(i, o, k, s, k // 2, bias=False), _gn(o), nn.ReLU(inplace=True))
 
 
-CHAN_N = {'he': 1, 'he_mask': 2, 'full': 4}
+CHAN_N = {'he': 1, 'he_mask': 2, 'full': 4, 'contrast': 4}
 
 
 def build_channels(img, mask, mode):
@@ -31,10 +31,13 @@ def build_channels(img, mask, mode):
       he       : img unchanged (the original single-channel pipeline, byte-identical)
       he_mask  : [HE, valid-pixel mask]
       full     : [HE, B1 = HE - per-q-column masked median over chi, B2 = that column median, mask]
+      contrast : img is already the [B,3,H,W] stack (log+HE, log+CLAHE, log+gamma 0.7) -> [stack, mask]
     Invalid pixels are 0 in every channel except the mask (same definition as the multi-channel branch)."""
     if mode == 'he':
         return img[:, None]
     m = mask.bool()
+    if mode == 'contrast':
+        return torch.cat([img, m.to(img.dtype)[:, None]], 1)
     he = img.masked_fill(~m, 0.)
     mf = m.to(img.dtype)
     if mode == 'he_mask':
@@ -98,10 +101,15 @@ class HeatmapNet(nn.Module):
         return self
 
     def forward(self, img, mask=None):
-        """img [B,1,H,W] (HE image); mask [B,H,W] bool (True = valid), needed unless chan_mode == 'he'."""
+        """img [B,1,H,W] (HE image; [B,3,H,W] contrast stack when chan_mode == 'contrast');
+        mask [B,H,W] bool (True = valid), needed unless chan_mode == 'he'. The swin sees channel 0 only."""
         B, _, H, W = img.shape
         if self.chan_mode == 'he':
             side = img
+        elif self.chan_mode == 'contrast':
+            assert mask is not None and img.shape[1] == 3
+            side = build_channels(img, mask.to(img.device), 'contrast')
+            img = img[:, :1]
         else:
             assert mask is not None, f"chan_mode '{self.chan_mode}' needs the valid-pixel mask"
             side = build_channels(img[:, 0], mask.to(img.device), self.chan_mode)

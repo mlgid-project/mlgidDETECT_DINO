@@ -17,6 +17,7 @@ import torchvision.transforms.functional as TF
 from torchvision.utils import draw_bounding_boxes
 from torchvision.ops import nms, masks_to_boxes
 import torchvision
+import cv2
 from math import pi, sin, cos
 from dataclasses import dataclass
 
@@ -61,6 +62,17 @@ def torch_he(img: Tensor, bins: int = 1000):
     cdf = cdf / cdf[-1]
     res = interp1d(bin_centers, cdf, img_flat)
     return res.view(img.shape)
+
+def clahe_torch(img: Tensor, clip_limit: float, tile: tuple):
+    """Contrast-limited adaptive HE, matching util.exp_preprocess.apply_contrast's CLAHE branch.
+
+    CLAHE is tile-based and has no torch equivalent, so this is the one place the simulator
+    leaves the GPU: ~2 ms per 512x1024 frame, about 3 s on a 9-minute epoch.
+    """
+    a = (img.clamp(0, 1) * 255).to(torch.uint8).cpu().numpy()
+    a = cv2.createCLAHE(clipLimit=float(clip_limit), tileGridSize=tuple(tile)).apply(a)
+    return torch.from_numpy(a).to(device=img.device, dtype=torch.float32) / 255
+
 
 def with_probability(probability: float = 1.):
     def wrapper(func):
@@ -179,6 +191,9 @@ class SimulationConfig():
     hot_pixels_p: float = 0.001
     hot_pixels_prob: float = 0.2
     prob_single_obj: float = 0.1
+    #multi-CONTRAST channels: when True, simulate_img returns a (3, H, W) stack of three
+    #contrasts of the same image instead of one contrasted image (see FastSimulation.contrast_stack).
+    contrast_channels: bool = False
 
 
 class FastSimulation(object):
@@ -293,14 +308,18 @@ class FastSimulation(object):
         
         
         clahe_img = img
-        # apply kernels & contrast correction
-        clahe_img = apply_log(clahe_img)
-        clahe_img = apply_he(clahe_img)
-        clahe_img = apply_clip_img(clahe_img)
-        clahe_img = apply_kernel(clahe_img, self.kernel1)
-        clahe_img = digitalize_img(clahe_img)
+        if self.sim_config.contrast_channels:
+            #multi-CONTRAST stack: three contrasts of this image instead of one (3, H, W)
+            clahe_img = self.contrast_stack(clahe_img, mask)
+        else:
+            # apply kernels & contrast correction
+            clahe_img = apply_log(clahe_img)
+            clahe_img = apply_he(clahe_img)
+            clahe_img = apply_clip_img(clahe_img)
+            clahe_img = apply_kernel(clahe_img, self.kernel1)
+            clahe_img = digitalize_img(clahe_img)
 
-        clahe_img = normalize(clahe_img)
+            clahe_img = normalize(clahe_img)
 
         if self.background_img is not None:
             clahe_img = clahe_img + self.background_img
@@ -312,6 +331,64 @@ class FastSimulation(object):
         clahe_img, boxes, mask = flip_image(clahe_img, boxes, mask)
 
         return clahe_img, boxes, mask, is_ring
+
+    @torch.no_grad()
+    def contrast_stack(self, img, mask):
+        """Three contrasts of the same simulated image, matching util.channels.CONTRAST_CHANNELS.
+
+            ch0  clip 5/99.5 + log + HE             (deployed default; the SSL-init channel)
+            ch1  clip 5/99.5 + log + CLAHE 4@16x16  (best organic of the 74-setting sweep)
+            ch2  clip 5/99.5 + log + gamma 0.7      (the 41-facing channel)
+
+        All three share the 5/99.5 clip AND the log, so both are applied once and only the
+        last stage differs per channel: HE, CLAHE, or a plain gamma.
+
+        Two deliberate differences from the real-data side (util.exp_preprocess.apply_contrast):
+
+        * The LOG. Simulated images are in arbitrary units, not detector counts, so
+          log10(|x| + 1e-7) -- what the real path uses -- would land on a completely
+          different part of the curve. apply_log maps the image onto a synthetic decade
+          range (normalize * U(50, 5000) + 1) first; that is the form every working run on
+          this branch was trained with. The clip, the gamma and HE/CLAHE are rank- or
+          ratio-based and so transfer from sim units to real counts unchanged.
+        * ONE draw of the trailing augmentations (mean/std clamp, smoothing kernel,
+          digitalisation) is shared by all three channels, so the stack stays coherent
+          rather than each channel being augmented independently.
+        """
+        v = img[mask]
+        lo, hi = torch.quantile(v, 0.05), torch.quantile(v, 0.995)
+        clipped = img.clamp(lo, hi)
+
+        logged = apply_log(clipped)                     #shared log trunk (p=0.9, single draw)
+        chans = [apply_he(logged),
+                 clahe_torch(normalize(logged), 4.0, (16, 16)),
+                 normalize(logged) ** 0.7]
+
+        def safe_norm(t):
+            #normalize() is (t - min) / (max - min): a channel that goes FLAT (digitalize with
+            #few levels, a fully clipped gamma channel, a constant CLAHE tile) makes that 0/0
+            #and puts NaN into the input. The NaN survives the forward and only surfaces much
+            #later as `assert boxes1[:, 2:] >= boxes1[:, :2]` in the matcher, because NaN
+            #comparisons are False -- which is exactly how job 2853568 died at epoch 4.
+            lo, hi = t.min(), t.max()
+            return (t - lo) / (hi - lo) if (hi - lo) > 1e-12 else torch.zeros_like(t)
+
+        do_clip, clip_scale = random.random() < 0.05, random.uniform(2, 4)
+        do_kernel = random.random() < 0.5
+        do_digit, levels = random.random() < 0.4, random.randint(16, 64)
+        out = []
+        for c in chans:
+            c = safe_norm(c)
+            if do_clip:
+                m, sd = c.mean().item(), c.std().item() * clip_scale
+                c = torch.clamp(c, m - sd, m + sd)
+            if do_kernel:
+                c = F.conv2d(c[None, None], self.kernel1, padding=1).squeeze()
+            if do_digit:
+                c = (safe_norm(c) * levels).round()
+            out.append(safe_norm(c).masked_fill(~mask, 0.))
+        #belt and braces: never hand a non-finite pixel to the model
+        return torch.nan_to_num(torch.stack(out), nan=0., posinf=1., neginf=0.)
 
     @torch.no_grad()
     def simulate_boxes(self):
@@ -1025,13 +1102,16 @@ def gen_intensities(pos, widths, a_pos, a_widths, intensity_range: tuple):
 
 
 def flip_image(img, boxes, mask):
+    #spatial dims addressed from the back, so a (C, H, W) contrast stack flips its image
+    #axes and not its channels; identical to the old dims=(0,)/(1,) for a plain (H, W) img
+    shape = img.shape[-2:]
     if np.random.rand() > 0.5:
-        img = torch.flip(img, dims=(0,))
-        boxes = flip_boxes(boxes, 0, img.shape)
+        img = torch.flip(img, dims=(-2,))
+        boxes = flip_boxes(boxes, 0, shape)
         mask = torch.flip(mask, dims=(0,))
     if np.random.rand() > 0.5:
-        img = torch.flip(img, dims=(1,))
-        boxes = flip_boxes(boxes, 1, img.shape)
+        img = torch.flip(img, dims=(-1,))
+        boxes = flip_boxes(boxes, 1, shape)
         mask = torch.flip(mask, dims=(1,))
 
     return img, boxes, mask

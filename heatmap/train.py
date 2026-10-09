@@ -29,8 +29,8 @@ def get_args():
     p.add_argument('--tf32', action='store_true', help='allow TF32 matmuls/convs (opt-in)')
     p.add_argument('--ring_target', default='legacy', choices=['legacy', 'ridge'],
                    help="'ridge': tall ridge target for rings, all ridge cells regress the same box")
-    p.add_argument('--chan', default='he', choices=['he', 'he_mask', 'full'],
-                   help='stem input channels (swin always sees the HE image only): he | he_mask | full = HE, B1 ring-subtracted, B2 column median, mask')
+    p.add_argument('--chan', default='he', choices=['he', 'he_mask', 'full', 'contrast'],
+                   help='stem input channels (swin always sees the HE image only): he | he_mask | full = HE, B1 ring-subtracted, B2 column median, mask | contrast = log+HE, log+CLAHE, log+gamma0.7 of the same image, mask')
     p.add_argument('--unfreeze', action='store_true')
     p.add_argument('--out_stride', type=int, default=2)
     p.add_argument('--epochs', type=int, default=60)
@@ -61,7 +61,7 @@ def quick_eval(model, epoch, out):
             print(f'[epoch {epoch}] eval skipped, missing {path}', flush=True)
             continue
         for cfg, ic in E.iter_frames(path):
-            o = model(E.frame_inputs(ic, 'cuda'), E.frame_mask(ic, 'cuda'))
+            o = model(E.frame_inputs(ic, 'cuda', chan_mode=model.chan_mode), E.frame_mask(ic, 'cuda'))
             gts.append(E.gt_of(ic))
             pi = decode(o, model.out_stride, 225)[0]
             dets.append(E.heatmap_dets(cfg, pi, use_nms=False))
@@ -117,10 +117,12 @@ def main():
 
     from simulation import FastSimulation
     cfg_sim = None
-    if a.box_coef != 'legacy':               # current main convention; 'legacy' = ssl1's default 3.5/1.0
+    if a.box_coef != 'legacy' or a.chan == 'contrast':
         from simulation import SimulationConfig
         cfg_sim = SimulationConfig()
-        cfg_sim.a_coef, cfg_sim.w_coef = (float(v) for v in a.box_coef.split(','))
+        if a.box_coef != 'legacy':           # current main convention; 'legacy' = ssl1's default 3.5/1.0
+            cfg_sim.a_coef, cfg_sim.w_coef = (float(v) for v in a.box_coef.split(','))
+        cfg_sim.contrast_channels = (a.chan == 'contrast')
     print(f'[train] sim box convention: a_coef,w_coef = {a.box_coef}', flush=True)
     sim = FastSimulation(sim_config=cfg_sim, device='cuda')
 
@@ -128,7 +130,7 @@ def main():
         while True:                           # same retry-on-failure as main.SimulationDataset
             try:
                 img, boxes, mask, is_ring = sim.simulate_img()
-                return img[None], boxes.float(), is_ring.long(), mask
+                return (img if img.dim() == 3 else img[None]), boxes.float(), is_ring.long(), mask
             except Exception:
                 pass
     stride = model.out_stride

@@ -58,7 +58,7 @@ def run(name, kind, ckpt):
     for ds, path in E.DATASETS.items():
         gts, d_main, d_nms = [], [], []
         for cfg, ic in E.iter_frames(path):
-            img = E.frame_inputs(ic, DEV, nch)
+            img = E.frame_inputs(ic, DEV, nch, chan_mode=getattr(model, 'chan_mode', 'he'))
             o = model(img) if kind == 'dino' else model(img, E.frame_mask(ic, DEV))
             gts.append(E.gt_of(ic))
             if kind == 'dino':
