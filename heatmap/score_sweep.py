@@ -41,7 +41,7 @@ def main():
             gts, per_frame, cfgs = [], [], []
             for cfg, ic in E.iter_frames(path):
                 with torch.no_grad():
-                    o = model(E.frame_inputs(ic, a.device))
+                    o = model(E.frame_inputs(ic, a.device), E.frame_mask(ic, a.device))
                 gts.append(E.gt_of(ic)); cfgs.append(cfg)
                 per_frame.append({K: decode(o, model.out_stride, num_select=K, score_floor=0.0)[0] for K in a.topk})
             n_gt = sum(len(g['gt']) for g in gts)

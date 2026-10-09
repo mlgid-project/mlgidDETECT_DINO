@@ -57,6 +57,11 @@ def frame_inputs(ic, device, num_channels=1):
     return img.repeat(1, num_channels, 1, 1)
 
 
+def frame_mask(ic, device):
+    """Valid-pixel mask [1,H,W] bool (True = valid), for the multi-channel stem."""
+    return torch.tensor(np.asarray(ic.converted_mask).reshape(*POLAR).astype(bool))[None].to(device)
+
+
 def gt_of(ic):
     return dict(gt=np.asarray(ic.polar_labels.boxes, np.float32),
                 gtconf=np.asarray(ic.polar_labels.confidences, np.float32),

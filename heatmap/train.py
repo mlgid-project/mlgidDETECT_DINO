@@ -29,6 +29,8 @@ def get_args():
     p.add_argument('--tf32', action='store_true', help='allow TF32 matmuls/convs (opt-in)')
     p.add_argument('--ring_target', default='legacy', choices=['legacy', 'ridge'],
                    help="'ridge': tall ridge target for rings, all ridge cells regress the same box")
+    p.add_argument('--chan', default='he', choices=['he', 'he_mask', 'full'],
+                   help='stem input channels (swin always sees the HE image only): he | he_mask | full = HE, B1 ring-subtracted, B2 column median, mask')
     p.add_argument('--unfreeze', action='store_true')
     p.add_argument('--out_stride', type=int, default=2)
     p.add_argument('--epochs', type=int, default=60)
@@ -59,7 +61,7 @@ def quick_eval(model, epoch, out):
             print(f'[epoch {epoch}] eval skipped, missing {path}', flush=True)
             continue
         for cfg, ic in E.iter_frames(path):
-            o = model(E.frame_inputs(ic, 'cuda'))
+            o = model(E.frame_inputs(ic, 'cuda'), E.frame_mask(ic, 'cuda'))
             gts.append(E.gt_of(ic))
             pi = decode(o, model.out_stride, 225)[0]
             dets.append(E.heatmap_dets(cfg, pi, use_nms=False))
@@ -92,9 +94,9 @@ def main():
     if a.bb == 'random':                      # control arm: frozen RANDOM-init swin, no weights loaded
         bb_path, bb_prefix = None, ''
     model = HeatmapNet(backbone_ckpt=bb_path, backbone_prefix=bb_prefix, freeze_backbone=not a.unfreeze,
-                       out_stride=a.out_stride, amp_backbone=a.amp_backbone).cuda()
+                       out_stride=a.out_stride, amp_backbone=a.amp_backbone, chan_mode=a.chan).cuda()
     hm_args = dict(freeze_backbone=not a.unfreeze, out_stride=a.out_stride, bb_path=bb_path,
-                   bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target)
+                   bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan)
     head_params = [p for n, p in model.named_parameters() if p.requires_grad and not n.startswith('backbone.')]
     groups = [dict(params=head_params, lr=a.lr)]
     if a.unfreeze:
@@ -125,8 +127,8 @@ def main():
     def sim_sample():
         while True:                           # same retry-on-failure as main.SimulationDataset
             try:
-                img, boxes, _mask, is_ring = sim.simulate_img()
-                return img[None], boxes.float(), is_ring.long()
+                img, boxes, mask, is_ring = sim.simulate_img()
+                return img[None], boxes.float(), is_ring.long(), mask
             except Exception:
                 pass
     stride = model.out_stride
@@ -135,13 +137,13 @@ def main():
     for epoch in range(start, a.epochs):
         t0 = time.time(); agg = dict(loss=0, loss_heat=0, loss_reg=0)
         for it in range(a.steps_per_epoch):
-            imgs, hs, rs, ws = [], [], [], []
+            imgs, hs, rs, ws, ms = [], [], [], [], []
             for _ in range(a.bs):
-                img, xyxy, lab = sim_sample()
+                img, xyxy, lab, msk = sim_sample()
                 H, W = img.shape[-2:]
                 h, r, w = build_targets(xyxy, lab, H, W, stride, a.ring_target)
-                imgs.append(img); hs.append(h); rs.append(r); ws.append(w)
-            out = model(torch.stack(imgs))
+                imgs.append(img); hs.append(h); rs.append(r); ws.append(w); ms.append(msk)
+            out = model(torch.stack(imgs), torch.stack(ms))
             loss, parts = heatmap_loss(out, torch.stack(hs), torch.stack(rs), torch.stack(ws))
             opt.zero_grad(set_to_none=True)
             loss.backward()

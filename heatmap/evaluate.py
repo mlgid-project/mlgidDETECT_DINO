@@ -32,7 +32,7 @@ def load_heatmap(ckpt):
     from models.heatmap_head import HeatmapNet
     ck = torch.load(ckpt, map_location='cpu')
     a = ck['hm_args']
-    model = HeatmapNet(backbone_ckpt=None, freeze_backbone=a['freeze_backbone'], out_stride=a['out_stride'], amp_backbone=bool(a.get('amp_backbone', False) or os.environ.get('HM_AMP') == '1'))
+    model = HeatmapNet(backbone_ckpt=None, freeze_backbone=a['freeze_backbone'], out_stride=a['out_stride'], amp_backbone=bool(a.get('amp_backbone', False) or os.environ.get('HM_AMP') == '1'), chan_mode=a.get('chan_mode', 'he'))
     print('  load:', model.load_state_dict(ck['model'], strict=False).unexpected_keys[:3])
     # backbone weights are re-read from their source file (frozen => identical to training)
     if a.get('bb') == 'random':               # backbone weights are inside the checkpoint
@@ -59,7 +59,7 @@ def run(name, kind, ckpt):
         gts, d_main, d_nms = [], [], []
         for cfg, ic in E.iter_frames(path):
             img = E.frame_inputs(ic, DEV, nch)
-            o = model(img)
+            o = model(img) if kind == 'dino' else model(img, E.frame_mask(ic, DEV))
             gts.append(E.gt_of(ic))
             if kind == 'dino':
                 d_main.append(E.dino_dets(cfg, o))
