@@ -14,7 +14,7 @@
 # Resumable: if the time limit hits, resubmit this same file (it reads <out>/checkpoint.pth).
 REPO=/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP
 PY=/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/bin/python
-BASE=/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/heatmap_runs
+BASE=/mnt/lustre/work/schreiber/szb389/datasets/DINO_HEATMAP
 OUT=$BASE/hm_simmim_UNFROZEN_ridge_long_tf32_2.80_1.30
 export PYTHONPATH=$REPO
 cd $REPO
