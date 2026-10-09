@@ -321,3 +321,34 @@ matches. Score sweeps (`hm_runs/score_sweeps/`): at top-K 225 floors 0-0.02 are 
 collapse AP (ridge 41: 0.453 at floor 0, 0.711 at 0.1). Best floor/K per run (tuned on the eval sets, so optimistic): ridge organic 0.625
 (K 900, floor 0.1) / 41 0.736 (floor 0.2); main 0.616 / 0.667; control 0.587 / 0.447. The 0.3 cut applies only to drawn boxes and the
 recall/precision lines, never inside the evaluator. All AP numbers above are floor-0.1 / top-225 unless stated.
+
+**Overnight runs (2026-10-08/09, colorbox1, all ridge target, TF32, finished 05:18 CEST, no NaN/abort; single seed each).**
+All numbers floor 0.1 + top-225, final epoch, `evaluate_final.txt`. `+nms` AP organic / 41 (native in brackets):
+
+| run | setup | organic +nms | 41 +nms | ring recall >0.3 (org / 41) | recall NN<5px >0.3 (org / 41) |
+|---|---|---|---|---|---|
+| ridge (run 2) | SimMIM, lr 3e-4, bs 4, 60 ep | 0.6057 (0.5834) | 0.7259 (0.5071) | 0.567 / 0.805 | 0.421 / 0.384 |
+| A | SimMIM, lr 1e-4, 60 ep | 0.5848 (0.5583) | 0.6956 (0.4606) | - | 0.446 / 0.370 |
+| B | boxconv1 backbone (frozen), lr 3e-4, 60 ep | 0.5732 (0.5488) | 0.7489 (0.4952) | 0.633 / 0.921 | 0.339 / 0.397 |
+| C | SimMIM, lr 4.2e-4, bs 8, 120 ep (lr drops 90, 112) | 0.6237 (0.5981) | 0.7178 (0.4807) | 0.533 / 0.819 | 0.463 / 0.342 |
+| ssl1 (DINO) | | 0.568 | 0.744 | 0.733 / 0.853 | 0.372 / 0.370 |
+| dino_lr4e5_1 | | 0.622 | 0.763 | 0.700 / 0.829 | 0.388 / 0.397 |
+| dino_boxconv1 | | 0.588 | 0.752 | - | 0.339 / 0.370 |
+
+lr pick for C: the lr-1e-4 run (A) had mean +nms AP 0.6402 vs ridge 0.6658, so the queue chose 4.2e-4 (1.4x the 3e-4 baseline) for the long run.
+Lower lr was worse, so the untuned-lr caveat is partly answered (1e-4 loses); lr above 3e-4 was only tried inside the long run, which also
+changed batch and epochs, so lr and schedule are confounded there.
+
+Reading: (1) Organic: C is the best heatmap run and matches the best DINO run (0.6237 vs dino_lr4e5_1 0.622, ssl1 0.568, boxconv1 0.588),
+a tie with lr4e5 inside noise. (2) 41: no heatmap run beats DINO; best is B 0.7489 (boxconv1 backbone) vs lr4e5 0.763, ssl1 0.744,
+boxconv1 DINO 0.752; C 0.7178 is 0.008 below its 60-epoch ridge predecessor, so longer training did not help on 41. (3) The SimMIM-to-boxconv1
+backbone swap helps 41 (+0.023 over ridge, ring recall >0.3 0.805 -> 0.921) and hurts organic (-0.032). (4) Close pairs <5px at >0.3:
+C organic 0.463 (n=121) vs lr4e5 0.388 / ssl1 0.372 / boxconv1 DINO 0.339: +0.075..0.124, i.e. 9-15 of 121 peaks (about 1.7 SE vs lr4e5),
+the best close-pair figure of any heatmap run, but on 41 C is 0.342 vs 0.370-0.397 (n=73, below DINO). Combined: organic mildly in the heatmap's
+favour, 41 against, and both are single seeds. The headline hypothesis is NOT confirmed: the < 5 px bucket still recalls under half of the
+peaks and the ~+0.06 recall prize is not clearly moved. C's native decode still trails +nms (organic 0.598 vs 0.624, 41 0.481 vs 0.718).
+Organic ring recall at >0.3 fell with the long run (0.533 vs 0.567), so ring calibration on organic is still below DINO (0.70-0.73).
+
+C score sweep (`hm_runs/.../score_sweep/`, AP at top-K 225): organic floors 0-0.05 0.625, 0.1 0.6237, 0.2 0.606, 0.3 0.565; 41 floors 0-0.05 0.7045-0.705,
+0.1 0.7178, 0.2 0.7274, 0.3 0.698. At top-K 900 floors < 0.05 collapse AP (organic 0.532, 41 0.517 at floor 0). Best F1 0.670 (organic, thr 0.3), 0.747 (41, thr 0.4).
+Images (+nms only) for A, B, C are in `hm_runs/<run>/images/nms/`. Run B's sweep OOM'd (GPU shared with C) and was re-run by hand.
