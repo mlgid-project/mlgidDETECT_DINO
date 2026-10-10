@@ -13,7 +13,8 @@ NN = re.compile(r'recall by NN Euclid dist\s+<5:(?P<c5>[\d.]+)\(n=(?P<n5>\d+)\)'
 LABELS = [  # run-dir tag -> readable name, in reading order (unknown runs are appended at the end)
     ('hm_simmim_frozen', 'main (first run, legacy ring target)'), ('hm_random_frozen', 'control: random frozen backbone'),
     ('ridge', 'ridge baseline (fp32)'), ('hm_ridge_lr1e-4_tf32', 'A: lr 1e-4 (TF32)'), ('hm_boxconv1_frozen_ridge_tf32', 'B: boxconv1 backbone (TF32)'),
-    ('ridge_long_tf32', 'C: long (bs 8, 120 ep, lr 4.2e-4)'), ('ridge_chanfull_tf32', 'chanfull: HE, B1, B2, mask'),
+    ('ridge_long_tf32', 'C: long (bs 8, 120 ep, lr 4.2e-4)'),
+    ('ridge_long_tf32_seed1', 'C replicate, seed 1'), ('ridge_long_tf32_seed2', 'C replicate, seed 2'), ('ridge_chanfull_tf32', 'chanfull: HE, B1, B2, mask'),
     ('ridge_stride1_tf32', 'stride-1 output (bs 2)'), ('ridge_chancontrast_tf32', 'contrast channels: log+HE, log, log+CLAHE, mask'),
     ('ridge_he_tf32', 'TF32 plain control'), ('ridge_zeroinv_tf32', 'invalid pixels zeroed'), ('ridge_wide_tf32', 'wide head (4.8 M params)'),
     ('ridge_ringhead_tf32', 'ring head (stride 8)'),
