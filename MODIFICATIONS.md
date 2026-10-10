@@ -426,3 +426,11 @@ Score>0.3: organic recall 0.635 (seg 0.638, ring 0.567) prec 0.737; 41 recall 0.
 Queue state: the whole colorbox1 queue (final, extra and weekend queues) and the galvani unfrozen run are done; no job is running. The native-decode images of the three early runs have not been deleted (question to the user unanswered).
 
 Noted idea (user, 2026-10-10): once the cluster is working again, try longer unfrozen runs on galvani (more epochs than the 120-epoch unfrozen run). Not queued. Planned repeats: unfrozen swin seeds 1 and 2 on galvani (not yet submitted, Slurm refused submissions on 2026-10-10), run C recipe seeds 1 and 2 on colorbox1 (running).
+
+Run C recipe replicates (bs 8 x 125, 120 epochs, lr 4.2e-4, lr drops 90/112, frozen swin, TF32, 118 s/epoch, colorbox1; seeds 1 and 2 added to run C = seed 42). +nms floor 0.1 top-225, organic / 41:
+ seed 42 (run C) 0.6237 / 0.7178; seed 1 0.6169 / 0.7302; seed 2 0.6138 / 0.7286. Mean 0.618 / 0.726; range 0.010 / 0.012.
+ Native AP organic 0.5981 / 0.5869 / 0.6006; native 41 0.4807 / 0.4387 / 0.4966 (range 0.058).
+ Score>0.3 (organic; 41): seed 1 recall 0.590 prec 0.755 ring 0.500; 0.776 / 0.730 / 0.833. Seed 2 recall 0.614 prec 0.722 ring 0.533; 0.793 / 0.703 / 0.836. NN<5px: seed 1 0.455 / 0.397, seed 2 0.463 / 0.356 (run C 0.463 / 0.342).
+ 41 AP at floor 0.2: seed 1 0.7336, seed 2 0.7377. GPU memory by nvidia-smi: seed 1 8392 MiB, seed 2 10475 MiB with the same command (cause untested).
+Versus the 60-epoch bs 4 lr 3e-4 recipe (mean 0.611 / 0.725, range 0.033 / 0.004): means equal within noise (organic +0.007, 41 +0.001): bs 8 / 120 epochs / lr 4.2e-4 gives no mean gain. The 120-epoch bs 4 lr 3e-4 run (0.6403 / 0.7121) is one run.
+Frozen 120-epoch recipe mean 0.618 / 0.726 is the frozen reference for the unfrozen swin (first run 0.6146 / 0.7531; unfrozen seeds 1 and 2 on galvani are NOT yet queued: Slurm refused all submissions on 2026-10-10, user checks the cluster).
