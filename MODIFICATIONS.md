@@ -404,3 +404,7 @@ Results so far (+nms, floor 0.1, top-225; organic / 41; single seeds, eval-to-ev
 - Regression check: evaluate.py on the old fp32 ridge checkpoint reproduces 0.6057 / 0.7259 exactly. Step timing (TF32, plots/time_step_*.txt): simulator is about 4-5% of a step; wide head 0.19 s/img; stride 1 0.195 s/img at bs 2, OOM at bs 4.
 
 Queued on colorbox1 (weekend queue, started 02:09): he_tf32 seed 1, seed 2, ring head stride 16, lr 5e-4, 120 epochs (lr drop 90); expected end about 15:00. On galvani (job 2952793, pending): run C recipe with the swin unfrozen (lr 1e-5, drop path 0), output in datasets/DINO_HEATMAP.
+
+Seeds of the plain TF32 recipe (`--chan he --tf32`, +nms floor 0.1 top-225; organic / 41; native 41): seed 42 0.6320 / 0.7260 / 0.4947; seed 1 0.5989 / 0.7225 / 0.4825; seed 2 0.6027 / 0.7266 / 0.5245. Mean 0.611 / 0.725; range organic 0.033, 41 0.004, native 41 0.042.
+Seed 2 score>0.3: organic recall 0.601 prec 0.773 ring recall 0.567, NN<5px 0.463 (n=121); 41 recall 0.772 prec 0.738 ring recall 0.809, NN<5px 0.356 (n=73). Seed 1: organic NN<5px 0.430, 41 0.397.
+Reading: all organic values of the variants (wide 0.6109, ring head 0.6075, zeroinv 0.6097, fp32 ridge 0.6057) lie inside the seed range. On 41 the wide head, ring head (coarse_rings) and zeroinv sit 0.007-0.010 below the seed mean against a seed range of 0.004: slightly larger than the seed spread, but three seeds do not establish it. Native 41 of ring head (0.6503) and zeroinv (0.5529) exceed the seed range 0.4825-0.5245; cause untested.
