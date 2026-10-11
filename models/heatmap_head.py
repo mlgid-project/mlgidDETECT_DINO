@@ -27,7 +27,7 @@ def _cbd(i, o, d):
     return nn.Sequential(nn.Conv2d(i, o, 3, 1, d, dilation=d, bias=False), _gn(o), nn.ReLU(inplace=True))
 
 
-CHAN_N = {'he': 1, 'he_mask': 2, 'full': 4, 'contrast': 4}
+CHAN_N = {'he': 1, 'he_mask': 2, 'full': 4, 'contrast': 4, 'coord': 3}
 
 
 def build_channels(img, mask, mode):
@@ -37,6 +37,7 @@ def build_channels(img, mask, mode):
       he_mask  : [HE, valid-pixel mask]
       full     : [HE, B1 = HE - per-q-column masked median over chi, B2 = that column median, mask]
       contrast : img is already the [B,3,H,W] stack (log+HE, plain log, log+CLAHE) -> [stack, mask]
+      coord    : (built in forward, not here) [HE, x/W, y/H]: the pixel position in the polar image (q axis x, chi axis y) in 0..1
     Invalid pixels are 0 in every channel except the mask (same definition as the multi-channel branch)."""
     if mode == 'he':
         return img[:, None]
@@ -128,6 +129,10 @@ class HeatmapNet(nn.Module):
             img = img.masked_fill(~mask.to(img.device).bool()[:, None], 0.)
         if self.chan_mode == 'he':
             side = img
+        elif self.chan_mode == 'coord':
+            gx = torch.linspace(0., 1., W, device=img.device, dtype=img.dtype).view(1, 1, 1, W).expand(B, 1, H, W)
+            gy = torch.linspace(0., 1., H, device=img.device, dtype=img.dtype).view(1, 1, H, 1).expand(B, 1, H, W)
+            side = torch.cat([img, gx, gy], 1)
         elif self.chan_mode == 'contrast':
             assert mask is not None and img.shape[1] == 3
             side = build_channels(img, mask.to(img.device), 'contrast')

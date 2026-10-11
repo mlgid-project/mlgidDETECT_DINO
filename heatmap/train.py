@@ -29,8 +29,8 @@ def get_args():
     p.add_argument('--tf32', action='store_true', help='allow TF32 matmuls/convs (opt-in)')
     p.add_argument('--ring_target', default='legacy', choices=['legacy', 'ridge'],
                    help="'ridge': tall ridge target for rings, all ridge cells regress the same box")
-    p.add_argument('--chan', default='he', choices=['he', 'he_mask', 'full', 'contrast'],
-                   help='stem input channels (swin always sees the HE image only): he | he_mask | full = HE, B1 ring-subtracted, B2 column median, mask | contrast = log+HE, plain log, log+CLAHE of the same image, mask')
+    p.add_argument('--chan', default='he', choices=['he', 'he_mask', 'full', 'contrast', 'coord'],
+                   help='stem input channels (swin always sees the HE image only): he | he_mask | full = HE, B1 ring-subtracted, B2 column median, mask | contrast = log+HE, plain log, log+CLAHE of the same image, mask | coord = HE, x/W, y/H (pixel position in the polar image; not physical q, each file has its own q range)')
     p.add_argument('--zero_invalid', action='store_true',
                    help='set invalid (masked) pixels to 0 in every model input incl. the frozen swin, in training AND eval (sim images are gray there, the eval files are exactly 0)')
     p.add_argument('--unfreeze', action='store_true', help='train the swin too (lr --lr_backbone); the frozen runs never used stochastic depth')
