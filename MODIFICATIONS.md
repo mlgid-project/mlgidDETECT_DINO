@@ -457,3 +457,9 @@ Run B replicate, seed 1 (`--bb ssl1 --bb_path boxconv1_backbone.pth`, frozen, pl
  Plain SimMIM seeds 42/1/2: organic 0.6320/0.5989/0.6027 (mean 0.611): B seed 1 is 0.019 below the lowest. 41: 0.7260/0.7225/0.7266 (range 0.004): B seed 1 is 0.023 above the highest. So the boxconv1 backbone looks better on 41 and worse on organic, in two runs; seeds 2 and 3 are queued.
  Score>0.3: organic recall 0.572 prec 0.792 ring 0.633; 41 recall 0.847 prec 0.647 ring 0.917. NN<5 px: organic 0.355 (n=121), 41 0.411 (n=73). Sweep (top-225): organic best 0.5895 at floor 0.05 (0.5801 at 0.1; top-900 0.5893); 41 best 0.7676 at floor 0.3 (0.7660 at 0.2; top-900 at 0.1 0.7406).
  Unfrozen SimMIM seed 1 (0.6219 / 0.7684) is above B on both sets.
+
+Run B replicate, seed 2 (boxconv1 backbone, frozen, plain 60-epoch TF32 recipe, 117 s/epoch, colorbox1, peak GPU 5923 MiB): +nms floor 0.1 top-225 organic 0.5988 / 41 0.7578. Native: organic 0.5653, 41 0.4707.
+ Score>0.3: organic recall 0.576 prec 0.784 ring 0.633; 41 recall 0.843 prec 0.655 ring 0.915. NN<5 px: organic 0.364 (n=121), 41 0.411 (n=73). Sweep (top-225): organic best 0.5988 at floor 0.1 (top-900 0.6103); 41 best 0.7727 at floor 0.2 (0.7578 at 0.1; top-900 0.7492).
+ Run B recipe, seeds 42 / 1 / 2: organic 0.5732 / 0.5801 / 0.5988 (mean 0.584, range 0.026); 41 0.7489 / 0.7493 / 0.7578 (mean 0.752, range 0.009); native 41 0.4952 / 0.4880 / 0.4707.
+ Plain SimMIM seeds 42 / 1 / 2: organic 0.6320 / 0.5989 / 0.6027 (mean 0.611); 41 0.7260 / 0.7225 / 0.7266 (mean 0.725).
+ Means B minus SimMIM: organic -0.027, 41 +0.027. On organic the ranges overlap (best B 0.5988 vs second-lowest SimMIM 0.5989); on 41 they do not (lowest B 0.7489 above highest SimMIM 0.7266). 3 seeds each; B seed 3 is queued. Unfrozen SimMIM seed 1 (0.6219 / 0.7684) is above the B mean on both sets.
