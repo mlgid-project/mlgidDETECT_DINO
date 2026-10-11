@@ -2,11 +2,13 @@
 No network change, no training. CPU only, input = the pickle from heatmap/dump_dets.py (+nms detections, floor 0.1, top-225).
 
   python heatmap/split_blobs.py <dump.pkl> [--sets sim] [--tau 30] [--sep_min 1.5] [--sep_max 8] [--ratio_min 0.3] [--score_min 0.2]
-  python heatmap/split_blobs.py <dump.pkl> --sweep_tau 10 20 30 50 80     (sim only: how many splits / close-pair gain / extra false positives per tau)
-  python heatmap/split_blobs.py <dump.pkl> --final --sets organic 41      (real sets, ONE evaluation with the parameters given; see the rule below)
+  python heatmap/split_blobs.py <dump.pkl> --sweep_tau 10 20 30 50 80     (sim and 41: how many splits / close-pair gain / extra false positives per tau)
+  python heatmap/split_blobs.py <dump.pkl> --final --sets organic      (final test set, ONE evaluation with the parameters given; see the rule below)
 
-Rule (to keep the real sets honest): the parameters are chosen on the simulator ('sim') frames, where the true close pairs are known. The real sets
-(organic, 41) are only touched with --final, once, with the parameters printed in the output; no tuning on them.
+Rule (to keep the final test honest): the parameters are chosen on the development sets 'sim' (simulator frames; NOTE they contain no GT pair closer than
+5 px, only 5-10 px ones) and '41' (the real mixed-frame set). 'organic' is the final test set: it is only touched with --final, once, with the parameters
+printed in the output; no tuning on it. (On sim the GT confidences are set to 1.0/0.5/0.1 in turn only so that the evaluator's AP strata exist; the
+strata are meaningless there.)
 
 Method, per segment detection with score >= score_min (rings and ring-like tall boxes are skipped):
   1. patch = the box grown by 25 %, at most 41 x 41 px, invalid pixels (mask) ignored;
@@ -123,15 +125,17 @@ def main():
                    help='allow the real sets (organic, 41): one evaluation with the given parameters, no tuning')
     a = p.parse_args()
     d = pickle.load(open(a.dump, 'rb'))
-    real = [s for s in a.sets if s != 'sim']
+    real = [s for s in a.sets if s not in ('sim', '41')]
     if real and not a.final:
-        sys.exit('refusing to run on real sets without --final (parameters must be chosen on sim first)')
+        sys.exit('refusing to run on the final test set (organic) without --final (choose the parameters on sim and 41 first)')
+    for f in d['sets'].get('sim', []):
+        f['gtconf'] = np.array([(1.0, 0.5, 0.1)[i % 3] for i in range(len(f['gt']))], np.float32)
     print(f'{d["run"]} (epoch {d["epoch"]})', flush=True)
     for ds in a.sets:
         t0 = time.time()
         fits = [fits_frame(f, a.score_min) for f in d['sets'][ds]]
         print(f'{ds}: fitted {sum(x is not None for fr in fits for x in fr)} detections in {time.time() - t0:.0f} s', flush=True)
-        taus = a.sweep_tau if (a.sweep_tau and ds == 'sim') else [a.tau]
+        taus = a.sweep_tau if (a.sweep_tau and ds != 'organic') else [a.tau]
         for tau in taus:
             prm = dict(tau=tau, sep_min=a.sep_min, sep_max=a.sep_max, ratio_min=a.ratio_min)
             print(f'parameters: {prm}, score_min {a.score_min}', flush=True)
