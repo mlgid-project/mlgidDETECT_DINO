@@ -451,3 +451,9 @@ Unfrozen swin, seed 1, colorbox1 (`--chan he --unfreeze --lr_backbone 1e-5 --bb_
  Score>0.3: organic recall 0.632 prec 0.744 ring 0.667; 41 recall 0.821 prec 0.720 ring 0.901. NN<5 px: organic 0.438 (n=121), 41 0.425 (n=73). Sweep (top-225): organic best 0.6219 at floor 0.1 (top-900 0.6279); 41 best 0.7894 at floor 0.2 (0.7684 at 0.1; top-900 0.7653).
  In-training evals: 41 AP rose from 0.74 (epoch 18-28) to 0.7755 at epoch 48 and 0.7669 at epoch 56; organic stayed at 0.57-0.62.
  Consistent with the galvani unfrozen run (bs 8, 120 epochs, 1 run: 0.6146 / 0.7531): both single unfrozen runs are above the frozen seeds on 41 and inside their range on organic. One seed here; unfrozen seed 2 is queued. Not a like-for-like comparison with the frozen runs (196.7 M trainable parameters vs 1.2 M, 3x time per epoch, 11.5 GB GPU). Why 41 gains and organic does not: untested.
+
+Run B replicate, seed 1 (`--bb ssl1 --bb_path boxconv1_backbone.pth`, frozen, plain 60-epoch TF32 recipe, bs 4 x 250, lr 3e-4, 117 s/epoch, colorbox1, peak GPU 5648 MiB): +nms floor 0.1 top-225 organic 0.5801 / 41 0.7493. Native: organic 0.5505, 41 0.4880.
+ Run B (seed 42): 0.5732 / 0.7489, native 0.5488 / 0.4952: seed 1 is +0.007 organic, +0.000 on 41, -0.007 native 41 (reproduces run B).
+ Plain SimMIM seeds 42/1/2: organic 0.6320/0.5989/0.6027 (mean 0.611): B seed 1 is 0.019 below the lowest. 41: 0.7260/0.7225/0.7266 (range 0.004): B seed 1 is 0.023 above the highest. So the boxconv1 backbone looks better on 41 and worse on organic, in two runs; seeds 2 and 3 are queued.
+ Score>0.3: organic recall 0.572 prec 0.792 ring 0.633; 41 recall 0.847 prec 0.647 ring 0.917. NN<5 px: organic 0.355 (n=121), 41 0.411 (n=73). Sweep (top-225): organic best 0.5895 at floor 0.05 (0.5801 at 0.1; top-900 0.5893); 41 best 0.7676 at floor 0.3 (0.7660 at 0.2; top-900 at 0.1 0.7406).
+ Unfrozen SimMIM seed 1 (0.6219 / 0.7684) is above B on both sets.
