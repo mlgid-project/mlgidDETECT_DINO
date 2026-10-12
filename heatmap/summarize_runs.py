@@ -26,7 +26,8 @@ LABELS = [  # run-dir tag -> readable name, in reading order (unknown runs are a
     ('ridge_ringhead16_tf32', 'ring head (stride 16)'), ('ridge_he_tf32_lr5e-4', 'TF32 plain control, lr 5e-4'),
     ('ridge_he_tf32_long120', 'TF32 plain control, 120 epochs (lr drop 90)'),
     ('hm_simmim_UNFROZEN_ridge_long_tf32', 'unfrozen swin (bs 8, 120 ep, galvani), seed 42'), ('hm_simmim_UNFROZEN_ridge_long_tf32_seed1', 'unfrozen swin (bs 8, 120 ep, galvani), seed 1'),
-    ('hm_simmim_UNFROZEN_ridge_long_tf32_seed2', 'unfrozen swin (bs 8, 120 ep, galvani), seed 2')]
+    ('hm_simmim_UNFROZEN_ridge_long_tf32_seed2', 'unfrozen swin (bs 8, 120 ep, galvani), seed 2'),
+    ('hm_simmim_UNFROZEN_ridge_long_tf32_seed1_bblr4e-5', 'unfrozen 120 ep, bblr 4e-5, seed 1')]
 NAME = dict(LABELS)
 REPLICATES = [  # recipes run more than once: (group label, run tags); only runs that exist and have an evaluation are used
     ('Plain recipe, frozen SimMIM (bs 4 x 250, 60 ep, TF32)', ['ridge_he_tf32', 'ridge_he_tf32_seed1', 'ridge_he_tf32_seed2']),
