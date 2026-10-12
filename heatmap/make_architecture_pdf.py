@@ -3,7 +3,9 @@
   python heatmap/make_architecture_pdf.py --out <dir>/heatmap_architecture.pdf [--png]
 
 Pure matplotlib + numpy (no torch, no data). The example image / heatmap / boxes are a synthetic illustration, not model output.
-The numbers in the text are those of the default head (stride 2, dim 128): 195,486,084 frozen swin parameters, 1,228,582 trained."""
+The numbers in the text are those of the default head (stride 2, dim 128): 195,486,084 frozen swin parameters, 1,228,582 trained =
+FPN 812,288 (lateral 1x1 convs 369,152 + three 3x3 smoothing convs 443,136) + stem 9,632 + fuse 184,576 + heat tower 110,848 + box tower 110,848 + heat conv 130 + box conv 260.
+(weights = all trainable numbers incl. biases and GroupNorm scale/shift; hand-counted from models/heatmap_head.py, sums to the logged 1,228,582.)"""
 import argparse
 import numpy as np
 import matplotlib
@@ -106,22 +108,23 @@ def main():
         ax.add_patch(Rectangle((45 - wd / 2, yb), wd, 2.1, fc=c, ec='white', lw=0.8, zorder=5))
         body(ax, 35.0, yb + 1.05, st, size=6.2, color=MUTED, ha='center', va='center')
         body(ax, 55.2, yb + 1.05, ch, size=6.2, color=MUTED, ha='center', va='center')
-    body(ax, 45, 61.0, 'four feature maps\nSimMIM pre-trained, window 48 x 6\n195.5 M parameters', size=6.8, color=INK, ha='center', ls=1.3)
+    body(ax, 45, 61.0, 'four feature maps\nSimMIM pre-trained, window 48 x 6\n195,486,084 weights (frozen)', size=6.8, color=INK, ha='center', ls=1.3)
     arrow(ax, (58, 68), (63, 68))
 
     box(ax, 63, 56, 26, 24, TRAIN)
     header(ax, 63, 77.4, 26, 'Feature pyramid (FPN)', TRAIN, 'TRAINED')
     body(ax, 64.8, 74.6, 'merges the four maps top-down:\n1 x 1 conv to 128 channels,\nupsample, add, 3 x 3 conv\n+ GroupNorm + ReLU', size=7.6)
+    body(ax, 76, 64.6, '812,288 weights', size=7.4, ha='center', va='center', weight='bold', color=TRAIN['ec'])
     box(ax, 65.2, 57.6, 21.6, 4.6, dict(fc='#fff6e6', ec=TRAIN['ec']), lw=1.0, r=0.9)
     body(ax, 76, 59.9, '128-channel map, stride 4', size=7.2, ha='center', va='center', weight='bold')
 
     # ---- stat cards (right of row A)
     box(ax, 94, 66, 20, 14, dict(fc='#eef3f9', ec=FROZEN['ec']), lw=1.2)
     body(ax, 104, 74.8, '195.5 M', size=19, ha='center', va='center', weight='bold', color=FROZEN['ec'])
-    body(ax, 104, 69.6, 'frozen parameters\n(the backbone)', size=7.8, ha='center', va='center', color=INK)
+    body(ax, 104, 69.6, 'frozen parameters\n(the backbone)\n195,486,084 exactly', size=7.8, ha='center', va='center', color=INK)
     box(ax, 118, 66, 20, 14, dict(fc='#fef5e6', ec=TRAIN['ec']), lw=1.2)
     body(ax, 128, 74.8, '1.23 M', size=19, ha='center', va='center', weight='bold', color=TRAIN['ec'])
-    body(ax, 128, 69.6, 'trained parameters\n(FPN, stem, towers)', size=7.8, ha='center', va='center', color=INK)
+    body(ax, 128, 69.6, 'trained parameters\n(FPN, stem, towers)\n1,228,582 exactly', size=7.8, ha='center', va='center', color=INK)
     box(ax, 94, 56.0, 44, 8.0, IO, lw=1.0, r=1.0)
     body(ax, 96, 60.0, 'Frozen: weights copied from self-supervised pre-training,\nnever updated.\nTrained: starts random, learns from simulated images only.', size=6.9, color=MUTED, va='center', ls=1.3)
 
@@ -129,12 +132,14 @@ def main():
     box(ax, 32, 30, 26, 20, TRAIN)
     header(ax, 32, 47.4, 26, 'Image stem', TRAIN, 'TRAINED')
     body(ax, 33.8, 44.2, 'looks at the raw image again,\nfor fine position detail:\n2 x (3 x 3 conv + norm + ReLU)\n32 channels, stride 2', size=7.6)
+    body(ax, 45, 32.4, '9,632 weights', size=7.4, ha='center', va='center', weight='bold', color=TRAIN['ec'])
     line(ax, [(15, 56), (15, 40)]); arrow(ax, (15, 40), (32, 40))
     body(ax, 16.4, 48.3, 'same image\ngoes to the stem', size=6.8, color=MUTED)
 
     box(ax, 63, 30, 26, 20, TRAIN)
     header(ax, 63, 47.4, 26, 'Fuse', TRAIN, 'TRAINED')
     body(ax, 64.8, 44.2, 'concatenate\n128 (FPN) + 32 (stem) = 160 ch\n3 x 3 conv + norm + ReLU\n-> 128 ch at stride 2\n(256 x 512 cells)', size=7.6)
+    body(ax, 76, 32.4, '184,576 weights', size=7.4, ha='center', va='center', weight='bold', color=TRAIN['ec'])
     arrow(ax, (58, 40), (63, 40))
     arrow(ax, (76, 56), (76, 50))
     body(ax, 77.6, 53.0, 'upsample to stride 2', size=6.8, color=MUTED, va='center')
@@ -142,6 +147,8 @@ def main():
     box(ax, 94, 41, 23, 10, TRAIN)
     header(ax, 94, 48.6, 23, 'Heat tower', TRAIN, 'TRAINED')
     body(ax, 95.8, 45.4, '2 x (3 x 3 conv, 64 ch)\nthen 1 x 1 conv', size=7.6)
+    body(ax, 105.5, 39.5, '110,978 weights (tower 110,848 + 1 x 1 conv 130)', size=5.6, ha='center', va='center', weight='bold', color=TRAIN['ec'])
+    body(ax, 105.5, 26.6, '111,108 weights (tower 110,848 + 1 x 1 conv 260)', size=5.6, ha='center', va='center', weight='bold', color=TRAIN['ec'])
     box(ax, 94, 28, 23, 10, TRAIN)
     header(ax, 94, 35.6, 23, 'Box tower', TRAIN, 'TRAINED')
     body(ax, 95.8, 32.4, '2 x (3 x 3 conv, 64 ch)\nthen 1 x 1 conv', size=7.6)
