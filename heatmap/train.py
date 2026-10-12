@@ -27,8 +27,8 @@ def get_args():
     p.add_argument('--box_coef', default='2.80,1.30', help="label convention a_coef,w_coef; 'legacy' = ssl1's 3.5/1.0")
     p.add_argument('--sim', default='legacy', choices=['legacy', 'realbkg'],
                    help="image source: 'legacy' = the simulator of every run so far (default, unchanged); 'realbkg' = real-background simulator in realsim/ (needs the data described in realsim/README.md, env GIWAXS_WORK)")
-    p.add_argument('--sim_workers', type=int, default=0, choices=[0, 1],
-                   help="with --sim realbkg: 1 = produce the frames in a separate process (the simulator costs 0.19 s/frame, 13 GB resident); frozen swin only, needs ~0.5 GB more GPU memory")
+    p.add_argument('--sim_workers', type=int, default=0, choices=[0, 1, 2, 3, 4],
+                   help="with --sim realbkg: N = produce the frames in N separate processes (the simulator costs 0.19 s/frame and 13 GB peak RAM per process); frozen swin only, ~0.5 GB more GPU memory per worker")
     p.add_argument('--realsim_opt', nargs='*', default=[], metavar='KEY=VALUE',
                    help="with --sim realbkg: override settings of realsim/factory.py R6, e.g. p_ring=0.4 contrast_min=2.5 (values are python literals)")
     p.add_argument('--amp_backbone', action='store_true', help='bf16 autocast for the frozen swin only (opt-in)')
@@ -171,7 +171,7 @@ def main():
         ov = {k: ast.literal_eval(v) for k, v in (o.split('=', 1) for o in a.realsim_opt)}
         if a.sim_workers:
             from heatmap.sim_worker import SimWorker
-            worker = SimWorker(coef, ov, a.seed)
+            worker = SimWorker(coef, ov, a.seed, n=a.sim_workers)
         else:
             sim = make_realbkg_sim(device='cuda', box_coef=coef, overrides=ov)
     else:

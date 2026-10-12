@@ -1,6 +1,6 @@
 """Produce real-background simulator frames in a separate process, so the training step does not wait for the 0.19 s/frame simulator.
 
-One worker holds the simulator (13 GB resident, mostly the hkl bank: two do not fit in colorbox1's 30 GB); the training process never builds it.
+Each worker holds the simulator (13 GB peak resident, mostly the hkl bank: on colorbox1 (30 GB) only one fits; on galvani use --mem accordingly); the training process never builds it.
 Frames come back as numpy arrays through a bounded queue and are turned into tensors by the consumer. The worker starts its own CUDA context
 (about 0.3-0.5 GB of GPU memory), so use it with frozen-swin runs; an unfrozen run at 11.5 of 12.2 GB has no room for it.
 """
@@ -35,19 +35,25 @@ def _produce(q, box_coef, overrides, seed):
 
 
 class SimWorker:
-    def __init__(self, box_coef, overrides, seed, qsize=64, start_timeout=900):
+    """n worker processes feeding one queue. They are started one after the other (each is ready before the next starts), because loading the bank
+    peaks at ~13 GB per process and the peaks should not coincide."""
+    def __init__(self, box_coef, overrides, seed, n=1, qsize=64, start_timeout=900):
         ctx = mp.get_context('spawn')
         self.q = ctx.Queue(qsize)
-        self.p = ctx.Process(target=_produce, args=(self.q, tuple(box_coef), overrides, int(seed) + 12345), daemon=True)
-        self.p.start()
-        kind, payload = self.q.get(timeout=start_timeout)
-        if kind != 'ready':
-            raise RuntimeError(f'sim worker failed to start:\n{payload}')
-        print(f'[sim_worker] worker pid {self.p.pid} ready', flush=True)
+        self.ps = []
+        for k in range(int(n)):
+            p = ctx.Process(target=_produce, args=(self.q, tuple(box_coef), overrides, int(seed) + 12345 + 1000 * k), daemon=True)
+            p.start(); self.ps.append(p)
+            kind, payload = self.q.get(timeout=start_timeout)
+            if kind != 'ready':
+                raise RuntimeError(f'sim worker {k} failed to start:\n{payload}')
+            print(f'[sim_worker] worker {k + 1}/{n} pid {p.pid} ready', flush=True)
 
     def sample(self, timeout=600):
         kind, payload = self.q.get(timeout=timeout)
         if kind == 'error':
             raise RuntimeError(f'sim worker died:\n{payload}')
+        if kind == 'ready':                          # cannot happen after start-up; ignore defensively
+            return self.sample(timeout)
         img, boxes, ring, mask = payload
         return torch.from_numpy(img)[None], torch.from_numpy(boxes), torch.from_numpy(ring), torch.from_numpy(mask)
