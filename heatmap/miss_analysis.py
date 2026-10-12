@@ -43,7 +43,7 @@ def gt_table(frames, thr):
         if len(gt) == 0:
             continue
         img = np.asarray(f['img'], np.float32); mask = np.asarray(f['mask'], bool)
-        ring = E.is_ring_geom(gt, mask)
+        ring = np.asarray(f['gt_ring'], bool) if 'gt_ring' in f else E.is_ring_geom(gt, mask)   # simulator frames carry the simulator's own ring flag
         sel = f['scores'] > thr
         b = f['boxes'][sel]; sc = f['scores'][sel]
         hit = np.zeros(len(gt), bool); tpscore = np.full(len(gt), np.nan)
@@ -91,7 +91,7 @@ def fp_table(frames, thr):
         matched = np.zeros(len(b), bool)
         if len(gt):
             _, ri, ci = E.matcher(torch.tensor(gt).float(), torch.tensor(b).float()); matched[np.asarray(ci, int)] = True
-        ring = E.is_ring_geom(gt, mask) if len(gt) else np.zeros(0, bool)
+        ring = (np.asarray(f['gt_ring'], bool) if 'gt_ring' in f else E.is_ring_geom(gt, mask)) if len(gt) else np.zeros(0, bool)
         gc = np.stack([(gt[:, 0] + gt[:, 2]) / 2, (gt[:, 1] + gt[:, 3]) / 2], 1) if len(gt) else np.zeros((0, 2))
         pc = np.stack([(b[:, 0] + b[:, 2]) / 2, (b[:, 1] + b[:, 3]) / 2], 1)
         for j in np.flatnonzero(~matched):
