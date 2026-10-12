@@ -70,7 +70,7 @@ class RealBkgSimulation:
                  count_rule='uniform',
                  seg_on_ring_keep=1.0, ring_w_coef=None, ring_sq_scale=1.0,
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
-                 ring_gain=1.0, seg_gain=1.0):
+                 ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -205,6 +205,9 @@ class RealBkgSimulation:
         #: fainter ring that no longer passes the gate is simply not drawn). Measured on the processed image (appearance_compare.py): the training rings are ~2x too bright and
         #: saturated, the segments ~2.5x too faint compared with real 41.
         self.ring_gain, self.seg_gain = float(ring_gain), float(seg_gain)
+        #: ring_contrast_min: the per-pixel contrast gate (amplitude / local noise) for RINGS only; None = contrast_min. A ring is integrated over hundreds of rows (the SNR
+        #: gate already accounts for that), and real 41 rings sit at ~1 sigma per pixel in the processed image, below the segments' gate of 2.
+        self.ring_contrast_min = None if ring_contrast_min is None else float(ring_contrast_min)
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
         if width_jitter is not None:
@@ -776,7 +779,7 @@ class RealBkgSimulation:
             # Note this also fixes the suppression path: previously _ring_nms removed a ring's
             # BOX while the ring stayed in the image. Here suppression removes the peak.
             con, snr = self._visibility(amp, noise[iy, ix], s_q, s_c, rg, mask, x)
-            keep = (con >= self.contrast_min) & (snr >= self.snr_min)
+            keep = (con >= (self.contrast_min if self.ring_contrast_min is None else np.where(rg, self.ring_contrast_min, self.contrast_min))) & (snr >= self.snr_min)
             bx = self._boxes(x, y, s_q, s_c, rg, mask)
             # Clip BEFORE the overlap test, not after. Two boxes that overhang the same frame
             # edge become more alike once clipped, so suppressing on unclipped geometry lets
