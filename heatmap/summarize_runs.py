@@ -24,7 +24,16 @@ LABELS = [  # run-dir tag -> readable name, in reading order (unknown runs are a
     ('ridge_ringhead_tf32', 'ring head (stride 8)'),
     ('ridge_he_tf32_seed1', 'TF32 plain control, seed 1'), ('ridge_he_tf32_seed2', 'TF32 plain control, seed 2'),
     ('ridge_ringhead16_tf32', 'ring head (stride 16)'), ('ridge_he_tf32_lr5e-4', 'TF32 plain control, lr 5e-4'),
-    ('ridge_he_tf32_long120', 'TF32 plain control, 120 epochs (lr drop 90)')]
+    ('ridge_he_tf32_long120', 'TF32 plain control, 120 epochs (lr drop 90)'),
+    ('hm_simmim_UNFROZEN_ridge_long_tf32', 'unfrozen swin (bs 8, 120 ep, galvani), seed 42'), ('hm_simmim_UNFROZEN_ridge_long_tf32_seed1', 'unfrozen swin (bs 8, 120 ep, galvani), seed 1'),
+    ('hm_simmim_UNFROZEN_ridge_long_tf32_seed2', 'unfrozen swin (bs 8, 120 ep, galvani), seed 2')]
+NAME = dict(LABELS)
+REPLICATES = [  # recipes run more than once: (group label, run tags); only runs that exist and have an evaluation are used
+    ('Plain recipe, frozen SimMIM (bs 4 x 250, 60 ep, TF32)', ['ridge_he_tf32', 'ridge_he_tf32_seed1', 'ridge_he_tf32_seed2']),
+    ('Run C recipe, frozen SimMIM (bs 8 x 125, 120 ep, lr 4.2e-4)', ['ridge_long_tf32', 'ridge_long_tf32_seed1', 'ridge_long_tf32_seed2']),
+    ('Run B, boxconv1 backbone frozen (bs 4 x 250, 60 ep)', ['hm_boxconv1_frozen_ridge_tf32', 'hm_boxconv1_frozen_ridge_tf32_seed1', 'hm_boxconv1_frozen_ridge_tf32_seed2', 'hm_boxconv1_frozen_ridge_tf32_seed3']),
+    ('Unfrozen swin (bs 4 x 250, 60 ep, colorbox)', ['hm_simmim_unfrozen_ridge_he_tf32_seed1', 'hm_simmim_unfrozen_ridge_he_tf32_seed2']),
+    ('Unfrozen swin (bs 8 x 125, 120 ep, galvani)', ['hm_simmim_UNFROZEN_ridge_long_tf32', 'hm_simmim_UNFROZEN_ridge_long_tf32_seed1', 'hm_simmim_UNFROZEN_ridge_long_tf32_seed2'])]
 NAME = dict(LABELS)
 DINO = [('DINO ssl1', '0.568', '0.744', '0.372', '0.370'), ('DINO lr 4e-5', '0.622', '0.763', '0.388', '0.397'),
         ('DINO boxconv1', '0.588', '0.752', '0.339', '0.370')]
@@ -47,12 +56,55 @@ def parse(path):
     return res
 
 
+def _stats(vals):
+    n = len(vals); m = sum(vals) / n
+    sd = (sum((x - m) ** 2 for x in vals) / (n - 1)) ** 0.5 if n > 1 else None
+    return n, m, sd
+
+
+def repeated_tables(byrun):
+    """Recipes that were run more than once: mean, sample SD (n-1), standard error (SD / sqrt(n)) and range over the runs/seeds."""
+    G = [(lab, [(t, byrun[t]) for t in tags if t in byrun]) for lab, tags in REPLICATES]
+    G = [(lab, rs) for lab, rs in G if len(rs) >= 2]
+    if not G:
+        return []
+    fmt = lambda x, d=3: ('-' if x is None else f'{x:.{d}f}')
+    L = ['', '## Recipes run more than once (+nms decode, floor 0.1, top-225)', '',
+         'Mean over the runs of one recipe (different seeds). **SD** = sample standard deviation (n-1), **SE** = SD / sqrt(n), **range** = lowest to highest run. '
+         'With n = 2 or 3 the SD and SE are themselves very uncertain; read the range and the single values next to them. Only recipes with at least 2 finished runs are listed.', '',
+         '### AP', '',
+         '| Recipe | n | Organic mean | SD | SE | range | 41 mean | SD | SE | range |', '|:--|--:|--:|--:|--:|:--|--:|--:|--:|:--|']
+    for lab, rs in G:
+        cells = []
+        for k in (0, 1):
+            v = [r[1][k]['ap'] for r in rs if 'ap' in r[1][k]]
+            n, m, sd = _stats(v)
+            cells += [fmt(m), fmt(sd), fmt(sd / n ** 0.5 if sd is not None else None), f'{min(v):.3f}-{max(v):.3f}']
+        L.append(f'| {lab} | {len(rs)} | ' + ' | '.join(cells) + ' |')
+    L += ['', '### Score > 0.3 and close pairs (mean ± SD)', '',
+          '| Recipe | n | Recall org | Prec org | Ring org | Recall 41 | Prec 41 | Ring 41 | NN<5px org | NN<5px 41 |', '|:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|']
+    for lab, rs in G:
+        cells = []
+        for k, key in ((0, 'rec'), (0, 'prec'), (0, 'ring'), (1, 'rec'), (1, 'prec'), (1, 'ring'), (0, 'c5'), (1, 'c5')):
+            v = [r[1][k][key] for r in rs if key in r[1][k]]
+            if not v:
+                cells.append('-'); continue
+            n, m, sd = _stats(v)
+            cells.append(f'{m:.3f} ± {sd:.3f}' if sd is not None else f'{m:.3f}')
+        L.append(f'| {lab} | {len(rs)} | ' + ' | '.join(cells) + ' |')
+    L += ['', '### The single runs behind it (AP organic / AP 41)', '']
+    for lab, rs in G:
+        L.append(f'- **{lab}**: ' + '; '.join(f"{NAME.get(t, t)} {o.get('ap', float('nan')):.4f} / {v.get('ap', float('nan')):.4f}" for t, (o, v) in rs))
+    return L
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--runs_dir', default='/mnt/DATA/mlgidDETECT_DINO_HEATMAP/hm_runs'); ap.add_argument('--out', default=None)
     a = ap.parse_args()
     f = lambda d, k: (f'{d[k]:.3f}' if k in d else '-')
     rows = []
+    byrun = {}                                                   # tag -> (organic dict, 41 dict) of the +nms decode, for the repeated-runs table
     for run, rdir in run_dirs(a.runs_dir):                      # works with runs at the top level or in group subfolders
         p = os.path.join(rdir, 'evaluate_final.txt')
         if not (run.startswith('hm_') and os.path.exists(p)):
@@ -65,6 +117,8 @@ def main():
                 continue                                           # ring-head runs: list the three explicit decode modes only
             o, v = r.get((name, 'organic'), {}), r.get((name, '41'), {})
             mode = name.split('ring-head decode=')[1] if 'ring-head' in name else ''
+            if not mode:
+                byrun[tag] = (o, v)
             lab = NAME.get(tag, tag) + (f' [{mode}]' if mode else '')
             order = [t for t, _ in LABELS].index(tag) if tag in NAME else 99
             rows.append((order, lab, o, v))
@@ -81,6 +135,7 @@ def main():
         lab, _, mode = lab.partition(' [')
         L.append(f'| {lab} | {mode.rstrip("]") or "-"} | {bold(f(o, "ap"), o, best_o)} | {bold(f(v, "ap"), v, best_v)} | {f(o, "rec")} | {f(o, "prec")} | {f(o, "ring")} | '
                  f'{f(v, "rec")} | {f(v, "prec")} | {f(v, "ring")} | {f(o, "c5")} | {f(v, "c5")} |')
+    L += repeated_tables(byrun)
     L += ['', '## Reference: DINO detectors (single models, same evaluation)', '',
           '| Run | AP organic | AP 41 | NN<5px org | NN<5px 41 |', '|:--|--:|--:|--:|--:|']
     L += [f'| {n} | {a1} | {a2} | {c1} | {c2} |' for n, a1, a2, c1, c2 in DINO]
