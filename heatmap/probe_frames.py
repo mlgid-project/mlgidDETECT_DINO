@@ -21,8 +21,8 @@ def main():
     p.add_argument('--ckpt', required=True); p.add_argument('--npz', nargs='+', required=True); p.add_argument('--out', required=True)
     p.add_argument('--device', default='cpu')
     a = p.parse_args()
-    model, ep = load(a.ckpt, a.device)
-    cfg = E.make_config(E.DATASETS['organic'])
+    model, ep = (None, -1) if a.ckpt == 'none' else load(a.ckpt, a.device)      # --ckpt none: only repackage the frames (no detections), e.g. for appearance_compare.py
+    cfg = E.make_config(E.DATASETS['organic']) if model is not None else None
     sets, allf = {}, []
     for f in a.npz:
         z = np.load(f)
@@ -30,10 +30,13 @@ def main():
         fr = []
         for k in ks:
             img = torch.from_numpy(z[f'{k}_img']).float(); mask = torch.from_numpy(z[f'{k}_mask']).bool(); boxes = z[f'{k}_boxes']; ring = z[f'{k}_ring']
-            x = img[None, None].to(a.device); m = mask.reshape(1, *img.shape[-2:]).to(a.device)
-            with torch.no_grad():
-                o = model(x, m)
-            b, s, c = detect(cfg, decode(o, model.out_stride, 225)[0])
+            if model is not None:
+                x = img[None, None].to(a.device); m = mask.reshape(1, *img.shape[-2:]).to(a.device)
+                with torch.no_grad():
+                    o = model(x, m)
+                b, s, c = detect(cfg, decode(o, model.out_stride, 225)[0])
+            else:
+                b, s, c = np.zeros((0, 4), np.float32), np.zeros(0, np.float32), np.zeros(0, int)
             fr.append(dict(img=img.numpy().astype(np.float16), mask=mask.numpy(), gt=boxes.astype(np.float32), gtconf=np.ones(len(boxes), np.float32), boxes=b, scores=s, cls=c, gt_ring=ring))
         name = 'sim_' + os.path.basename(os.path.dirname(os.path.abspath(f))).replace('realsim_', '')
         sets[name] = fr; allf += fr
