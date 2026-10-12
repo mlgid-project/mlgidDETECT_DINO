@@ -1,7 +1,7 @@
 """Appearance gap, measured: how do background noise, RINGS and SEGMENTS look in the processed (HE) image the network sees, per image source? CPU only.
 
   python heatmap/appearance_compare.py <name>=<dump.pkl>:<set> [...] [--max_frames 60]
-e.g. real41=hm_runs/plots/dets_he_tf32_seed42.pkl:41  organic=...:organic  legacy=...:sim  realsim=hm_runs/plots/dets_realsim_single_ep7_on_simframes.pkl:sim_bench2_single
+e.g. real41=hm_runs/plots/dumps/dets_he_tf32_seed42.pkl:41  organic=...:organic  legacy=...:sim  realsim=hm_runs/plots/dumps/dets_realsim_single_ep7_on_simframes.pkl:sim_bench2_single
 Input pickles: heatmap/dump_dets.py or heatmap/probe_frames.py (frames carry img, mask, gt boxes, optional 'gt_ring' flag, else the geometric ring criterion).
 Per source it prints quartiles (p25 / median / p75) of
   BACKGROUND NOISE  (per frame, valid pixels away from the mask, residual = image - 8 px blur): sd, lag-1 autocorrelation along q and along chi

@@ -1,0 +1,4 @@
+git: heatmap 21fb553
+name, memory.total [MiB]
+NVIDIA A100-PCIE-40GB, 40960 MiB
+FORCE_CKPT: using --grad_ckpt without smoke

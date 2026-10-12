@@ -1,7 +1,7 @@
 """How do rings LOOK in different image sources, in the processed (HE) image the network sees? CPU only; input = dump_dets / probe_frames pickles.
 
   python heatmap/ring_compare.py <name>=<dump.pkl>:<set> [<name>=<dump.pkl>:<set> ...] [--max_frames 60]
-e.g. real41=hm_runs/plots/dets_he_tf32_seed42.pkl:41  legacy=hm_runs/plots/dets_he_tf32_seed42.pkl:sim  realsim=hm_runs/plots/dets_realsim_single_ep7_on_simframes.pkl:sim_bench2_single
+e.g. real41=hm_runs/plots/dumps/dets_he_tf32_seed42.pkl:41  legacy=hm_runs/plots/dumps/dets_he_tf32_seed42.pkl:sim  realsim=hm_runs/plots/dumps/dets_realsim_single_ep7_on_simframes.pkl:sim_bench2_single
 For every ring (the frame's own 'gt_ring' flag if present, else the geometric criterion) the cross-section across the ring is averaged over the valid chi rows of its column:
   amplitude   peak of the profile minus the median of the flanks (|dq| 25-40 px), image units 0-1
   fwhm        full width at half maximum of that profile, px

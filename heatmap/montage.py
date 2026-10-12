@@ -2,7 +2,7 @@
 (green segments, magenta rings). CPU only.
 
   python heatmap/montage.py --real <dump.pkl>:41 --real_frames 3 9 17 22 31 38 --sim <bench dir>/sim_frames.npz --sim_frames 0 1 2 3 4 5 --out sheet.png [--label "text"] [--scale 0.5]
---real: a dump_dets / probe_frames pickle and the set name (e.g. hm_runs/plots/dets_he_tf32_seed42.pkl:41); --sim: the sim_frames.npz written by heatmap/bench_sim.py --save N.
+--real: a dump_dets / probe_frames pickle and the set name (e.g. hm_runs/plots/dumps/dets_he_tf32_seed42.pkl:41); --sim: the sim_frames.npz written by heatmap/bench_sim.py --save N.
 One row per pair, so the two lists must have the same length."""
 import os, sys, types, argparse, pickle
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
