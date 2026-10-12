@@ -18,14 +18,16 @@ REPO=/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP
 PY=/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/bin/python
 BASE=/mnt/lustre/work/schreiber/szb389/datasets/DINO_HEATMAP
 SEED=${SEED:-42}
+LR_BB=${LR_BB:-1e-5}          # backbone lr; the default keeps every earlier run unchanged. Other values write to ..._bblr<LR_BB>_... (e.g. sbatch --export=ALL,SEED=1,FORCE_CKPT=1,LR_BB=4e-5 ...)
 if [ "$SEED" = 42 ]; then OUT=$BASE/hm_simmim_UNFROZEN_ridge_long_tf32_2.80_1.30; else OUT=$BASE/hm_simmim_UNFROZEN_ridge_long_tf32_seed${SEED}_2.80_1.30; fi
+if [ "$LR_BB" != 1e-5 ]; then OUT=${OUT}_bblr${LR_BB}; fi
 export PYTHONPATH=$REPO
 cd $REPO
 mkdir -p "$OUT"
 echo "git: $(git branch --show-current) $(git rev-parse --short HEAD)"; nvidia-smi --query-gpu=name,memory.total --format=csv
 ( while true; do nvidia-smi --query-gpu=timestamp,memory.used --format=csv,noheader >> "$OUT/gpu_mem.log"; sleep 60; done ) &
 MON=$!
-COMMON="--bb simmim1 --ring_target ridge --tf32 --lr 4.2e-4 --lr_drops 90 112 --epochs 120 --eval_interval 2 --bs 8 --steps_per_epoch 125 --unfreeze --lr_backbone 1e-5 --bb_drop_path 0 --seed $SEED"
+COMMON="--bb simmim1 --ring_target ridge --tf32 --lr 4.2e-4 --lr_drops 90 112 --epochs 120 --eval_interval 2 --bs 8 --steps_per_epoch 125 --unfreeze --lr_backbone $LR_BB --bb_drop_path 0 --seed $SEED"
 CK=""
 if [ "${FORCE_CKPT:-0}" = 1 ] && [ ! -f "$OUT/checkpoint.pth" ]; then CK="--grad_ckpt"; echo "FORCE_CKPT: using --grad_ckpt without smoke"
 elif [ ! -f "$OUT/checkpoint.pth" ]; then
