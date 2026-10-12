@@ -19,7 +19,7 @@ def main():
     p.add_argument('--sim', default='realbkg', choices=['legacy', 'realbkg'])
     p.add_argument('--n', type=int, default=100); p.add_argument('--save', type=int, default=0)
     p.add_argument('--out', default='sim_bench'); p.add_argument('--box_coef', default='2.80,1.30')
-    p.add_argument('--realsim_opt', nargs='*', default=[]); p.add_argument('--seed', type=int, default=0)
+    p.add_argument('--realsim_opt', nargs='*', default=[]); p.add_argument('--realsim_preset', default='r6', choices=['r6', 'r7', 'r8']); p.add_argument('--seed', type=int, default=0)
     a = p.parse_args()
     import random
     random.seed(a.seed); np.random.seed(a.seed); torch.manual_seed(a.seed)
@@ -27,7 +27,7 @@ def main():
     t0 = time.time()
     if a.sim == 'realbkg':
         from realsim.factory import make_realbkg_sim
-        sim = make_realbkg_sim(device='cuda', box_coef=coef, overrides={k: ast.literal_eval(v) for k, v in (o.split('=', 1) for o in a.realsim_opt)})
+        sim = make_realbkg_sim(device='cuda', box_coef=coef, overrides={k: ast.literal_eval(v) for k, v in (o.split('=', 1) for o in a.realsim_opt)}, preset=a.realsim_preset)
     else:
         from simulation import FastSimulation, SimulationConfig
         cfg = SimulationConfig(); cfg.a_coef, cfg.w_coef = coef

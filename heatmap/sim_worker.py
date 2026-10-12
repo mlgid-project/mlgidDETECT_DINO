@@ -12,12 +12,12 @@ import torch
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _produce(q, box_coef, overrides, seed):
+def _produce(q, box_coef, overrides, seed, preset='r6'):
     sys.path.insert(0, ROOT)
     try:
         random.seed(seed); np.random.seed(seed % (2 ** 32)); torch.manual_seed(seed)
         from realsim.factory import make_realbkg_sim
-        sim = make_realbkg_sim(device='cuda', box_coef=box_coef, overrides=overrides)
+        sim = make_realbkg_sim(device='cuda', box_coef=box_coef, overrides=overrides, preset=preset)
         q.put(('ready', None))
         while True:
             try:
@@ -37,12 +37,12 @@ def _produce(q, box_coef, overrides, seed):
 class SimWorker:
     """n worker processes feeding one queue. They are started one after the other (each is ready before the next starts), because loading the bank
     peaks at ~13 GB per process and the peaks should not coincide."""
-    def __init__(self, box_coef, overrides, seed, n=1, qsize=64, start_timeout=900):
+    def __init__(self, box_coef, overrides, seed, n=1, qsize=64, start_timeout=900, preset='r6'):
         ctx = mp.get_context('spawn')
         self.q = ctx.Queue(qsize)
         self.ps = []
         for k in range(int(n)):
-            p = ctx.Process(target=_produce, args=(self.q, tuple(box_coef), overrides, int(seed) + 12345 + 1000 * k), daemon=True)
+            p = ctx.Process(target=_produce, args=(self.q, tuple(box_coef), overrides, int(seed) + 12345 + 1000 * k, preset), daemon=True)
             p.start(); self.ps.append(p)
             kind, payload = self.q.get(timeout=start_timeout)
             if kind != 'ready':
