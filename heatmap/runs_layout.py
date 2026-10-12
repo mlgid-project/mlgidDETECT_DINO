@@ -18,7 +18,7 @@ def group_of(name):
     n = name
     if 'realsim' in n:
         return 'realsim'
-    if n.startswith('hm_simmim_unfrozen'):
+    if n.lower().startswith('hm_simmim_unfrozen'):
         return 'unfrozen'
     if 'boxconv1' in n or 'random_frozen' in n:
         return 'backbone_variants'

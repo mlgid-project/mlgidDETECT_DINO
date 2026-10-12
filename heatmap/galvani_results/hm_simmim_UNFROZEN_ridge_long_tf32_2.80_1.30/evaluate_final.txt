@@ -1,0 +1,43 @@
+
+===== hm (heatmap) /mnt/lustre/work/schreiber/szb389/datasets/DINO_HEATMAP/hm_simmim_UNFROZEN_ridge_long_tf32_2.80_1.30/final_checkpoint.pth
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP/heatmap/evaluate.py:33: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  ck = torch.load(ckpt, map_location='cpu')
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/functional.py:534: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3595.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+  load: []
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP/heatmap/evaluate.py:40: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  bb = torch.load(os.environ.get('HM_BB_PATH', a['bb_path']), map_location='cpu')
+  [hm (native)] organic: ap_total 0.5943 (AP by GT confidence: high 0.746 / med 0.623 / low 0.376)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.302 recall 0.575 FP/GT 0.18; fp<=0.1/GT: score>=0.399 recall 0.510 FP/GT 0.10; high_recall>=95: score>=0.100 recall 0.692 FP/GT 0.68
+    score>0.1: recall 0.692 (seg 0.689, ring 0.767) precision 0.503 preds 1124 FP 559
+      recall by NN Euclid dist  <5:0.455(n=121) 5-10:0.471(n=85) >10:0.769(n=581)
+      recall by same-radius chi-gap  <5:0.477(n=128) 5-10:0.490(n=49) >10:0.740(n=527)
+    score>0.3: recall 0.592 (seg 0.591, ring 0.633) precision 0.786 preds 616 FP 132
+      recall by NN Euclid dist  <5:0.430(n=121) 5-10:0.435(n=85) >10:0.647(n=581)
+      recall by same-radius chi-gap  <5:0.445(n=128) 5-10:0.449(n=49) >10:0.630(n=527)
+  [hm+nms] organic: ap_total 0.6146 (AP by GT confidence: high 0.772 / med 0.643 / low 0.389)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.302 recall 0.583 FP/GT 0.14; fp<=0.1/GT: score>=0.351 recall 0.553 FP/GT 0.10; high_recall>=95: score>=0.100 recall 0.688 FP/GT 0.58
+    score>0.1: recall 0.688 (seg 0.686, ring 0.733) precision 0.540 preds 1040 FP 478
+      recall by NN Euclid dist  <5:0.455(n=121) 5-10:0.471(n=85) >10:0.766(n=581)
+      recall by same-radius chi-gap  <5:0.477(n=128) 5-10:0.490(n=49) >10:0.736(n=527)
+    score>0.3: recall 0.592 (seg 0.591, ring 0.633) precision 0.818 preds 592 FP 108
+      recall by NN Euclid dist  <5:0.430(n=121) 5-10:0.435(n=85) >10:0.647(n=581)
+      recall by same-radius chi-gap  <5:0.445(n=128) 5-10:0.449(n=49) >10:0.630(n=527)
+  [hm (native)] 41: ap_total 0.6195 (AP by GT confidence: high 0.720 / med 0.650 / low 0.507)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.398 recall 0.678 FP/GT 0.44; fp<=0.1/GT: score>=0.685 recall 0.347 FP/GT 0.10; high_recall>=95: score>=0.129 recall 0.860 FP/GT 1.66
+    score>0.1: recall 0.907 (seg 0.872, ring 0.957) precision 0.296 preds 5140 FP 3616
+      recall by NN Euclid dist  <5:0.425(n=73) 5-10:0.774(n=62) >10:0.920(n=846)
+      recall by same-radius chi-gap  <5:1.000(n=2) 5-10:0.250(n=4) >10:0.905(n=550)
+    score>0.3: recall 0.843 (seg 0.800, ring 0.904) precision 0.595 preds 2378 FP 962
+      recall by NN Euclid dist  <5:0.425(n=73) 5-10:0.677(n=62) >10:0.844(n=846)
+      recall by same-radius chi-gap  <5:0.000(n=2) 5-10:0.250(n=4) >10:0.838(n=550)
+  [hm+nms] 41: ap_total 0.7531 (AP by GT confidence: high 0.873 / med 0.797 / low 0.613)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.400 recall 0.732 FP/GT 0.24; fp<=0.1/GT: score>=0.537 recall 0.596 FP/GT 0.10; high_recall>=95: score>=0.159 recall 0.843 FP/GT 0.93
+    score>0.1: recall 0.895 (seg 0.856, ring 0.950) precision 0.363 preds 4135 FP 2632
+      recall by NN Euclid dist  <5:0.425(n=73) 5-10:0.774(n=62) >10:0.901(n=846)
+      recall by same-radius chi-gap  <5:1.000(n=2) 5-10:0.250(n=4) >10:0.880(n=550)
+    score>0.3: recall 0.827 (seg 0.779, ring 0.895) precision 0.697 preds 1993 FP 603
+      recall by NN Euclid dist  <5:0.425(n=73) 5-10:0.677(n=62) >10:0.820(n=846)
+      recall by same-radius chi-gap  <5:0.000(n=2) 5-10:0.250(n=4) >10:0.805(n=550)
