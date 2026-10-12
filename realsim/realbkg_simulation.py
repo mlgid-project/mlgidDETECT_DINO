@@ -71,7 +71,7 @@ class RealBkgSimulation:
                  seg_on_ring_keep=1.0, ring_w_coef=None, ring_sq_scale=1.0,
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
                  ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0,
-                 ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0):
+                 ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0, ring_follow_bkg=False):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -221,6 +221,11 @@ class RealBkgSimulation:
         self.ring_no_elongate = bool(ring_no_elongate)
         self.ring_cap = None if ring_cap is None else float(ring_cap)
         self.ring_chi_floor = float(ring_chi_floor)
+        #: ring_follow_bkg: the ring's amplitude along chi follows the (smoothed) local background level at its column, normalised to its median, so that the ring has a UNIFORM CONTRAST
+        #: against what is under it instead of being an additive stripe of fixed height on a background that rises and falls along chi (after the log / histogram-equalisation
+        #: steps that reads as a ring that brightens and fades). Factor clipped to [0.4, 2.5]. With a small ring_chi_texture this gives rings of uniform brightness with small jitter.
+        self.ring_follow_bkg = bool(ring_follow_bkg)
+        self._cur_bkg = self._cur_mask = None
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
         if width_jitter is not None:
@@ -578,10 +583,26 @@ class RealBkgSimulation:
             Y = torch.arange(r0, r1, device=dev, dtype=torch.float32).view(-1, 1)
             u2 = ((X - float(x[i]))/float(s_q[i]))**2 + ((Y - float(y[i]))/float(s_c[i]))**2
             prof = eta/(1.0 + u2/ln2) + (1-eta)*torch.exp(-u2/2)
+            if self.ring_follow_bkg and s_c[i] >= 1e3 and self._cur_bkg is not None:
+                prof = prof*self._bkg_follow(x[i], r0, r1).to(dev).view(-1, 1)
             if self.ring_chi_texture > 0 and s_c[i] >= 1e3:
                 prof = prof*self._chi_texture(r1 - r0).to(dev).view(-1, 1)
             img[r0:r1, c0:c1] += float(amp[i])*prof*torch.exp(-(u2/uc2)**2)
         return img.cpu().numpy().astype(np.float64)
+
+    def _bkg_follow(self, xc, r0, r1):
+        """Smoothed local background level along chi at a ring's column (valid pixels only), divided by its median, clipped to [0.4, 2.5]."""
+        from scipy.ndimage import gaussian_filter1d
+        b, m = self._cur_bkg, np.asarray(self._cur_mask, bool)
+        c0, c1 = max(int(xc) - 6, 0), min(int(xc) + 7, WIDTH)
+        den = m[:, c0:c1].sum(1)
+        g = np.where(den > 0, (b[:, c0:c1]*m[:, c0:c1]).sum(1)/np.maximum(den, 1), np.nan)
+        ok = np.isfinite(g)
+        if not ok.any():
+            return torch.ones(r1 - r0)
+        med = float(np.nanmedian(g))
+        g = gaussian_filter1d(np.where(ok, g, med), 8.0, mode='nearest')/max(med, 1e-9)
+        return torch.as_tensor(np.clip(g[r0:r1], 0.4, 2.5), dtype=torch.float32)
 
     def _chi_texture(self, n):
         """Mean-one log-normal factor along chi for one ring: smooth Gaussian noise of unit sd
@@ -733,6 +754,7 @@ class RealBkgSimulation:
             noise = self.noise[d].astype(np.float64); coef = self.coef[d].astype(np.float64)
             qmax = float(self.qmax[d])
 
+        self._cur_bkg, self._cur_mask = bkg, mask
         p = self._draw_peaks(qmax)
         if p is None:
             return None
