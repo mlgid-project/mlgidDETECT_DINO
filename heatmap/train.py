@@ -25,6 +25,10 @@ def get_args():
     p.add_argument('--bb', default='simmim1', choices=['simmim1', 'ssl1', 'random'])
     p.add_argument('--bb_path', default=None, help='override the backbone weights file (SimMIM export, or ssl1 checkpoint)')
     p.add_argument('--box_coef', default='2.80,1.30', help="label convention a_coef,w_coef; 'legacy' = ssl1's 3.5/1.0")
+    p.add_argument('--sim', default='legacy', choices=['legacy', 'realbkg'],
+                   help="image source: 'legacy' = the simulator of every run so far (default, unchanged); 'realbkg' = real-background simulator in realsim/ (needs the data described in realsim/README.md, env GIWAXS_WORK)")
+    p.add_argument('--realsim_opt', nargs='*', default=[], metavar='KEY=VALUE',
+                   help="with --sim realbkg: override settings of realsim/factory.py R6, e.g. p_ring=0.4 contrast_min=2.5 (values are python literals)")
     p.add_argument('--amp_backbone', action='store_true', help='bf16 autocast for the frozen swin only (opt-in)')
     p.add_argument('--tf32', action='store_true', help='allow TF32 matmuls/convs (opt-in)')
     p.add_argument('--ring_target', default='legacy', choices=['legacy', 'ridge'],
@@ -158,7 +162,13 @@ def main():
             cfg_sim.a_coef, cfg_sim.w_coef = (float(v) for v in a.box_coef.split(','))
         cfg_sim.contrast_channels = (a.chan == 'contrast')
     print(f'[train] sim box convention: a_coef,w_coef = {a.box_coef}', flush=True)
-    sim = FastSimulation(sim_config=cfg_sim, device='cuda')
+    if a.sim == 'realbkg':
+        import ast
+        from realsim.factory import make_realbkg_sim
+        coef = (3.5, 1.0) if a.box_coef == 'legacy' else tuple(float(v) for v in a.box_coef.split(','))
+        sim = make_realbkg_sim(device='cuda', box_coef=coef, overrides={k: ast.literal_eval(v) for k, v in (o.split('=', 1) for o in a.realsim_opt)})
+    else:
+        sim = FastSimulation(sim_config=cfg_sim, device='cuda')
 
     def sim_sample():
         while True:                           # same retry-on-failure as main.SimulationDataset
