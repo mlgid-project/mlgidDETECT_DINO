@@ -20,9 +20,21 @@ H, W = 512, 1024
 
 
 def fluct(b, m):
-    bl = cv2.GaussianBlur(b.astype(np.float32), (0, 0), 16.0)
-    r = np.where(m & (bl > 0), b / np.maximum(bl, 1e-6) - 1.0, 0.0).astype(np.float32)
-    return r
+    """Fluctuation field: frame / its 16-px blur - 1, with the blur normalised over VALID pixels only and everything within 24 px of an invalid pixel set to 0.
+    (A first version blurred the zeros of the masked area into the blur, which makes every detector-gap edge a strong feature shared by all frames with the
+    same detector geometry; the random-phase surrogate frames, whose texture cannot be shared, showed the same 'correlation' - so that version measured masks.)"""
+    mf = m.astype(np.float32)
+    bl = cv2.GaussianBlur(b.astype(np.float32) * mf, (0, 0), 16.0) / np.maximum(cv2.GaussianBlur(mf, (0, 0), 16.0), 1e-6)
+    r = np.where(m & (bl > 0), b / np.maximum(bl, 1e-6) - 1.0, 0.0)
+    core = cv2.erode(m.astype(np.uint8), np.ones((49, 49), np.uint8)).astype(bool)
+    return np.where(core, r, 0.0).astype(np.float32)
+
+
+def envelope(b, m):
+    mf = m.astype(np.float32)
+    e = cv2.GaussianBlur(b.astype(np.float32) * mf, (0, 0), 64.0) / np.maximum(cv2.GaussianBlur(mf, (0, 0), 64.0), 1e-6)
+    e = np.log(np.maximum(e, 1e-3))
+    return cv2.resize(e, (32, 16), interpolation=cv2.INTER_AREA).ravel()
 
 
 def main():
@@ -45,9 +57,7 @@ def main():
             m, md = masks.draw()
             sur = rng.random() < R6['surrogate_frac']
             b, m = (bv.surrogate(mask=m) if sur else bv.frame(mask=m))
-            env = np.log(np.maximum(cv2.GaussianBlur(b, (0, 0), 64.0), 1e-3))
-            env = cv2.resize(env, (32, 16), interpolation=cv2.INTER_AREA).ravel()
-            fr.append((c, sur, fluct(b, m), env - env.mean(), md['id']))
+            fr.append((c, sur, fluct(b, m), envelope(b, m), md['id']))
         print(f'canvas {c + 1}/{a.canvases} done', flush=True)
     n = len(fr)
     print(f'{n} backgrounds from {a.canvases} canvases ({sum(f[1] for f in fr)} surrogate-texture frames)')
@@ -74,12 +84,14 @@ def main():
     same = [i for i in range(n) if fr[i][0] == 0 and not fr[i][1]][:12]
     report('real-tile texture, SAME canvas (expected overlap)', [(i, j) for k, i in enumerate(same) for j in same[k + 1:]])
     sur = pick(lambda f: f[1], 16)
-    report('surrogate texture, any canvases', [(i, j) for k, i in enumerate(sur) for j in sur[k + 1:]])
+    report('NULL: surrogate texture (cannot be shared), any canvases', [(i, j) for k, i in enumerate(sur) for j in sur[k + 1:]])
+    report('real-tile vs surrogate (also a null)', [(i, j) for i in one_per_canvas[:8] for j in sur[:8]])
 
     # 2. envelope
-    E = np.stack([f[3] for f in fr]); E = E / np.maximum(np.linalg.norm(E, axis=1, keepdims=True), 1e-9)
+    E = np.stack([f[3] for f in fr]); E = E - E.mean(0, keepdims=True)          # remove the shape every frame has (bright at low q)
+    E = E / np.maximum(np.linalg.norm(E, axis=1, keepdims=True), 1e-9)
     C = E @ E.T; iu = np.triu_indices(n, 1)
-    print(f'ENVELOPE: pairwise correlation of the smooth shape over {len(iu[0])} pairs: median {np.median(C[iu]):.2f}, p90 {np.percentile(C[iu], 90):.2f}, '
+    print(f'ENVELOPE (population mean removed): pairwise correlation of the smooth shape over {len(iu[0])} pairs: median {np.median(C[iu]):.2f}, p90 {np.percentile(C[iu], 90):.2f}, '
           f'pairs above 0.98: {(C[iu] > 0.98).sum()} ({(C[iu] > 0.98).mean():.2%}), above 0.995: {(C[iu] > 0.995).sum()}')
     # 3. masks
     cnt = collections.Counter(f[4] for f in fr)
