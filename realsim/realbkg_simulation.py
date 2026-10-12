@@ -72,7 +72,7 @@ class RealBkgSimulation:
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
                  ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0,
                  ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0, ring_follow_bkg=False,
-                 bkg_noise_blur=None, bkg_noise_aniso=1.3):
+                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -234,6 +234,9 @@ class RealBkgSimulation:
         #: bkg_noise_aniso x that along chi, and rescaled to its original standard deviation, so the noise amplitude is unchanged. None = off.
         self.bkg_noise_blur = None if bkg_noise_blur is None else (float(bkg_noise_blur[0]), float(bkg_noise_blur[1]))
         self.bkg_noise_aniso = float(bkg_noise_aniso)
+        #: bkg_noise_power: sigma = lo + (hi - lo) * u**power with u ~ U(0,1); power > 1 puts most frames near lo (real frames: lag-1 quartiles 0.05 / 0.19 / 0.79, i.e. many nearly
+        #: white frames and a tail of strongly correlated ones).
+        self.bkg_noise_power = float(bkg_noise_power)
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
         if width_jitter is not None:
@@ -599,7 +602,8 @@ class RealBkgSimulation:
         return img.cpu().numpy().astype(np.float64)
 
     def _correlate_noise(self, bkg, mask):
-        sq = random.uniform(*self.bkg_noise_blur)
+        lo, hi = self.bkg_noise_blur
+        sq = lo + (hi - lo)*random.random()**self.bkg_noise_power
         sc = sq*self.bkg_noise_aniso
         b = np.asarray(bkg, np.float32)
         m = np.asarray(mask, bool)

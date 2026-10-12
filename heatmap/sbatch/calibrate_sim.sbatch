@@ -15,9 +15,8 @@ export PYTHONPATH=$REPO
 cd $REPO
 echo "git: $(git branch --show-current) $(git rev-parse --short HEAD)"
 B="amplitude_mode='fitted';intensity_decades=None;ring_gain=0.4;ring_contrast_min=0.3;ring_chi_texture=0.05;ring_chi_corr=(8.0,64.0);seg_sc_scale=0.6;seg_wide_frac=0.0;ring_sq_scale=1.0;ring_w_coef=2.2;ring_no_elongate=True;R_w_sq=0.2;ring_cap=4.0;ring_chi_floor=0.5;ring_follow_bkg=True"
-$PY -u heatmap/calibrate_sim.py --n 40 --seed 8 \
-  --cfg "n0:$B" \
-  --cfg "n1:$B;bkg_noise_blur=(0.3,0.9)" \
-  --cfg "n2:$B;bkg_noise_blur=(0.4,1.2)" \
-  --cfg "n3:$B;bkg_noise_blur=(0.5,1.5)" \
-  --cfg "n4:$B;bkg_noise_blur=(0.6,1.8)"
+$PY -u heatmap/calibrate_sim.py --n 40 --seed 9 \
+  --cfg "m1:$B;bkg_noise_blur=(0.0,1.3);bkg_noise_power=2.0" \
+  --cfg "m2:$B;bkg_noise_blur=(0.0,1.5);bkg_noise_power=3.0" \
+  --cfg "m3:$B;bkg_noise_blur=(0.0,1.2);bkg_noise_power=1.5" \
+  --cfg "m4:$B;bkg_noise_blur=(0.0,1.6);bkg_noise_power=2.5"

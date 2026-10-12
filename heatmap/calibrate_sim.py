@@ -71,7 +71,7 @@ def main():
     sim = make_realbkg_sim(device='cuda', preset=a.preset)
     print(f'[calibrate] simulator ready in {time.time() - t0:.0f} s', flush=True)
     base = {k: copy.deepcopy(getattr(sim, k)) for k in ('ring_gain', 'seg_gain', 'ring_sq_scale', 'ring_w_coef', 'ring_chi_texture', 'ring_chi_corr', 'ring_min_gap', 'seg_wide_frac',
-                                                        'seg_wide_sigma', 'voigt_eta', 'contrast_min', 'snr_min', 'rings_cap', 'spots_cap', 'sq_q_slope', 'ring_contrast_min', 'amplitude_mode', 'elongate', 'seg_sc_scale', 'intensity_decades', 'ring_no_elongate', 'ring_cap', 'ring_chi_floor', 'ring_follow_bkg', 'bkg_noise_blur', 'bkg_noise_aniso')}
+                                                        'seg_wide_sigma', 'voigt_eta', 'contrast_min', 'snr_min', 'rings_cap', 'spots_cap', 'sq_q_slope', 'ring_contrast_min', 'amplitude_mode', 'elongate', 'seg_sc_scale', 'intensity_decades', 'ring_no_elongate', 'ring_cap', 'ring_chi_floor', 'ring_follow_bkg', 'bkg_noise_blur', 'bkg_noise_aniso', 'bkg_noise_power')}
     baseR = dict(sim.R)
     sim.spots_cap = tuple(ast.literal_eval(a.spots)); sim.rings_cap = tuple(ast.literal_eval(a.rings))
     base['spots_cap'], base['rings_cap'] = sim.spots_cap, sim.rings_cap
