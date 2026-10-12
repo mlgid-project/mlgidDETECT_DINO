@@ -81,6 +81,8 @@ def main():
             moves.append((p, os.path.join(a.runs_dir, '_scratch', e)))
     for old, new in moves:
         skip = os.path.realpath(old) in busy or any(k in os.path.basename(old) for k in a.skip)
+        if not skip and os.path.exists(new):
+            print(f'SKIP (destination exists) {os.path.relpath(old, a.runs_dir)} -> {os.path.relpath(new, a.runs_dir)}'); continue
         print(('SKIP (a train.py is writing to it) ' if skip else ('MOVE ' if a.apply else 'would move ')) + f'{os.path.relpath(old, a.runs_dir)} -> {os.path.relpath(new, a.runs_dir)}')
     if not a.apply:
         print('dry run; add --apply to move'); return
