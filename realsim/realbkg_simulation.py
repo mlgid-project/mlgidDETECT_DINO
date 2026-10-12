@@ -65,7 +65,8 @@ class RealBkgSimulation:
                  elongate=None, max_donors=None,
                  mosaic=False, mosaic_pool=48, mosaic_refresh=64, mosaic_seed=None,
                  intensity_decades=None, amplitude_mode='fitted',
-                 mask_bank=True, mask_keep='default'):
+                 mask_bank=True, mask_keep='default',
+                 single_structure=False, width_jitter=None, sq_q_slope=0.0):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -149,6 +150,18 @@ class RealBkgSimulation:
         self.next_intensity_target = None   # set to force one frame's peak scale, else drawn
         self.amplitude_mode = str(amplitude_mode)
         self.mask_bank, self.mask_keep = bool(mask_bank), mask_keep
+        #: HEATMAP-BRANCH ADDITIONS (all off by default: with the defaults the random-number sequence and the output are those of the
+        #: original, so the DINO realbkg runs stay reproducible).
+        #: single_structure: a frame holds ONE crystal structure -- with probability p_ring a powder entry (rings only), otherwise one
+        #: oriented entry (segments only) -- instead of 1-3 oriented entries plus rings. Fewer, less crowded frames.
+        self.single_structure = bool(single_structure)
+        #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
+        #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
+        if width_jitter is not None:
+            self.R['w_sq'], self.R['w_sc'] = float(width_jitter[0]), float(width_jitter[1])
+        #: sq_q_slope: sigma_q grows with q inside a real frame (measured, 1926 fitted peaks, frame-demeaned: d log sigma_q / d log q = 0.56,
+        #: correlation 0.56). The peak's sigma_q is multiplied by (q / frame geometric-mean q) ** slope, which keeps the frame median.
+        self.sq_q_slope = float(sq_q_slope)
         self._frames_made = 0
         if mosaic:
             self._load_mosaic_donors(mosaic_pool, mosaic_seed)
@@ -332,7 +345,10 @@ class RealBkgSimulation:
 
     def _draw_peaks(self, qmax):
         xs, ys, ii, rg = [], [], [], []
-        for _ in range(random.randint(*self.n_oriented)):
+        if self.single_structure:
+            ring_frame = random.random() < self.p_ring
+        n_or = (0 if ring_frame else 1) if self.single_structure else random.randint(*self.n_oriented)
+        for _ in range(n_or):
             q, chi, I = self.phys._entry(int(np.random.choice(self.phys.oriented_ids)))
             q, chi, I = (np.asarray(v.cpu() if torch.is_tensor(v) else v, float)
                          for v in (q, chi, I))
@@ -345,8 +361,8 @@ class RealBkgSimulation:
             k = len(top)
             xs.append(q[top]/qmax*WIDTH); ys.append(chi[top]/90.0*HEIGHT)
             ii.append(I[top]);            rg.append(np.zeros(k, bool))
-        if random.random() < self.p_ring:
-            for _ in range(random.randint(*self.n_powder)):
+        if (ring_frame if self.single_structure else random.random() < self.p_ring):
+            for _ in range(1 if self.single_structure else random.randint(*self.n_powder)):
                 q, _c, I = self.phys._entry(int(np.random.choice(self.phys.powder_ids)))
                 q, I = (np.asarray(v.cpu() if torch.is_tensor(v) else v, float) for v in (q, I))
                 v = q < qmax*0.995
@@ -383,7 +399,7 @@ class RealBkgSimulation:
             x, y, I, r = x[k], y[k], I[k], r[k]
         return x, y, I/I.max(), r
 
-    def _draw_widths(self, n, is_ring):
+    def _draw_widths(self, n, is_ring, x=None):
         R = self.R
         ln = lambda mu, sd, k=None: np.exp(np.random.normal(mu, sd, k))
         s_q = ln(R['log_sq_mu'], R['log_sq_sd'])*ln(0.0, R['w_sq'], n)
@@ -411,6 +427,9 @@ class RealBkgSimulation:
             if seg.any():
                 s_q = np.where(seg, ln(np.log(mq), sdq)*ln(0.0, R['w_sq'], n), s_q)
                 s_c = np.where(seg, ln(np.log(mc), sdc)*ln(0.0, R['w_sc'], n), s_c)
+        if self.sq_q_slope and x is not None and n:
+            xq = np.maximum(np.asarray(x, float), 1.0)
+            s_q = s_q*(xq/np.exp(np.log(xq).mean()))**self.sq_q_slope
         s_q = np.clip(s_q, *self.sig_clip[0])
         s_c = np.clip(s_c, *self.sig_clip[1])
         return s_q, np.where(is_ring, 1e4, s_c), el
@@ -607,7 +626,7 @@ class RealBkgSimulation:
             return None
         x, y, rel, rg, iy, ix = x[inside], y[inside], rel[inside], rg[inside], iy[inside], ix[inside]
 
-        s_q, s_c, el = self._draw_widths(len(x), rg)
+        s_q, s_c, el = self._draw_widths(len(x), rg, x)
 
         if self.amplitude_mode == 'pygid':
             # PYGIDSIM INTENSITIES, UNTOUCHED. `rel` is I/I_max straight out of the structure

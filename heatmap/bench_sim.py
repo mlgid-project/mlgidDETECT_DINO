@@ -34,6 +34,7 @@ def main():
         sim = FastSimulation(sim_config=cfg, device='cuda')
     print(f'construction: {time.time() - t0:.1f} s, peak RSS so far {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6:.2f} GB', flush=True)
     ts, nb, nr, none, frames = [], [], [], 0, []
+    cover, ovl, bw, bh = [], [], [], []
     for i in range(a.n):
         t = time.time()
         try:
@@ -48,11 +49,25 @@ def main():
         if i >= 5:
             ts.append(dt)
         nb.append(len(boxes)); nr.append(int(is_ring.sum()))
+        sg = boxes[~is_ring.bool()].float().cpu().numpy()
+        if len(sg):
+            occ = np.zeros((512, 1024), bool)
+            for q_ in sg:
+                occ[max(int(q_[1]), 0):int(q_[3]) + 1, max(int(q_[0]), 0):int(q_[2]) + 1] = True
+            cover.append(occ.mean())
+            ix = np.clip(np.minimum(sg[:, None, 2], sg[None, :, 2]) - np.maximum(sg[:, None, 0], sg[None, :, 0]), 0, None)
+            iy = np.clip(np.minimum(sg[:, None, 3], sg[None, :, 3]) - np.maximum(sg[:, None, 1], sg[None, :, 1]), 0, None)
+            ovl.append(int(((ix * iy > 0).sum() - len(sg)) // 2))
+            bw += list(sg[:, 2] - sg[:, 0]); bh += list(sg[:, 3] - sg[:, 1])
         if len(frames) < a.save:
             frames.append(dict(img=img.float().cpu().numpy(), boxes=boxes.float().cpu().numpy(), mask=mask.cpu().numpy(), ring=is_ring.cpu().numpy()))
     print(f'{a.sim}: {len(ts)} timed frames, {np.mean(ts) * 1000:.0f} ms/frame (median {np.median(ts) * 1000:.0f}, p90 {np.percentile(ts, 90) * 1000:.0f}); '
           f'returned nothing {none}/{a.n}; boxes/frame mean {np.mean(nb):.1f} (p10 {np.percentile(nb, 10):.0f}, p90 {np.percentile(nb, 90):.0f}); '
           f'ring boxes/frame {np.mean(nr):.2f}, frames without any ring {np.mean(np.array(nr) == 0):.0%}; peak RSS {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6:.2f} GB', flush=True)
+    if cover:
+        print(f'segment boxes: share of the frame covered by their union mean {np.mean(cover):.1%} (p90 {np.percentile(cover, 90):.1%}), '
+              f'overlapping pairs/frame mean {np.mean(ovl):.1f} (p90 {np.percentile(ovl, 90):.0f}); box width px p10/50/90 {np.percentile(bw, 10):.0f}/{np.percentile(bw, 50):.0f}/{np.percentile(bw, 90):.0f}, '
+              f'height {np.percentile(bh, 10):.0f}/{np.percentile(bh, 50):.0f}/{np.percentile(bh, 90):.0f}', flush=True)
     if frames:
         import cv2
         os.makedirs(a.out, exist_ok=True)
