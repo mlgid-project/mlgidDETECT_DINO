@@ -69,7 +69,8 @@ class RealBkgSimulation:
                  single_structure=False, width_jitter=None, sq_q_slope=0.0,
                  count_rule='uniform',
                  seg_on_ring_keep=1.0, ring_w_coef=None, ring_sq_scale=1.0,
-                 ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0)):
+                 ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
+                 ring_gain=1.0, seg_gain=1.0):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -200,6 +201,10 @@ class RealBkgSimulation:
         #: single_structure: a frame holds ONE crystal structure -- with probability p_ring a powder entry (rings only), otherwise one
         #: oriented entry (segments only) -- instead of 1-3 oriented entries plus rings. Fewer, less crowded frames.
         self.single_structure = bool(single_structure)
+        #: ring_gain / seg_gain: multiply the peak amplitudes of RINGS / SEGMENTS in 'pygid' amplitude mode, BEFORE the visibility gate (so render-iff-labelled still holds: a
+        #: fainter ring that no longer passes the gate is simply not drawn). Measured on the processed image (appearance_compare.py): the training rings are ~2x too bright and
+        #: saturated, the segments ~2.5x too faint compared with real 41.
+        self.ring_gain, self.seg_gain = float(ring_gain), float(seg_gain)
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
         if width_jitter is not None:
@@ -754,7 +759,7 @@ class RealBkgSimulation:
             tgt = self.next_intensity_target
             R = (float(tgt) if tgt is not None
                  else 10.0**random.uniform(*(self.intensity_decades or (3.0, 6.0))))
-            amp = np.asarray(rel, np.float64)*R
+            amp = np.asarray(rel, np.float64)*R*np.where(rg, self.ring_gain, self.seg_gain)
             self.last_gain = R
         else:
             n_label = int(np.random.choice(self.R['npf']))
