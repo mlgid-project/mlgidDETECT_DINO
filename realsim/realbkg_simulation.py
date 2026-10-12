@@ -71,7 +71,8 @@ class RealBkgSimulation:
                  seg_on_ring_keep=1.0, ring_w_coef=None, ring_sq_scale=1.0,
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
                  ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0,
-                 ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0, ring_follow_bkg=False):
+                 ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0, ring_follow_bkg=False,
+                 bkg_noise_blur=None, bkg_noise_aniso=1.3):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -226,6 +227,13 @@ class RealBkgSimulation:
         #: steps that reads as a ring that brightens and fades). Factor clipped to [0.4, 2.5]. With a small ring_chi_texture this gives rings of uniform brightness with small jitter.
         self.ring_follow_bkg = bool(ring_follow_bkg)
         self._cur_bkg = self._cur_mask = None
+        #: bkg_noise_blur=(lo, hi): give the BACKGROUND noise a real-like pixel-to-pixel correlation. The simulated backgrounds are nearly white at pixel scale (lag-1 autocorrelation of
+        #: the processed image ~0.05 along q and chi) while real frames are correlated (organic 0.14 / 0.34, 41 0.19 / 0.34 with a wide frame-to-frame spread 0.05-0.8), and a model trained
+        #: on white noise fires on the correlated clumps of real frames (41: 15.8 segment false positives per frame in empty background against 6.0 for the legacy-sim model).
+        #: Per frame the high-frequency part of the background (what is left after a 6 px blur) is smoothed with a Gaussian of sigma ~ U(lo, hi) px along q and
+        #: bkg_noise_aniso x that along chi, and rescaled to its original standard deviation, so the noise amplitude is unchanged. None = off.
+        self.bkg_noise_blur = None if bkg_noise_blur is None else (float(bkg_noise_blur[0]), float(bkg_noise_blur[1]))
+        self.bkg_noise_aniso = float(bkg_noise_aniso)
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
         if width_jitter is not None:
@@ -590,6 +598,18 @@ class RealBkgSimulation:
             img[r0:r1, c0:c1] += float(amp[i])*prof*torch.exp(-(u2/uc2)**2)
         return img.cpu().numpy().astype(np.float64)
 
+    def _correlate_noise(self, bkg, mask):
+        sq = random.uniform(*self.bkg_noise_blur)
+        sc = sq*self.bkg_noise_aniso
+        b = np.asarray(bkg, np.float32)
+        m = np.asarray(mask, bool)
+        fine = b - cv2.GaussianBlur(b, (0, 0), 6.0)
+        sm = cv2.GaussianBlur(fine, (0, 0), sigmaX=max(sq, 0.05), sigmaY=max(sc, 0.05))
+        if m.any():
+            sm = sm*(float(fine[m].std())/max(float(sm[m].std()), 1e-9))
+        out = np.where(m, np.maximum(b - fine + sm, 0.0), 0.0)
+        return out.astype(np.float64)
+
     def _bkg_follow(self, xc, r0, r1):
         """Smoothed local background level along chi at a ring's column (valid pixels only), divided by its median, clipped to [0.4, 2.5]."""
         from scipy.ndimage import gaussian_filter1d
@@ -754,6 +774,8 @@ class RealBkgSimulation:
             noise = self.noise[d].astype(np.float64); coef = self.coef[d].astype(np.float64)
             qmax = float(self.qmax[d])
 
+        if self.bkg_noise_blur is not None:
+            bkg = self._correlate_noise(bkg, mask)
         self._cur_bkg, self._cur_mask = bkg, mask
         p = self._draw_peaks(qmax)
         if p is None:
