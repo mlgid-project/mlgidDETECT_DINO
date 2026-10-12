@@ -19,6 +19,11 @@ cd "$REPO" || exit 1
 log() { echo "$(date '+%F %T') $*" | tee -a "$STATUS"; }
 exec 9>"$RUNS/_tools/queue3.lock"
 flock -n 9 || { log "another queue3 instance holds the lock -> exit"; exit 0; }
+# one training at a time on the 12 GB card: queue2 and queue3 share this blocking lock (held until the script exits), whichever was started first runs first
+exec 8>"$RUNS/_tools/gpu.lock"
+log "waiting for the GPU lock"
+flock 8
+log "GPU lock acquired"
 R=$RUNS/$NAME
 SIM=(--sim realbkg --sim_workers 1 --realsim_opt single_structure=True p_ring=0.25 "spots_cap=(25,75)")
 COMMON=(--ring_target ridge --tf32 --bs 4 --steps_per_epoch 250 --lr 3e-4 --epochs $EPOCHS --lr_drop 45 --eval_interval 2 --bb_path "$SIMMIM" --seed 42 "${SIM[@]}")
@@ -32,7 +37,7 @@ if grep -q "^\[epoch $((EPOCHS-1))\] loss" "$R/train.log" 2>/dev/null; then log 
     else log "SMOKE FAILED -> stopped: $(tail -n 8 "$SM/smoke.log" | tr '\n' '|')"; exit 1; fi
   fi
   log "START train $NAME :: ${COMMON[*]}"
-  : > "$R/gpu_mem.log"; ( while :; do nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits >> "$R/gpu_mem.log"; free -m | awk 'NR==2{print "ram_used_MiB",$3}' >> "$R/gpu_mem.log"; sleep 5; done ) & SAMP=$!
+  : > "$R/gpu_mem.log"; : > "$R/ram_used_MiB.log"; ( while :; do nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits >> "$R/gpu_mem.log"; free -m | awk 'NR==2{print $3}' >> "$R/ram_used_MiB.log"; sleep 5; done ) & SAMP=$!
   "$PY" -u heatmap/train.py --out "$R" "${COMMON[@]}" >> "$R/train.log" 2>&1
   rc=$?
   kill $SAMP 2>/dev/null; wait $SAMP 2>/dev/null

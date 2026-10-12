@@ -25,6 +25,11 @@ cd "$REPO" || exit 1
 log() { echo "$(date '+%F %T') $*" | tee -a "$STATUS"; }
 exec 9>"$RUNS/_tools/queue2.lock"
 flock -n 9 || { log "another queue2 instance holds the lock -> exit"; exit 0; }
+# one training at a time on the 12 GB card: queue2 and queue3 share this blocking lock (held until the script exits), whichever was started first runs first
+exec 8>"$RUNS/_tools/gpu.lock"
+log "waiting for the GPU lock"
+flock 8
+log "GPU lock acquired"
 train_done()  { grep -q "^\[epoch $((EPOCHS-1))\] loss" "$1/train.log" 2>/dev/null; }
 eval_done()   { grep -q '+nms\] 41: ap_total' "$1/evaluate_final.txt" 2>/dev/null; }
 images_done() { [ -f "$1/images/nms/41/closepairs.png" ]; }
