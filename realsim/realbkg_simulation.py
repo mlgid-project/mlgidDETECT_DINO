@@ -70,7 +70,7 @@ class RealBkgSimulation:
                  count_rule='uniform',
                  seg_on_ring_keep=1.0, ring_w_coef=None, ring_sq_scale=1.0,
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
-                 ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None):
+                 ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -208,6 +208,9 @@ class RealBkgSimulation:
         #: ring_contrast_min: the per-pixel contrast gate (amplitude / local noise) for RINGS only; None = contrast_min. A ring is integrated over hundreds of rows (the SNR
         #: gate already accounts for that), and real 41 rings sit at ~1 sigma per pixel in the processed image, below the segments' gate of 2.
         self.ring_contrast_min = None if ring_contrast_min is None else float(ring_contrast_min)
+        #: seg_sc_scale: multiplies the chi width (sigma_chi) of SEGMENTS in frames that are not drawn in the organic-like wide mode, i.e. the 41-like tall-narrow half. The fitted
+        #: draw (median sigma_chi 20 px over the whole corpus) gives box heights of p50 53 against 37 on real 41 (calibrate_sim.py pass 2).
+        self.seg_sc_scale = float(seg_sc_scale)
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
         if width_jitter is not None:
@@ -481,7 +484,9 @@ class RealBkgSimulation:
             else:
                 s_q = s_q*f
             el['f'] = f
+        wide_frame = False
         if self.seg_wide_frac > 0 and random.random() < self.seg_wide_frac:
+            wide_frame = True
             # The organic-like mode: wide in q, short in chi. Chosen PER FRAME, not per peak,
             # because peak shape is a property of the sample and the detector -- organic's frames
             # are wide-and-short throughout and 41's are narrow-and-tall throughout, and no real
@@ -494,6 +499,8 @@ class RealBkgSimulation:
                 s_c = np.where(seg, ln(np.log(mc), sdc)*ln(0.0, R['w_sc'], n), s_c)
         if self.ring_sq_scale != 1.0:
             s_q = np.where(is_ring, s_q*self.ring_sq_scale, s_q)
+        if self.seg_sc_scale != 1.0 and not wide_frame:
+            s_c = np.where(is_ring, s_c, s_c*self.seg_sc_scale)
         if self.sq_q_slope and x is not None and n:
             xq = np.maximum(np.asarray(x, float), 1.0)
             s_q = s_q*(xq/np.exp(np.log(xq).mean()))**self.sq_q_slope
@@ -766,7 +773,7 @@ class RealBkgSimulation:
             self.last_gain = R
         else:
             n_label = int(np.random.choice(self.R['npf']))
-            amp = self._assign_amplitudes(rel, noise[iy, ix], n_label)
+            amp = self._assign_amplitudes(rel, noise[iy, ix], n_label)*np.where(rg, self.ring_gain, self.seg_gain)
             if el['on'] and self.elongate['conserve_flux'] and el['f'] is not None:
                 amp = amp/el['f']          # an arc is the same reflection over a longer footprint
 
