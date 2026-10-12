@@ -66,7 +66,8 @@ class RealBkgSimulation:
                  mosaic=False, mosaic_pool=48, mosaic_refresh=64, mosaic_seed=None,
                  intensity_decades=None, amplitude_mode='fitted',
                  mask_bank=True, mask_keep='default',
-                 single_structure=False, width_jitter=None, sq_q_slope=0.0):
+                 single_structure=False, width_jitter=None, sq_q_slope=0.0,
+                 count_rule='uniform'):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -162,6 +163,12 @@ class RealBkgSimulation:
         #: sq_q_slope: sigma_q grows with q inside a real frame (measured, 1926 fitted peaks, frame-demeaned: d log sigma_q / d log q = 0.56,
         #: correlation 0.56). The peak's sigma_q is multiplied by (q / frame geometric-mean q) ** slope, which keeps the frame median.
         self.sq_q_slope = float(sq_q_slope)
+        #: count_rule: how many reflections (spots_cap) / rings (rings_cap) are drawn per entry. 'uniform' = randint(lo, hi), the original.
+        #: 'legacy' = the rule of the legacy simulator (simulation.simulate_labels): n = clip(gauss(lo + 0.75 (hi - lo), hi - lo), lo, hi), which
+        #: for (2, 200) gives n = 200 in 40 % of the draws, n = 2 in 23 % and something in between in the rest (before the visibility gate / NMS).
+        if count_rule not in ('uniform', 'legacy'):
+            raise ValueError(f"count_rule must be 'uniform' or 'legacy', got {count_rule!r}")
+        self.count_rule = count_rule
         self._frames_made = 0
         if mosaic:
             self._load_mosaic_donors(mosaic_pool, mosaic_seed)
@@ -343,6 +350,12 @@ class RealBkgSimulation:
             idx[rng.randint(k)] = bright[rng.randint(len(bright))]
         return idx
 
+    def _count(self, cap):
+        lo, hi = int(cap[0]), int(cap[1])
+        if self.count_rule == 'legacy':
+            return int(max(lo, min(random.gauss(lo + 0.75*(hi - lo), (hi - lo)/1.0), hi)))
+        return random.randint(lo, hi)
+
     def _draw_peaks(self, qmax):
         xs, ys, ii, rg = [], [], [], []
         if self.single_structure:
@@ -356,7 +369,7 @@ class RealBkgSimulation:
             if v.sum() < 1:
                 continue
             q, chi, I = q[v], chi[v], I[v]
-            k = min(len(q), random.randint(*self.spots_cap))
+            k = min(len(q), self._count(self.spots_cap))
             top = self._pick(I, k)
             k = len(top)
             xs.append(q[top]/qmax*WIDTH); ys.append(chi[top]/90.0*HEIGHT)
@@ -369,7 +382,7 @@ class RealBkgSimulation:
                 if v.sum() < 1:
                     continue
                 q, I = q[v], I[v]
-                k = min(len(q), random.randint(*self.rings_cap))
+                k = min(len(q), self._count(self.rings_cap))
                 top = self._pick(I, k)
                 k = len(top)
                 xs.append(q[top]/qmax*WIDTH); ys.append(np.full(k, HEIGHT/2.0))
