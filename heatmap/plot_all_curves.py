@@ -16,6 +16,8 @@ Honest notes: curves are single seeds and the evaluation noise between neighbour
 drop; +nms AP is missing (gap in the line) for evaluations logged before that column existed; runs still training are marked (running).
 DINO reference lines are the final +nms numbers scored by the same code (ssl1 0.568/0.744, lr 4e-5 0.622/0.763), not per-epoch curves."""
 import argparse, csv, math, os, re, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from runs_layout import run_dirs
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -51,10 +53,7 @@ def drops_of(run):
 
 def load(runs_dir):
     runs = []
-    for run in sorted(os.listdir(runs_dir)):
-        d = os.path.join(runs_dir, run)
-        if not (run.startswith('hm_') and os.path.isdir(d)):
-            continue
+    for run, d in run_dirs(runs_dir):                           # works with runs at the top level or in group subfolders
         ev = {ds: read_eval(os.path.join(d, f'exp_ap_{ds}.txt')) for ds, _ in SETS}
         if not any(ev.values()):
             continue

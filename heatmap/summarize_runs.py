@@ -5,7 +5,9 @@
 Per run (+nms decode = the deployed pipeline; floor 0.1 + top-225): AP on organic / 41, and at score > 0.3: recall, precision,
 ring recall, recall of the segment pairs closer than 5 px (NN Euclid <5). Runs with a ring head list their three decode modes
 (coarse_rings = the headline decode fixed in advance). Writes a Markdown table; DINO reference numbers are appended."""
-import os, re, argparse
+import os, re, argparse, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from runs_layout import run_dirs
 
 HDR = re.compile(r'^\s*\[(?P<name>.+?)\] (?P<ds>organic|41): ap_total (?P<ap>[\d.]+)')
 S03 = re.compile(r'score>0\.3: recall (?P<rec>[\d.]+) \(seg [\d.]+, ring (?P<ring>[\d.]+)\) precision (?P<prec>[\d.]+) preds (?P<n>\d+) FP (?P<fp>\d+)')
@@ -51,8 +53,8 @@ def main():
     a = ap.parse_args()
     f = lambda d, k: (f'{d[k]:.3f}' if k in d else '-')
     rows = []
-    for run in sorted(os.listdir(a.runs_dir)):
-        p = os.path.join(a.runs_dir, run, 'evaluate_final.txt')
+    for run, rdir in run_dirs(a.runs_dir):                      # works with runs at the top level or in group subfolders
+        p = os.path.join(rdir, 'evaluate_final.txt')
         if not (run.startswith('hm_') and os.path.exists(p)):
             continue
         r = parse(p)
