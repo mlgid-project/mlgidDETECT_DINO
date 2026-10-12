@@ -1,0 +1,24 @@
+
+===== boxconv1 (dino) /mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_boxconv1/checkpoint.pth
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+  ck = torch.load(ckpt, map_location='cpu')
+  load: <All keys matched successfully>
+  [boxconv1] organic: ap_total 0.5881 (AP by GT confidence: high 0.720 / med 0.558 / low 0.424)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.188 recall 0.597 FP/GT 0.19; fp<=0.1/GT: score>=0.319 recall 0.507 FP/GT 0.10; high_recall>=95: score>=0.103 recall 0.651 FP/GT 0.37
+    score>0.1: recall 0.657 (seg 0.653, ring 0.767) precision 0.637 preds 843 FP 306
+      recall by NN Euclid dist  <5:0.380(n=121) 5-10:0.435(n=85) >10:0.742(n=581)
+      recall by same-radius chi-gap  <5:0.414(n=128) 5-10:0.469(n=49) >10:0.710(n=527)
+    score>0.3: recall 0.528 (seg 0.521, ring 0.700) precision 0.840 preds 513 FP 82
+      recall by NN Euclid dist  <5:0.339(n=121) 5-10:0.388(n=85) >10:0.578(n=581)
+      recall by same-radius chi-gap  <5:0.367(n=128) 5-10:0.429(n=49) >10:0.565(n=527)
+  [boxconv1] 41: ap_total 0.7521 (AP by GT confidence: high 0.873 / med 0.772 / low 0.629)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.434 recall 0.708 FP/GT 0.25; fp<=0.1/GT: score>=0.702 recall 0.560 FP/GT 0.10; high_recall>=95: score>=0.136 recall 0.854 FP/GT 0.91
+    score>0.1: recall 0.875 (seg 0.831, ring 0.937) precision 0.418 preds 3520 FP 2050
+      recall by NN Euclid dist  <5:0.384(n=73) 5-10:0.694(n=62) >10:0.881(n=846)
+      recall by same-radius chi-gap  <5:0.500(n=2) 5-10:0.250(n=4) >10:0.844(n=550)
+    score>0.3: recall 0.783 (seg 0.721, ring 0.872) precision 0.671 preds 1960 FP 644
+      recall by NN Euclid dist  <5:0.370(n=73) 5-10:0.516(n=62) >10:0.768(n=846)
+      recall by same-radius chi-gap  <5:0.500(n=2) 5-10:0.250(n=4) >10:0.740(n=550)

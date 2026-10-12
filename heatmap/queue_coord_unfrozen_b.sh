@@ -35,10 +35,12 @@ eval_done()   { grep -q '+nms\] 41: ap_total' "$1/evaluate_final.txt" 2>/dev/nul
 images_done() { [ -f "$1/images/nms/41/closepairs.png" ]; }
 sweep_done()  { ls "$1"/score_sweep/*_score_sweep.txt >/dev/null 2>&1; }
 
-# one_run <name> <bb file for visualize/sweep> <train.py args...>
+# rdir <run name> <group>: where a run lives -- at the top level of hm_runs, in any group subfolder (see heatmap/runs_layout.py), else in <group> (new run)
+rdir() { local c; for c in "$RUNS/$1" "$RUNS"/*/"$1"; do [ -d "$c" ] && { echo "$c"; return; }; done; echo "$RUNS/$2/$1"; }
+# one_run <name> <bb file for visualize/sweep> <group folder> <train.py args...>
 one_run() {
-  local name=$1 postbb=$2; shift 2
-  local R=$RUNS/$name rc peak SAMP
+  local name=$1 postbb=$2 grp=$3; shift 3
+  local R rc peak SAMP; R=$(rdir "$name" "$grp")
   mkdir -p "$R"
   if train_done "$R"; then log "SKIP train $name"; else
     log "START train $name :: $*"
@@ -76,10 +78,10 @@ if "$PY" -u heatmap/train.py --out "$SM" --ring_target ridge --tf32 --bs 4 --ste
   log "SMOKE coord ok: $(tail -n 1 "$SM/smoke.log")"
 else log "SMOKE coord FAILED -> queue stopped: $(tail -n 5 "$SM/smoke.log" | tr '\n' '|')"; exit 1; fi
 
-one_run hm_simmim_frozen_ridge_coord_tf32_seed1_2.80_1.30 "$SIMMIM" $COORD --seed 1            || { log "QUEUE2 STOPPED (coord seed 1)"; exit 1; }
-one_run hm_simmim_unfrozen_ridge_he_tf32_seed1_2.80_1.30 "$SIMMIM" $UNF --seed 1                || { log "QUEUE2 STOPPED (unfrozen seed 1)"; exit 1; }
-one_run hm_boxconv1_frozen_ridge_tf32_seed1_2.80_1.30 "$BOXCONV" $BOX --seed 1                  || { log "QUEUE2 STOPPED (B seed 1)"; exit 1; }
-one_run hm_boxconv1_frozen_ridge_tf32_seed2_2.80_1.30 "$BOXCONV" $BOX --seed 2                  || { log "QUEUE2 STOPPED (B seed 2)"; exit 1; }
-one_run hm_simmim_unfrozen_ridge_he_tf32_seed2_2.80_1.30 "$SIMMIM" $UNF --seed 2                || { log "QUEUE2 STOPPED (unfrozen seed 2)"; exit 1; }
-one_run hm_boxconv1_frozen_ridge_tf32_seed3_2.80_1.30 "$BOXCONV" $BOX --seed 3                  || { log "QUEUE2 STOPPED (B seed 3)"; exit 1; }
+one_run hm_simmim_frozen_ridge_coord_tf32_seed1_2.80_1.30 "$SIMMIM" channel_variants $COORD --seed 1            || { log "QUEUE2 STOPPED (coord seed 1)"; exit 1; }
+one_run hm_simmim_unfrozen_ridge_he_tf32_seed1_2.80_1.30 "$SIMMIM" unfrozen $UNF --seed 1                || { log "QUEUE2 STOPPED (unfrozen seed 1)"; exit 1; }
+one_run hm_boxconv1_frozen_ridge_tf32_seed1_2.80_1.30 "$BOXCONV" backbone_variants $BOX --seed 1                  || { log "QUEUE2 STOPPED (B seed 1)"; exit 1; }
+one_run hm_boxconv1_frozen_ridge_tf32_seed2_2.80_1.30 "$BOXCONV" backbone_variants $BOX --seed 2                  || { log "QUEUE2 STOPPED (B seed 2)"; exit 1; }
+one_run hm_simmim_unfrozen_ridge_he_tf32_seed2_2.80_1.30 "$SIMMIM" unfrozen $UNF --seed 2                || { log "QUEUE2 STOPPED (unfrozen seed 2)"; exit 1; }
+one_run hm_boxconv1_frozen_ridge_tf32_seed3_2.80_1.30 "$BOXCONV" backbone_variants $BOX --seed 3                  || { log "QUEUE2 STOPPED (B seed 3)"; exit 1; }
 log "QUEUE2 ALL DONE"

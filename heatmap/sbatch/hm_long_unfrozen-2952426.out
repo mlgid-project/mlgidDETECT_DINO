@@ -1,0 +1,18 @@
+git: heatmap 5b69206
+name, memory.total [MiB]
+NVIDIA A100-PCIE-40GB, 40960 MiB
+smoke bs 8 plain FAILED:
+    return self._apply(lambda t: t.cuda(device))
+                                 ^^^^^^^^^^^^^^
+  File "/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/cuda/__init__.py", line 319, in _lazy_init
+    torch._C._cuda_init()
+RuntimeError: No CUDA GPUs are available
+smoke with grad_ckpt FAILED too -> abort
+    param_applied = fn(param)
+                    ^^^^^^^^^
+  File "/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1050, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ^^^^^^^^^^^^^^
+  File "/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/cuda/__init__.py", line 319, in _lazy_init
+    torch._C._cuda_init()
+RuntimeError: No CUDA GPUs are available

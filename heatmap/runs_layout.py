@@ -62,6 +62,7 @@ def running_outs():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--runs_dir', default=RUNS); ap.add_argument('--apply', action='store_true'); ap.add_argument('--undo', action='store_true')
+    ap.add_argument('--skip', nargs='*', default=[], help='run names (or substrings) that must not move, e.g. a run whose queue is still doing its post steps')
     a = ap.parse_args()
     man = os.path.join(a.runs_dir, '_tools', 'moved_runs.tsv')
     if a.undo:
@@ -79,13 +80,13 @@ def main():
         elif e in ('_smoke', '_smoke_coord', '_interim'):
             moves.append((p, os.path.join(a.runs_dir, '_scratch', e)))
     for old, new in moves:
-        skip = os.path.realpath(old) in busy
+        skip = os.path.realpath(old) in busy or any(k in os.path.basename(old) for k in a.skip)
         print(('SKIP (a train.py is writing to it) ' if skip else ('MOVE ' if a.apply else 'would move ')) + f'{os.path.relpath(old, a.runs_dir)} -> {os.path.relpath(new, a.runs_dir)}')
     if not a.apply:
         print('dry run; add --apply to move'); return
     with open(man, 'a') as mf:
         for old, new in moves:
-            if os.path.realpath(old) in busy or os.path.exists(new):
+            if os.path.realpath(old) in busy or any(k in os.path.basename(old) for k in a.skip) or os.path.exists(new):
                 continue
             os.makedirs(os.path.dirname(new), exist_ok=True)
             shutil.move(old, new); mf.write(f'{old}\t{new}\n')

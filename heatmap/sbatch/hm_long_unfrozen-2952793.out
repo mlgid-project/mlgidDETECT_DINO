@@ -1,0 +1,14 @@
+git: heatmap 377e951
+name, memory.total [MiB]
+NVIDIA A100-PCIE-40GB, 40960 MiB
+smoke bs 8 plain FAILED:
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP/models/dino/swin_transformer.py", line 127, in forward
+    attn = (q @ k.transpose(-2, -1))
+            ~~^~~~~~~~~~~~~~~~~~~~~
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 670.00 MiB. GPU 0 has a total capacity of 39.49 GiB of which 363.50 MiB is free. Including non-PyTorch memory, this process has 39.13 GiB memory in use. Of the allocated memory 37.47 GiB is allocated by PyTorch, and 1.16 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+smoke bs 8 + grad_ckpt OK -> using --grad_ckpt
+  return fn(*args, **kwargs)
+[smoke] step 12 loss 6.992 {'loss_heat': 2.8084213733673096, 'loss_reg': 1.0459526777267456} 1.42s/step
+train rc=0
+eval rc=0

@@ -24,7 +24,8 @@ exec 8>"$RUNS/_tools/gpu.lock"
 log "waiting for the GPU lock"
 flock 8
 log "GPU lock acquired"
-R=$RUNS/$NAME
+rdir() { local c; for c in "$RUNS/$1" "$RUNS"/*/"$1"; do [ -d "$c" ] && { echo "$c"; return; }; done; echo "$RUNS/$2/$1"; }   # run dir wherever it lives (top level or group folder)
+R=$(rdir "$NAME" realsim)
 SIM=(--sim realbkg --sim_workers 1 --realsim_opt single_structure=True p_ring=0.25 "spots_cap=(25,75)")
 COMMON=(--ring_target ridge --tf32 --bs 4 --steps_per_epoch 250 --lr 3e-4 --epochs $EPOCHS --lr_drop 45 --eval_interval 2 --bb_path "$SIMMIM" --seed 42 "${SIM[@]}")
 log "QUEUE3 START (pid $$)"
