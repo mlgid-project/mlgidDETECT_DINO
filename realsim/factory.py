@@ -25,17 +25,26 @@ R6 = dict(
     bkg_v2=True, surrogate_frac=0.5, v2_canvas=(2048, 4096), v2_refresh=25, v2_n_pc=6)
 
 
+# r7 = r6 + the ring-appearance fixes of DINO run 7 (unpushed commits 8e24593..7f18c30 of the local multi-channel-analysis branch, ported in realsim/realbkg_simulation.py):
+# ring chi texture, ring width / box width / spacing, fewer segments sitting on rings. r8 = r7 with seg_on_ring_keep 0.5 (run 7's on-ring segments scored low).
+# Counts differ from r6 as in the DINO configs (r7: p_ring 0.75, 1-3 powder entries, 2-60 rings, 1-4 oriented entries, 2-100 spots).
+R7 = dict(R6, p_ring=0.75, n_powder=(1, 3), rings_cap=(2, 60), n_oriented=(1, 4), spots_cap=(2, 100),
+          ring_sq_scale=0.7, ring_w_coef=3.0, seg_on_ring_keep=0.12, ring_min_gap=8.0, ring_chi_texture=0.45, ring_chi_corr=(1.0, 64.0))
+R8 = dict(R7, seg_on_ring_keep=0.5)
+PRESETS = dict(r6=R6, r7=R7, r8=R8)
+
+
 def work_dir():
     return os.environ.get('GIWAXS_WORK', '/mnt/lustre/work/schreiber/szb389')
 
 
-def make_realbkg_sim(device='cuda', box_coef=(2.80, 1.30), overrides=None, bank_path=None, stats_path=None):
+def make_realbkg_sim(device='cuda', box_coef=(2.80, 1.30), overrides=None, bank_path=None, stats_path=None, preset='r6'):
     from realsim.simulation_mc import SimulationConfig
     from realsim.realbkg_simulation import RealBkgSimulation
     W = work_dir()
     cfg = SimulationConfig()
     cfg.a_coef, cfg.w_coef = float(box_coef[0]), float(box_coef[1])
-    kw = dict(R6)
+    kw = dict(PRESETS[preset])
     kw.update(overrides or {})
     unknown = set(kw) - set(RealBkgSimulation.__init__.__code__.co_varnames)
     if unknown:
@@ -45,5 +54,5 @@ def make_realbkg_sim(device='cuda', box_coef=(2.80, 1.30), overrides=None, bank_
         donor_path=f'{W}/datasets/sim_background_bank4.h5',
         stats_path=stats_path or f'{W}/datasets/sim_real_stats.npz',
         sim_config=cfg, device=device, **kw)
-    print(f'[realsim] real-background sim ON (r6 settings, overrides {overrides or {}}), box convention a_coef,w_coef = {box_coef}', flush=True)
+    print(f'[realsim] real-background sim ON ({preset} settings, overrides {overrides or {}}), box convention a_coef,w_coef = {box_coef}', flush=True)
     return sim
