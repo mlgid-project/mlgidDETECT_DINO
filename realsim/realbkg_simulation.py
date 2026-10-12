@@ -70,7 +70,8 @@ class RealBkgSimulation:
                  count_rule='uniform',
                  seg_on_ring_keep=1.0, ring_w_coef=None, ring_sq_scale=1.0,
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
-                 ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0):
+                 ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0,
+                 ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -211,6 +212,15 @@ class RealBkgSimulation:
         #: seg_sc_scale: multiplies the chi width (sigma_chi) of SEGMENTS in frames that are not drawn in the organic-like wide mode, i.e. the 41-like tall-narrow half. The fitted
         #: draw (median sigma_chi 20 px over the whole corpus) gives box heights of p50 53 against 37 on real 41 (calibrate_sim.py pass 2).
         self.seg_sc_scale = float(seg_sc_scale)
+        #: Ring realism, from looking at candidate frames (a ring-only frame had 11 rings with box widths 5-36 px, two saturated white, two fading to invisible):
+        #:   ring_no_elongate  the arc-stretching of 'elongate' (x2-5 on sigma_q for 20% of its frames) also hit rings, so some rings came out 2-5x wider than their neighbours;
+        #:                     True leaves rings out of it.
+        #:   ring_cap          upper limit of a ring's amplitude in units of the local noise (fitted amplitude mode): the lognormal tail otherwise gives a few rings 10-40 sigma, which
+        #:                     saturate to flat white after the contrast chain. None = no limit.
+        #:   ring_chi_floor    lower limit of the ring's texture factor along chi, so the texture modulates a ring but never makes it disappear for tens of rows. 0 = none.
+        self.ring_no_elongate = bool(ring_no_elongate)
+        self.ring_cap = None if ring_cap is None else float(ring_cap)
+        self.ring_chi_floor = float(ring_chi_floor)
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
         if width_jitter is not None:
@@ -479,6 +489,8 @@ class RealBkgSimulation:
             el['k'] = random.uniform(*E['factor'])
             sel = np.random.random(n) < E['p_peak']
             f = np.where(sel, el['k']*ln(0.0, 0.1, n), 1.0)
+            if self.ring_no_elongate:
+                f = np.where(is_ring, 1.0, f)
             if random.random() < E['p_chi']:
                 s_c = s_c*f
             else:
@@ -580,7 +592,7 @@ class RealBkgSimulation:
         z = gaussian_filter1d(np.random.standard_normal(n + int(6*L)), L, mode='wrap')[int(3*L):int(3*L) + n]
         z = (z - z.mean())/max(z.std(), 1e-9)
         sd = random.uniform(0.0, self.ring_chi_texture)
-        return torch.as_tensor(np.exp(sd*z - 0.5*sd*sd), dtype=torch.float32)
+        return torch.as_tensor(np.maximum(np.exp(sd*z - 0.5*sd*sd), self.ring_chi_floor), dtype=torch.float32)
 
     def _boxes(self, x, y, s_q, s_c, rg, mask):
         """Label boxes for every peak. Full extent is `coef * sigma` on each axis, which matches
@@ -774,6 +786,8 @@ class RealBkgSimulation:
         else:
             n_label = int(np.random.choice(self.R['npf']))
             amp = self._assign_amplitudes(rel, noise[iy, ix], n_label)*np.where(rg, self.ring_gain, self.seg_gain)
+            if self.ring_cap is not None:
+                amp = np.where(rg, np.minimum(amp, self.ring_cap*noise[iy, ix]), amp)
             if el['on'] and self.elongate['conserve_flux'] and el['f'] is not None:
                 amp = amp/el['f']          # an arc is the same reflection over a longer footprint
 

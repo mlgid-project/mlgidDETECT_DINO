@@ -54,8 +54,8 @@ def line(rows, target):
         v = np.array([r[k] for r in rows], float); v = v[np.isfinite(v)]
         if len(v) < 3:
             out.append(f'{k} -'); continue
-        q = np.percentile(v, [25, 50, 75])
-        out.append(f'{k} {q[0]:.3g}/{q[1]:.3g}/{q[2]:.3g} (real {lo:.3g}/{mid:.3g}/{hi:.3g})')
+        q = np.percentile(v, [25, 50, 75]); t = np.percentile(v, [10, 90])
+        out.append(f'{k} {q[0]:.3g}/{q[1]:.3g}/{q[2]:.3g} [p10 {t[0]:.3g}, p90 {t[1]:.3g}] (real {lo:.3g}/{mid:.3g}/{hi:.3g})')
     return '\n      '.join(out)
 
 
@@ -71,16 +71,21 @@ def main():
     sim = make_realbkg_sim(device='cuda', preset=a.preset)
     print(f'[calibrate] simulator ready in {time.time() - t0:.0f} s', flush=True)
     base = {k: copy.deepcopy(getattr(sim, k)) for k in ('ring_gain', 'seg_gain', 'ring_sq_scale', 'ring_w_coef', 'ring_chi_texture', 'ring_chi_corr', 'ring_min_gap', 'seg_wide_frac',
-                                                        'seg_wide_sigma', 'voigt_eta', 'contrast_min', 'snr_min', 'rings_cap', 'spots_cap', 'sq_q_slope', 'ring_contrast_min', 'amplitude_mode', 'elongate', 'seg_sc_scale', 'intensity_decades')}
+                                                        'seg_wide_sigma', 'voigt_eta', 'contrast_min', 'snr_min', 'rings_cap', 'spots_cap', 'sq_q_slope', 'ring_contrast_min', 'amplitude_mode', 'elongate', 'seg_sc_scale', 'intensity_decades', 'ring_no_elongate', 'ring_cap', 'ring_chi_floor')}
+    baseR = dict(sim.R)
     sim.spots_cap = tuple(ast.literal_eval(a.spots)); sim.rings_cap = tuple(ast.literal_eval(a.rings))
     base['spots_cap'], base['rings_cap'] = sim.spots_cap, sim.rings_cap
     for spec in (a.cfg or ['base:']):
         name, _, kv = spec.partition(':')
         for k, v in base.items():
             setattr(sim, k, copy.deepcopy(v))
+        sim.R.update(baseR)
         for item in [x for x in kv.split(';') if x]:
             k, v = item.split('=', 1)
-            setattr(sim, k, ast.literal_eval(v))
+            if k.startswith('R_'):                                  # a measured-statistics entry, e.g. R_w_sq (within-frame scatter of log sigma_q), R_w_sc
+                sim.R[k[2:]] = ast.literal_eval(v)
+            else:
+                setattr(sim, k, ast.literal_eval(v))
         t = time.time()
         R, _, NR, nbR = draw(sim, a.n, True)
         _, S, NS, nbS = draw(sim, a.n, False)
