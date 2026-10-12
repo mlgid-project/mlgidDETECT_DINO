@@ -29,6 +29,7 @@ from summarize_runs import NAME                                                 
 
 ORG, V41 = '#2a78d6', '#eb6834'
 EXTRA_NAME = {'ridge_chanhemask_tf32': 'chanhemask: HE, mask (stopped at epoch 2)'}
+PARTIAL = {'ridge_realsim_single_tf32_seed42'}      # stopped by the user at epoch 14 (appearance-gap diagnosis): drawn, labelled '(partial)'
 STOPPED = {'ridge_chanhemask_tf32'}          # stopped by the user after epoch 2: kept in the CSV, left out of the figures
 PALETTE = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#000000', '#7f7f7f', '#3b0f70', '#00a6a6', '#a65628', '#e6ab02']
 SETS = [('organic', ORG), ('41', V41)]
@@ -58,7 +59,7 @@ def load(runs_dir):
         if not any(ev.values()):
             continue
         done = os.path.exists(os.path.join(d, 'evaluate_final.txt'))
-        st = 'stopped' if tag_of(run) in STOPPED else ('finished' if done else 'running')
+        st = 'stopped' if tag_of(run) in STOPPED else ('partial' if tag_of(run) in PARTIAL else ('finished' if done else 'running'))
         runs.append(dict(run=run, dir=d, ev=ev, loss=read_loss(os.path.join(d, 'train.log')), done=done, status=st))
     # reading order of summarize_runs.LABELS, unknown runs last
     order = {k: i for i, k in enumerate(NAME)}
