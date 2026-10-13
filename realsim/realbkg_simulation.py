@@ -72,7 +72,7 @@ class RealBkgSimulation:
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
                  ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0,
                  ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0, ring_follow_bkg=False,
-                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0):
+                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0, ring_x_share=None):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -237,6 +237,10 @@ class RealBkgSimulation:
         #: bkg_noise_power: sigma = lo + (hi - lo) * u**power with u ~ U(0,1); power > 1 puts most frames near lo (real frames: lag-1 quartiles 0.05 / 0.19 / 0.79, i.e. many nearly
         #: white frames and a tail of strongly correlated ones).
         self.bkg_noise_power = float(bkg_noise_power)
+        #: ring_x_share: five numbers (share of rings with x in 0-200 / 200-400 / 400-600 / 600-800 / 800-1024 px) -- the ring reflections of a powder entry are drawn
+        #: with probability proportional to share[bin] / (number of that entry's visible reflections in the bin), so the ring positions follow this histogram instead of
+        #: the (low-q heavy) reflection list. Real 41: (0.106, 0.179, 0.257, 0.238, 0.220). None = uniform draw over the list (original).
+        self.ring_x_share = None if ring_x_share is None else np.asarray(ring_x_share, float) / float(np.sum(ring_x_share))
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
         if width_jitter is not None:
@@ -431,6 +435,18 @@ class RealBkgSimulation:
             idx[rng.randint(k)] = bright[rng.randint(len(bright))]
         return idx
 
+    def _pick_x(self, I, x, k, n_bright=5):
+        """_pick with the x-position histogram of `ring_x_share`: per-reflection probability = share[bin] / count[bin] (bins without reflections drop out)."""
+        n = len(I); k = min(k, n)
+        b = np.minimum((np.asarray(x) / (WIDTH / 5.0)).astype(int), 4)
+        cnt = np.bincount(b, minlength=5).astype(float)
+        w = self.ring_x_share[b] / np.maximum(cnt[b], 1.0)
+        idx = np.random.choice(n, size=k, replace=False, p=w / w.sum())
+        bright = np.argsort(-I)[:min(n_bright, n)]
+        if not np.intersect1d(idx, bright).size:
+            idx[np.random.randint(k)] = bright[np.random.randint(len(bright))]
+        return idx
+
     def _count(self, cap):
         lo, hi = int(cap[0]), int(cap[1])
         if self.count_rule == 'legacy':
@@ -464,7 +480,7 @@ class RealBkgSimulation:
                     continue
                 q, I = q[v], I[v]
                 k = min(len(q), self._count(self.rings_cap))
-                top = self._pick(I, k)
+                top = self._pick(I, k) if self.ring_x_share is None else self._pick_x(I, q/qmax*WIDTH, k)
                 k = len(top)
                 xs.append(q[top]/qmax*WIDTH); ys.append(np.full(k, HEIGHT/2.0))
                 ii.append(I[top]);            rg.append(np.ones(k, bool))
