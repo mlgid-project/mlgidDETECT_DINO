@@ -1,0 +1,29 @@
+git: heatmap 46a722b
+== S1_single_sparse: 150 frames, rings/frame 2.4, segments/frame 3.5
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                3.1     6.4     9.9    16.2    33.3
+   ring centre q column           167.2   308.4   482.3   666.2   878.4
+   ring box height px             133.0   469.5   487.0   496.0   505.0
+   SEGMENT box width px             1.5     3.0     4.6     7.3    16.4
+   SEGMENT box height px            6.0    15.7    36.2    87.0   231.9
+   rings with q column    0- 200:  0.25 per frame, median width   6.5
+   rings with q column  200- 400:  0.65 per frame, median width   8.6
+   rings with q column  400- 600:  0.61 per frame, median width  10.3
+   rings with q column  600- 800:  0.54 per frame, median width  11.7
+   rings with q column  800-1100:  0.32 per frame, median width  11.1
+
+== S2_few_both: 150 frames, rings/frame 5.4, segments/frame 5.1
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.2     4.3     7.0    12.1    24.2
+   ring centre q column           168.5   332.5   530.6   727.0   934.2
+   ring box height px              73.5   405.0   485.0   495.0   505.0
+   SEGMENT box width px             1.5     3.0     4.8     7.6    13.7
+   SEGMENT box height px            5.6    14.1    31.2    61.9   172.5
+   rings with q column    0- 200:  0.51 per frame, median width   3.1
+   rings with q column  200- 400:  1.25 per frame, median width   5.2
+   rings with q column  400- 600:  1.41 per frame, median width   7.6
+   rings with q column  600- 800:  1.24 per frame, median width   8.2
+   rings with q column  800-1100:  0.99 per frame, median width  10.4
+[realsim] real-background sim ON (r6 settings, overrides {'mask_keep': [0, 3, 6, 7], 'ring_x_share': (0.106, 0.179, 0.257, 0.238, 0.22)}), box convention a_coef,w_coef = (2.8, 1.3)
+wrote sheet_E8S1.png ((1536, 1024, 3)) boxes/frame 7.2 rings/frame 2.5
+wrote sheet_E8S2.png ((1536, 1024, 3)) boxes/frame 10.8 rings/frame 5.8
