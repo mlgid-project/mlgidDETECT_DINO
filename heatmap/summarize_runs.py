@@ -32,7 +32,10 @@ LABELS = [  # run-dir tag -> readable name, in reading order (unknown runs are a
     ('hm_simmim_UNFROZEN_ridge_long_tf32_seed3_bblr4e-5', 'unfrozen 120 ep, bblr 4e-5, seed 3'),
     ('ridge_realsimE1b_tf32_seed42', 'realsim E1b (E1 + correlated bkg noise, galvani)'),
     ('ridge_realsimE5_tf32_seed42', 'realsim E5 (E1b + 4 low-q masks + ring_x_share), seed 42, galvani'),
-    ('ridge_realsimE5_tf32_seed2', 'realsim E5, seed 2, colorbox'), ('ridge_realsimE5_tf32_seed3', 'realsim E5, seed 3, colorbox')]
+    ('ridge_realsimE5_tf32_seed2', 'realsim E5, seed 2, colorbox'), ('ridge_realsimE5_tf32_seed3', 'realsim E5, seed 3, colorbox'),
+    ('hm_boxconv1_unfrozen_ridge_tf32_seed1_bblr4e-5', 'unfrozen boxconv1 backbone (bs 4, 60 ep, colorbox), bblr 4e-5, seed 1'),
+    ('hm_simmim_unfrozen_ridge_he_tf32_seed1_bblr4e-5', 'unfrozen swin (bs 4, 60 ep, colorbox), bblr 4e-5, seed 1'),
+    ('hm_simmim_unfrozen_ridge_he_tf32_seed1_bblr8e-5', 'unfrozen swin (bs 4, 60 ep, colorbox), bblr 8e-5, seed 1')]
 NAME = dict(LABELS)
 REPLICATES = [  # recipes run more than once: (group label, run tags); only runs that exist and have an evaluation are used
     ('Plain recipe, frozen SimMIM (bs 4 x 250, 60 ep, TF32)', ['ridge_he_tf32', 'ridge_he_tf32_seed1', 'ridge_he_tf32_seed2']),
