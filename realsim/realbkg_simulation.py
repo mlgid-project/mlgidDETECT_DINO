@@ -72,7 +72,7 @@ class RealBkgSimulation:
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
                  ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0,
                  ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0, ring_follow_bkg=False,
-                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0, ring_x_share=None, ring_rel_shuffle=0.0):
+                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0, ring_x_share=None, ring_rel_shuffle=0.0, bkg_flat_q=0.0):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -244,6 +244,10 @@ class RealBkgSimulation:
         #: rank-matching of amplitudes, so a ring's brightness no longer follows its q. Real 41: rings at q column >= 781 are as bright (median amplitude 0.23) as the
         #: others (0.20); with the pygidSIM ordering E6's are 3x fainter (0.07). 0 = off (original).
         self.ring_rel_shuffle = float(ring_rel_shuffle)
+        #: bkg_flat_q: 0..1 -- the background (and its noise map) is multiplied by (median / smoothed column median) ** bkg_flat_q along q before peaks are added, i.e. the
+        #: radial fall-off of the donor backgrounds is flattened. Measured on the processed image (bkg_profile_x.py): E6 mean value 0.65 (q column 128) -> 0.09 (896) and
+        #: local noise 0.115 -> 0.051, real 41 mean 0.33-0.68-0.35 and noise 0.11-0.14 flat, legacy simulator flat. 0 = off (original).
+        self.bkg_flat_q = float(bkg_flat_q)
         self.ring_x_share = None if ring_x_share is None else np.asarray(ring_x_share, float) / float(np.sum(ring_x_share))
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
@@ -779,10 +783,27 @@ class RealBkgSimulation:
                   if len(self._qsrc) else 4.45)
         use_surr = self.surrogate_frac > 0 and np.random.random() < self.surrogate_frac
         b, m = (self._bv.surrogate(mask=m) if use_surr else self._bv.frame(mask=m))
+        if self.bkg_flat_q > 0:
+            b = self._flatten_q(b, m)
         nz = self._noise_map(b.astype(np.float64), m)
         cf = nz/np.sqrt(np.maximum(cv2.GaussianBlur(b, (0, 0), 16.0), 1e-6))
         return (b.astype(np.float64), m, nz.astype(np.float64),
                 cf.astype(np.float64), qm)
+
+    def _flatten_q(self, b, m):
+        """Multiply the background by (median / smoothed column median) ** bkg_flat_q (valid pixels only, factor clipped to [0.25, 8])."""
+        from scipy.ndimage import gaussian_filter1d
+        b = np.asarray(b, np.float64); m = np.asarray(m, bool)
+        den = m.sum(0)
+        col = np.where(den > 20, (b*m).sum(0)/np.maximum(den, 1), np.nan)
+        ok = np.isfinite(col)
+        if ok.sum() < 50:
+            return b
+        xs = np.arange(b.shape[1])
+        col = np.interp(xs, xs[ok], col[ok])
+        prof = np.maximum(gaussian_filter1d(col, 48.0, mode='nearest'), 1e-9)
+        g = np.clip((np.median(prof[ok])/prof)**self.bkg_flat_q, 0.25, 8.0)
+        return b*g[None, :]
 
     # ------------------------------------------------------------------ frame
     def simulate_img(self):
