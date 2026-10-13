@@ -72,7 +72,7 @@ class RealBkgSimulation:
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
                  ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0,
                  ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0, ring_follow_bkg=False,
-                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0, ring_x_share=None, ring_rel_shuffle=0.0, bkg_flat_q=0.0, mask_no_gaps=False, mask_wedge_only_frac=0.0):
+                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0, ring_x_share=None, ring_rel_shuffle=0.0, bkg_flat_q=0.0, mask_no_gaps=False, mask_wedge_only_frac=0.0, bkg_noise_edge_fix=False):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -252,6 +252,9 @@ class RealBkgSimulation:
         self.mask_no_gaps = bool(mask_no_gaps)
         #: mask_wedge_only_frac: share of the frames whose mask is the generated wedge only (see detector_masks.MaskBank); 0.2 = one extra 'no detector mask' entry next to 4 geometries.
         self.mask_wedge_only_frac = float(mask_wedge_only_frac)
+        #: bkg_noise_edge_fix: _correlate_noise with mask-aware (normalised) blurs, so the invalid pixels no longer enter the high-pass at the mask boundary. Measured (edge_profile.py): with
+        #: the original code the mean image value at 1-3 px from an invalid pixel is ~0.05 above the interior (real 41: flat, dark edge pixel 0.24); without the correlation it is flat. 0/False = original.
+        self.bkg_noise_edge_fix = bool(bkg_noise_edge_fix)
         self.ring_x_share = None if ring_x_share is None else np.asarray(ring_x_share, float) / float(np.sum(ring_x_share))
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
@@ -635,8 +638,15 @@ class RealBkgSimulation:
         sc = sq*self.bkg_noise_aniso
         b = np.asarray(bkg, np.float32)
         m = np.asarray(mask, bool)
-        fine = b - cv2.GaussianBlur(b, (0, 0), 6.0)
-        sm = cv2.GaussianBlur(fine, (0, 0), sigmaX=max(sq, 0.05), sigmaY=max(sc, 0.05))
+        if self.bkg_noise_edge_fix and m.any():
+            mf = m.astype(np.float32)
+            def nblur(x, sx, sy):
+                return cv2.GaussianBlur(x*mf, (0, 0), sigmaX=sx, sigmaY=sy)/np.maximum(cv2.GaussianBlur(mf, (0, 0), sigmaX=sx, sigmaY=sy), 1e-3)
+            fine = np.where(m, b - nblur(b, 6.0, 6.0), 0.0).astype(np.float32)
+            sm = np.where(m, nblur(fine, max(sq, 0.05), max(sc, 0.05)), 0.0).astype(np.float32)
+        else:
+            fine = b - cv2.GaussianBlur(b, (0, 0), 6.0)
+            sm = cv2.GaussianBlur(fine, (0, 0), sigmaX=max(sq, 0.05), sigmaY=max(sc, 0.05))
         if m.any():
             sm = sm*(float(fine[m].std())/max(float(sm[m].std()), 1e-9))
         out = np.where(m, np.maximum(b - fine + sm, 0.0), 0.0)
