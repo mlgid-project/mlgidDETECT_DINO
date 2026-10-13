@@ -1,0 +1,44 @@
+
+===== hm (heatmap) /mnt/lustre/work/schreiber/szb389/datasets/DINO_HEATMAP/hm_simmim_frozen_ridge_realsimE7_tf32_seed42_2.80_1.30/final_checkpoint.pth
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP/heatmap/evaluate.py:33: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  ck = torch.load(ckpt, map_location='cpu')
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/functional.py:534: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3595.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+  load: []
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP/heatmap/evaluate.py:40: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  bb = torch.load(os.environ.get('HM_BB_PATH', a['bb_path']), map_location='cpu')
+  backbone: _IncompatibleKeys(missing_keys=['norm0.weight', 'norm0.bias'], unexpected_keys=[])
+  [hm (native)] organic: ap_total 0.5380 (AP by GT confidence: high 0.712 / med 0.510 / low 0.316)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.388 recall 0.508 FP/GT 0.20; fp<=0.1/GT: score>=0.472 recall 0.426 FP/GT 0.10; high_recall>=95: score>=0.105 recall 0.674 FP/GT 1.15
+    score>0.1: recall 0.674 (seg 0.672, ring 0.733) precision 0.362 preds 1524 FP 973
+      recall by NN Euclid dist  <5:0.455(n=121) 5-10:0.471(n=85) >10:0.747(n=581)
+      recall by same-radius chi-gap  <5:0.469(n=128) 5-10:0.531(n=49) >10:0.715(n=527)
+    score>0.3: recall 0.596 (seg 0.597, ring 0.567) precision 0.627 preds 777 FP 290
+      recall by NN Euclid dist  <5:0.438(n=121) 5-10:0.412(n=85) >10:0.657(n=581)
+      recall by same-radius chi-gap  <5:0.438(n=128) 5-10:0.449(n=49) >10:0.636(n=527)
+  [hm+nms] organic: ap_total 0.5581 (AP by GT confidence: high 0.738 / med 0.528 / low 0.328)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.369 recall 0.524 FP/GT 0.20; fp<=0.1/GT: score>=0.457 recall 0.442 FP/GT 0.10; high_recall>=95: score>=0.103 recall 0.667 FP/GT 0.81
+    score>0.1: recall 0.667 (seg 0.666, ring 0.700) precision 0.449 preds 1215 FP 670
+      recall by NN Euclid dist  <5:0.446(n=121) 5-10:0.459(n=85) >10:0.742(n=581)
+      recall by same-radius chi-gap  <5:0.461(n=128) 5-10:0.531(n=49) >10:0.708(n=527)
+    score>0.3: recall 0.594 (seg 0.595, ring 0.567) precision 0.658 preds 737 FP 252
+      recall by NN Euclid dist  <5:0.430(n=121) 5-10:0.412(n=85) >10:0.656(n=581)
+      recall by same-radius chi-gap  <5:0.430(n=128) 5-10:0.449(n=49) >10:0.634(n=527)
+  [hm (native)] 41: ap_total 0.4237 (AP by GT confidence: high 0.478 / med 0.481 / low 0.333)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.442 recall 0.392 FP/GT 0.34; fp<=0.1/GT: score>=0.592 recall 0.217 FP/GT 0.10; high_recall>=95: score>=0.117 recall 0.828 FP/GT 3.15
+    score>0.1: recall 0.860 (seg 0.806, ring 0.937) precision 0.203 preds 7114 FP 5669
+      recall by NN Euclid dist  <5:0.425(n=73) 5-10:0.694(n=62) >10:0.848(n=846)
+      recall by same-radius chi-gap  <5:0.000(n=2) 5-10:0.500(n=4) >10:0.849(n=550)
+    score>0.3: recall 0.691 (seg 0.688, ring 0.695) precision 0.514 preds 2260 FP 1099
+      recall by NN Euclid dist  <5:0.425(n=73) 5-10:0.597(n=62) >10:0.719(n=846)
+      recall by same-radius chi-gap  <5:0.000(n=2) 5-10:0.250(n=4) >10:0.725(n=550)
+  [hm+nms] 41: ap_total 0.5500 (AP by GT confidence: high 0.623 / med 0.622 / low 0.431)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.346 recall 0.541 FP/GT 0.46; fp<=0.1/GT: score>=0.545 recall 0.307 FP/GT 0.10; high_recall>=95: score>=0.124 recall 0.835 FP/GT 1.61
+    score>0.1: recall 0.857 (seg 0.804, ring 0.932) precision 0.331 preds 4344 FP 2904
+      recall by NN Euclid dist  <5:0.425(n=73) 5-10:0.694(n=62) >10:0.845(n=846)
+      recall by same-radius chi-gap  <5:0.000(n=2) 5-10:0.500(n=4) >10:0.845(n=550)
+    score>0.3: recall 0.689 (seg 0.687, ring 0.691) precision 0.581 preds 1990 FP 833
+      recall by NN Euclid dist  <5:0.425(n=73) 5-10:0.597(n=62) >10:0.717(n=846)
+      recall by same-radius chi-gap  <5:0.000(n=2) 5-10:0.250(n=4) >10:0.724(n=550)
