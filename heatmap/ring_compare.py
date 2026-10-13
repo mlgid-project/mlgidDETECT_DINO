@@ -20,6 +20,9 @@ import numpy as np
 from heatmap import evaluation as E
 
 
+LABS = (('amp', 'amplitude (0-1 image units)'), ('fwhm', 'FWHM px'), ('sd', 'flank noise sd'), ('cv', 'chi variation cv'), ('snr', 'integrated snr'), ('gap', 'gap to nearest ring px'), ('w', 'box width px'), ('h', 'box height px'))
+
+
 def ring_stats(f):
     img = np.asarray(f['img'], np.float32); mask = np.asarray(f['mask'], bool)
     gt = np.asarray(f['gt'], np.float32).reshape(-1, 4)
@@ -41,7 +44,7 @@ def ring_stats(f):
         flank = np.r_[prof[:16], prof[-16:]]
         base = np.nanmedian(flank); amp = float(np.nanmax(prof[36:45]) - base)
         if amp <= 0:
-            out.append(dict(amp=amp, fwhm=np.nan, sd=np.nan, cv=np.nan, snr=np.nan, gap=np.nan, w=b[2] - b[0], h=b[3] - b[1])); continue
+            out.append(dict(xc=xc, amp=amp, fwhm=np.nan, sd=np.nan, cv=np.nan, snr=np.nan, gap=np.nan, w=b[2] - b[0], h=b[3] - b[1])); continue
         half = base + amp / 2; pk = 36 + int(np.nanargmax(prof[36:45]))
         l = pk
         while l > 0 and prof[l] > half: l -= 1
@@ -54,12 +57,12 @@ def ring_stats(f):
         cv = float(blk.std() / max(abs(blk.mean()), 1e-6)) if n8 >= 4 else np.nan
         others = np.delete(xs, np.searchsorted(xs, (b[0] + b[2]) / 2)) if len(xs) > 1 else np.array([])
         gap = float(np.min(np.abs(others - (b[0] + b[2]) / 2))) if len(others) else np.nan
-        out.append(dict(amp=amp, fwhm=float(r - l), sd=sd, cv=cv, snr=amp / max(sd / np.sqrt(rows.sum()), 1e-6), gap=gap, w=float(b[2] - b[0]), h=float(b[3] - b[1])))
+        out.append(dict(xc=xc, amp=amp, fwhm=float(r - l), sd=sd, cv=cv, snr=amp / max(sd / np.sqrt(rows.sum()), 1e-6), gap=gap, w=float(b[2] - b[0]), h=float(b[3] - b[1])))
     return out
 
 
 def main():
-    p = argparse.ArgumentParser(); p.add_argument('src', nargs='+'); p.add_argument('--max_frames', type=int, default=60)
+    p = argparse.ArgumentParser(); p.add_argument('src', nargs='+'); p.add_argument('--max_frames', type=int, default=60); p.add_argument('--x_split', type=float, default=0, help='if > 0: print the statistics separately for rings left / right of this q column')
     a = p.parse_args()
     cache = {}
     for s in a.src:
@@ -68,11 +71,13 @@ def main():
             cache[path] = pickle.load(open(path, 'rb'))
         frames = cache[path]['sets'][ds][:a.max_frames]
         R = [r for f in frames for r in ring_stats(f)]
-        print(f'\n== {name}: {len(R)} rings in {len(frames)} frames')
-        for k, lab in (('amp', 'amplitude (0-1 image units)'), ('fwhm', 'FWHM px'), ('sd', 'flank noise sd'), ('cv', 'chi variation cv'), ('snr', 'integrated snr'), ('gap', 'gap to nearest ring px'), ('w', 'box width px'), ('h', 'box height px')):
-            v = np.array([r[k] for r in R], float); v = v[np.isfinite(v)]
-            if len(v):
-                print(f'  {lab:30s} p25 {np.percentile(v, 25):8.3f}  median {np.median(v):8.3f}  p75 {np.percentile(v, 75):8.3f}')
+        groups = [('all', R)] if a.x_split <= 0 else [('all', R), (f'x < {a.x_split:g}', [r for r in R if r['xc'] < a.x_split]), (f'x >= {a.x_split:g}', [r for r in R if r['xc'] >= a.x_split])]
+        for gname, RR in groups:
+            print(f'\n== {name} [{gname}]: {len(RR)} rings in {len(frames)} frames')
+            for k, lab in LABS:
+                v = np.array([r[k] for r in RR], float); v = v[np.isfinite(v)]
+                if len(v):
+                    print(f'  {lab:30s} p25 {np.percentile(v, 25):8.3f}  median {np.median(v):8.3f}  p75 {np.percentile(v, 75):8.3f}')
 
 
 if __name__ == '__main__':
