@@ -30,7 +30,9 @@ LABELS = [  # run-dir tag -> readable name, in reading order (unknown runs are a
     ('hm_simmim_UNFROZEN_ridge_long_tf32_seed1_bblr4e-5', 'unfrozen 120 ep, bblr 4e-5, seed 1'),
     ('hm_simmim_UNFROZEN_ridge_long_tf32_seed2_bblr4e-5', 'unfrozen 120 ep, bblr 4e-5, seed 2'),
     ('hm_simmim_UNFROZEN_ridge_long_tf32_seed3_bblr4e-5', 'unfrozen 120 ep, bblr 4e-5, seed 3'),
-    ('ridge_realsimE1b_tf32_seed42', 'realsim E1b (E1 + correlated bkg noise, galvani)')]
+    ('ridge_realsimE1b_tf32_seed42', 'realsim E1b (E1 + correlated bkg noise, galvani)'),
+    ('ridge_realsimE5_tf32_seed42', 'realsim E5 (E1b + 4 low-q masks + ring_x_share), seed 42, galvani'),
+    ('ridge_realsimE5_tf32_seed2', 'realsim E5, seed 2, colorbox'), ('ridge_realsimE5_tf32_seed3', 'realsim E5, seed 3, colorbox')]
 NAME = dict(LABELS)
 REPLICATES = [  # recipes run more than once: (group label, run tags); only runs that exist and have an evaluation are used
     ('Plain recipe, frozen SimMIM (bs 4 x 250, 60 ep, TF32)', ['ridge_he_tf32', 'ridge_he_tf32_seed1', 'ridge_he_tf32_seed2']),
@@ -38,7 +40,8 @@ REPLICATES = [  # recipes run more than once: (group label, run tags); only runs
     ('Run B, boxconv1 backbone frozen (bs 4 x 250, 60 ep)', ['hm_boxconv1_frozen_ridge_tf32', 'hm_boxconv1_frozen_ridge_tf32_seed1', 'hm_boxconv1_frozen_ridge_tf32_seed2', 'hm_boxconv1_frozen_ridge_tf32_seed3']),
     ('Unfrozen swin (bs 4 x 250, 60 ep, colorbox)', ['hm_simmim_unfrozen_ridge_he_tf32_seed1', 'hm_simmim_unfrozen_ridge_he_tf32_seed2']),
     ('Unfrozen swin (bs 8 x 125, 120 ep, galvani)', ['hm_simmim_UNFROZEN_ridge_long_tf32', 'hm_simmim_UNFROZEN_ridge_long_tf32_seed1', 'hm_simmim_UNFROZEN_ridge_long_tf32_seed2']),
-    ('Unfrozen swin (bs 8 x 125, 120 ep, galvani), backbone lr 4e-5', ['hm_simmim_UNFROZEN_ridge_long_tf32_seed1_bblr4e-5', 'hm_simmim_UNFROZEN_ridge_long_tf32_seed2_bblr4e-5', 'hm_simmim_UNFROZEN_ridge_long_tf32_seed3_bblr4e-5'])]
+    ('Unfrozen swin (bs 8 x 125, 120 ep, galvani), backbone lr 4e-5', ['hm_simmim_UNFROZEN_ridge_long_tf32_seed1_bblr4e-5', 'hm_simmim_UNFROZEN_ridge_long_tf32_seed2_bblr4e-5', 'hm_simmim_UNFROZEN_ridge_long_tf32_seed3_bblr4e-5']),
+    ('Realsim E5 (E1b + 4 low-q masks + ring_x_share; plain recipe)', ['ridge_realsimE5_tf32_seed42', 'ridge_realsimE5_tf32_seed2', 'ridge_realsimE5_tf32_seed3'])]
 NAME = dict(LABELS)
 DINO = [('DINO ssl1', '0.568', '0.744', '0.372', '0.370'), ('DINO lr 4e-5', '0.622', '0.763', '0.388', '0.397'),
         ('DINO boxconv1', '0.588', '0.752', '0.339', '0.370')]
