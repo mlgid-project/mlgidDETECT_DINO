@@ -1,0 +1,34 @@
+  ck = torch.load(ckpt, map_location='cpu')
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+  bb = torch.load(os.environ.get('HM_BB_PATH', a['bb_path']), map_location='cpu')
+################ hm_simmim_frozen_ridge_realsimE9_tf32_seed42_2.80_1.30 (epoch 59)  score > 0.3
+== 41: 1680 GT (696 ring, 984 segment)
+  hit rate: all 0.738 | rings 0.767 | segments 0.716 | segments on a ring 0.777 (n=229) | isolated segments 0.698
+  median score of the matched predictions: rings 0.49, segments 0.55
+  SEGMENT hit rate by box width px:  [0.276,2.48] n=246 hit 0.56 | [2.48,4.65] n=246 hit 0.74 | [4.65,7.05] n=246 hit 0.81 | [7.05,26.2] n=246 hit 0.76
+  SEGMENT hit rate by box height px:  [2.32,15.3] n=246 hit 0.53 | [15.3,34.7] n=246 hit 0.80 | [34.7,73.4] n=246 hit 0.82 | [73.4,355] n=246 hit 0.72
+  SEGMENT hit rate by q column:  [36.5,324] n=246 hit 0.72 | [324,473] n=246 hit 0.73 | [473,621] n=246 hit 0.68 | [621,928] n=246 hit 0.74
+  SEGMENT hit rate by chi row:  [2.45,130] n=246 hit 0.74 | [130,243] n=246 hit 0.74 | [243,371] n=246 hit 0.74 | [371,502] n=246 hit 0.64
+  SEGMENT hit rate by contrast (sd of the annulus):  [-0.44,0.581] n=246 hit 0.57 | [0.581,0.86] n=246 hit 0.74 | [0.86,1.21] n=246 hit 0.75 | [1.21,5.32] n=246 hit 0.80
+  SEGMENT hit rate by GT centres within 40 px:  [0,1] n=331 hit 0.76 | [1,2] n=267 hit 0.71 | [2,7] n=386 hit 0.69
+  SEGMENT hit rate by px to nearest invalid pixel:  [0,48.7] n=246 hit 0.67 | [48.7,119] n=246 hit 0.73 | [119,202] n=246 hit 0.76 | [202,491] n=246 hit 0.72
+  RING hit rate by contrast:  [-1.36,0.389] n=174 hit 0.75 | [0.389,0.657] n=174 hit 0.79 | [0.657,0.938] n=174 hit 0.78 | [0.938,3.95] n=174 hit 0.75
+  RING hit rate by q column:  [75,366] n=174 hit 0.83 | [366,571] n=174 hit 0.91 | [571,781] n=174 hit 0.75 | [781,1.01e+03] n=174 hit 0.57
+  RING hit rate by box width px:  [0.538,5.04] n=174 hit 0.79 | [5.04,7.62] n=174 hit 0.84 | [7.62,10.7] n=174 hit 0.81 | [10.7,65.3] n=174 hit 0.63
+  false positives per frame (41 frames):  cls ring, elsewhere: 3.3 | cls ring, near a GT peak (<8 px): 0.3 | cls ring, on a GT ring column: 1.0 | cls segment, elsewhere: 6.1 | cls segment, near a GT peak (<8 px): 0.6 | cls segment, on a GT ring column: 3.2
+  per-frame recall (worst 8): f40:0.32 (n=19, rings 18), f29:0.49 (n=39, rings 21), f26:0.50 (n=2, rings 2), f1:0.52 (n=67, rings 13), f25:0.60 (n=60, rings 15), f22:0.61 (n=41, rings 14), f39:0.61 (n=36, rings 29), f2:0.62 (n=141, rings 10)
+  per-frame recall (best 5):  f32:0.90 (n=73, rings 24), f27:0.92 (n=26, rings 16), f14:0.93 (n=27, rings 24), f20:0.95 (n=22, rings 7), f7:1.00 (n=1, rings 1)
+== organic: 817 GT (30 ring, 787 segment)
+  hit rate: all 0.646 | rings 0.600 | segments 0.648 | segments on a ring nan (n=0) | isolated segments 0.648
+  median score of the matched predictions: rings 0.64, segments 0.56
+  SEGMENT hit rate by box width px:  [0.94,7.32] n=197 hit 0.54 | [7.32,10.5] n=196 hit 0.69 | [10.5,15] n=197 hit 0.69 | [15,70.1] n=197 hit 0.67
+  SEGMENT hit rate by box height px:  [1.24,3.99] n=197 hit 0.53 | [3.99,8.15] n=196 hit 0.70 | [8.15,14.8] n=197 hit 0.70 | [14.8,238] n=197 hit 0.67
+  SEGMENT hit rate by q column:  [72.7,416] n=197 hit 0.72 | [416,572] n=196 hit 0.67 | [572,701] n=197 hit 0.66 | [701,1e+03] n=197 hit 0.54
+  SEGMENT hit rate by chi row:  [0,120] n=197 hit 0.66 | [120,218] n=196 hit 0.62 | [218,306] n=197 hit 0.60 | [306,505] n=197 hit 0.70
+  SEGMENT hit rate by contrast (sd of the annulus):  [-0.805,0.53] n=197 hit 0.40 | [0.53,0.839] n=196 hit 0.62 | [0.839,1.17] n=197 hit 0.78 | [1.17,2.78] n=197 hit 0.79
+  SEGMENT hit rate by GT centres within 40 px:  [0,1] n=140 hit 0.76 | [1,2] n=140 hit 0.72 | [2,5] n=301 hit 0.67 | [5,16] n=206 hit 0.48
+  SEGMENT hit rate by px to nearest invalid pixel:  [0,9.85] n=193 hit 0.59 | [9.85,21.8] n=200 hit 0.64 | [21.8,38.9] n=197 hit 0.68 | [38.9,98.6] n=197 hit 0.69
+  RING hit rate by contrast:  [-0.0266,0.159] n=8 hit 0.38 | [0.159,0.3] n=7 hit 0.57 | [0.3,0.563] n=7 hit 0.43 | [0.563,0.973] n=8 hit 1.00
+  RING hit rate by q column:  [96.2,285] n=8 hit 0.62 | [285,442] n=7 hit 0.86 | [442,698] n=7 hit 0.71 | [698,1.01e+03] n=8 hit 0.25
+  RING hit rate by box width px:  [1.72,7.82] n=8 hit 0.62 | [7.82,11.5] n=7 hit 0.86 | [11.5,27.2] n=7 hit 0.71 | [27.2,92.6] n=8 hit 0.25
+  false positives per frame (8 frames):  cls ring, elsewhere: 1.9 | cls ring, near a GT peak (<8 px): 0.5 | cls ring, on a GT ring column: 0.6 | cls segment, elsewhere: 12.9 | cls segment, near a GT peak (<8 px): 3.5 | cls segment, on a GT ring column: 0.8
