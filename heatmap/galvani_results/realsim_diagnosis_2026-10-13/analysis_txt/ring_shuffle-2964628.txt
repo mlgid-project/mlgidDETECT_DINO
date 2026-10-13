@@ -1,0 +1,45 @@
+== real41 [all]: 669 rings in 41 frames
+  amplitude (0-1 image units)    p25    0.077  median    0.205  p75    0.348
+  flank noise sd                 p25    0.185  median    0.221  p75    0.256
+  chi variation cv               p25    0.109  median    0.180  p75    0.254
+  integrated snr                 p25    9.869  median   20.055  p75   33.099
+== real41 [x < 781]: 522 rings in 41 frames
+  amplitude (0-1 image units)    p25    0.077  median    0.197  p75    0.339
+  flank noise sd                 p25    0.191  median    0.231  p75    0.260
+  chi variation cv               p25    0.144  median    0.205  p75    0.280
+  integrated snr                 p25   10.492  median   22.127  p75   33.752
+== real41 [x >= 781]: 147 rings in 41 frames
+  amplitude (0-1 image units)    p25    0.077  median    0.234  p75    0.390
+  flank noise sd                 p25    0.173  median    0.198  p75    0.221
+  chi variation cv               p25    0.031  median    0.066  p75    0.114
+  integrated snr                 p25    6.814  median   13.832  p75   26.887
+== shuf0.5 [all]: 2497 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.085  median    0.209  p75    0.377
+  flank noise sd                 p25    0.186  median    0.237  p75    0.269
+  chi variation cv               p25    0.069  median    0.134  p75    0.246
+  integrated snr                 p25    9.521  median   21.198  p75   34.101
+== shuf0.5 [x < 781]: 2049 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.097  median    0.228  p75    0.380
+  flank noise sd                 p25    0.208  median    0.245  p75    0.272
+  chi variation cv               p25    0.065  median    0.125  p75    0.227
+  integrated snr                 p25   10.332  median   22.445  p75   34.377
+== shuf0.5 [x >= 781]: 448 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.041  median    0.137  p75    0.339
+  flank noise sd                 p25    0.057  median    0.132  p75    0.229
+  chi variation cv               p25    0.099  median    0.204  p75    0.381
+  integrated snr                 p25    6.920  median   14.764  p75   27.930
+== shuf1.0 [all]: 2342 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.039  median    0.122  p75    0.246
+  flank noise sd                 p25    0.116  median    0.184  p75    0.240
+  chi variation cv               p25    0.092  median    0.175  p75    0.308
+  integrated snr                 p25    7.626  median   17.500  p75   31.196
+== shuf1.0 [x < 781]: 1957 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.049  median    0.133  p75    0.259
+  flank noise sd                 p25    0.135  median    0.196  p75    0.246
+  chi variation cv               p25    0.086  median    0.160  p75    0.281
+  integrated snr                 p25    8.220  median   18.214  p75   31.179
+== shuf1.0 [x >= 781]: 385 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.006  median    0.052  p75    0.184
+  flank noise sd                 p25    0.020  median    0.070  p75    0.160
+  chi variation cv               p25    0.163  median    0.301  p75    0.609
+  integrated snr                 p25    5.113  median   12.668  p75   31.412

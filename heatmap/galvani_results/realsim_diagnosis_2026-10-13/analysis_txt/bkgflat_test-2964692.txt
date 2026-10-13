@@ -1,0 +1,25 @@
+== real41: 41 frames; bins of 128 px along q
+   bin start           0    128    256    384    512    640    768    896
+   mean value      0.333  0.424  0.517  0.683  0.595  0.428  0.401  0.352
+   local noise sd  0.111  0.137  0.133  0.120  0.127  0.130  0.129  0.138
+   invalid share   0.009  0.021  0.040  0.058  0.078  0.219  0.632  0.917
+== flat: 150 frames; bins of 128 px along q
+   bin start           0    128    256    384    512    640    768    896
+   mean value      0.390  0.440  0.471  0.518  0.509  0.515  0.512  0.491
+   local noise sd  0.162  0.161  0.163  0.158  0.160  0.162  0.167  0.172
+   invalid share   0.185  0.078  0.094  0.097  0.120  0.168  0.611  0.897
+== real41 [x >= 781]: 147 rings in 41 frames
+  amplitude (0-1 image units)    p25    0.077  median    0.234  p75    0.390
+  flank noise sd                 p25    0.173  median    0.198  p75    0.221
+  chi variation cv               p25    0.031  median    0.066  p75    0.114
+  integrated snr                 p25    6.814  median   13.832  p75   26.887
+== flat [x >= 781]: 425 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.118  median    0.226  p75    0.396
+  flank noise sd                 p25    0.215  median    0.251  p75    0.285
+  chi variation cv               p25    0.036  median    0.082  p75    0.159
+  integrated snr                 p25    6.242  median   11.977  p75   19.243
+== flatshuf [x >= 781]: 394 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.120  median    0.219  p75    0.385
+  flank noise sd                 p25    0.212  median    0.249  p75    0.275
+  chi variation cv               p25    0.039  median    0.085  p75    0.148
+  integrated snr                 p25    6.350  median   10.673  p75   17.722

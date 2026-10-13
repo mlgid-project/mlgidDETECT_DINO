@@ -1,0 +1,81 @@
+== real41 [all]: 669 rings in 41 frames
+  amplitude (0-1 image units)    p25    0.077  median    0.205  p75    0.348
+  FWHM px                        p25    8.000  median   12.000  p75   19.000
+  flank noise sd                 p25    0.185  median    0.221  p75    0.256
+  chi variation cv               p25    0.109  median    0.180  p75    0.254
+  integrated snr                 p25    9.869  median   20.055  p75   33.099
+  gap to nearest ring px         p25   16.935  median   27.637  p75   47.717
+  box width px                   p25    4.973  median    7.463  p75   10.420
+  box height px                  p25  303.279  median  449.820  p75  466.380
+== real41 [x < 781]: 522 rings in 41 frames
+  amplitude (0-1 image units)    p25    0.077  median    0.197  p75    0.339
+  FWHM px                        p25    7.000  median   12.000  p75   19.000
+  flank noise sd                 p25    0.191  median    0.231  p75    0.260
+  chi variation cv               p25    0.144  median    0.205  p75    0.280
+  integrated snr                 p25   10.492  median   22.127  p75   33.752
+  gap to nearest ring px         p25   16.253  median   24.787  p75   53.459
+  box width px                   p25    4.495  median    6.708  p75    9.478
+  box height px                  p25  433.733  median  457.034  p75  470.500
+== real41 [x >= 781]: 147 rings in 41 frames
+  amplitude (0-1 image units)    p25    0.077  median    0.234  p75    0.390
+  FWHM px                        p25    8.000  median   11.000  p75   16.000
+  flank noise sd                 p25    0.173  median    0.198  p75    0.221
+  chi variation cv               p25    0.031  median    0.066  p75    0.114
+  integrated snr                 p25    6.814  median   13.832  p75   26.887
+  gap to nearest ring px         p25   20.793  median   37.961  p75   45.205
+  box width px                   p25    7.974  median    9.728  p75   13.078
+  box height px                  p25   69.622  median  123.856  p75  194.877
+== legacysim [all]: 1989 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.012  median    0.108  p75    0.315
+  FWHM px                        p25    9.000  median   13.000  p75   24.000
+  flank noise sd                 p25    0.080  median    0.137  p75    0.239
+  chi variation cv               p25    0.009  median    0.018  p75    0.045
+  integrated snr                 p25    8.565  median   21.612  p75   43.410
+  gap to nearest ring px         p25   14.174  median   18.104  p75   26.442
+  box width px                   p25    5.720  median    6.708  p75    8.719
+  box height px                  p25  189.481  median  362.141  p75  511.000
+== legacysim [x < 781]: 1592 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.011  median    0.114  p75    0.319
+  FWHM px                        p25    9.000  median   13.000  p75   24.000
+  flank noise sd                 p25    0.086  median    0.140  p75    0.239
+  chi variation cv               p25    0.010  median    0.021  p75    0.048
+  integrated snr                 p25    9.360  median   22.585  p75   45.532
+  gap to nearest ring px         p25   14.226  median   18.113  p75   26.231
+  box width px                   p25    5.720  median    6.673  p75    8.688
+  box height px                  p25  253.990  median  391.701  p75  511.000
+== legacysim [x >= 781]: 397 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.015  median    0.086  p75    0.293
+  FWHM px                        p25   10.000  median   15.000  p75   25.000
+  flank noise sd                 p25    0.065  median    0.115  p75    0.236
+  chi variation cv               p25    0.007  median    0.012  p75    0.034
+  integrated snr                 p25    6.781  median   14.936  p75   33.853
+  gap to nearest ring px         p25   13.932  median   18.092  p75   27.181
+  box width px                   p25    5.789  median    6.881  p75    8.961
+  box height px                  p25   96.738  median  156.371  p75  511.000
+== realsimE6 [all]: 2315 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.046  median    0.137  p75    0.277
+  FWHM px                        p25    5.000  median    8.000  p75   14.000
+  flank noise sd                 p25    0.121  median    0.197  p75    0.245
+  chi variation cv               p25    0.082  median    0.156  p75    0.286
+  integrated snr                 p25    8.675  median   18.987  p75   30.826
+  gap to nearest ring px         p25   11.261  median   19.080  p75   33.444
+  box width px                   p25    3.955  median    6.522  p75   10.821
+  box height px                  p25  458.500  median  486.000  p75  496.000
+== realsimE6 [x < 781]: 1958 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.056  median    0.145  p75    0.277
+  FWHM px                        p25    5.000  median    8.000  p75   14.000
+  flank noise sd                 p25    0.141  median    0.208  p75    0.250
+  chi variation cv               p25    0.078  median    0.145  p75    0.260
+  integrated snr                 p25    9.120  median   19.213  p75   30.396
+  gap to nearest ring px         p25   10.468  median   17.611  p75   30.687
+  box width px                   p25    3.759  median    6.070  p75    9.649
+  box height px                  p25  481.000  median  490.000  p75  498.000
+== realsimE6 [x >= 781]: 357 rings in 150 frames
+  amplitude (0-1 image units)    p25    0.009  median    0.071  p75    0.271
+  FWHM px                        p25    5.000  median    8.000  p75   14.000
+  flank noise sd                 p25    0.026  median    0.086  p75    0.161
+  chi variation cv               p25    0.118  median    0.227  p75    0.499
+  integrated snr                 p25    6.512  median   16.924  p75   37.159
+  gap to nearest ring px         p25   18.369  median   29.582  p75   48.238
+  box width px                   p25    6.327  median   10.109  p75   15.573
+  box height px                  p25   96.000  median  148.000  p75  203.000
