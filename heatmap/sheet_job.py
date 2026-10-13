@@ -27,6 +27,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--out', required=True); p.add_argument('--cfg', action='append', required=True); p.add_argument('--real_frames', type=int, nargs='+', default=[30, 23, 15, 34, 12, 20])
     p.add_argument('--n', type=int, default=6); p.add_argument('--seed', type=int, default=5); p.add_argument('--scale', type=float, default=0.5); p.add_argument('--preset', default='r6')
+    p.add_argument('--init', default='', help="constructor options that cannot be set afterwards, e.g. \"mask_keep=[0,3,6,7]\"")
     a = p.parse_args()
     import random
     os.makedirs(a.out, exist_ok=True)
@@ -39,7 +40,8 @@ def main():
             real.append((i, np.asarray(ic.converted_polar_image[0, 0], np.float32), mask, gt, E.is_ring_geom(gt, mask) if len(gt) else np.zeros(0, bool)))
     real.sort(key=lambda r: a.real_frames.index(r[0]))
     from realsim.factory import make_realbkg_sim
-    sim = make_realbkg_sim(device='cuda', preset=a.preset)
+    init = {k: ast.literal_eval(v) for k, v in (x.split('=', 1) for x in a.init.split(';') if x)}
+    sim = make_realbkg_sim(device='cuda', preset=a.preset, overrides=init)
     base = {k: copy.deepcopy(getattr(sim, k)) for k in dir(sim) if not k.startswith('_') and isinstance(getattr(sim, k), (int, float, str, bool, tuple, type(None), dict)) and k not in ('device',)}
     for spec in a.cfg:
         name, _, kv = spec.partition(':')

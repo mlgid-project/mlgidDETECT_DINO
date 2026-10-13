@@ -33,6 +33,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--dump', required=True); p.add_argument('--n', type=int, default=150); p.add_argument('--cfg', action='append', required=True)
     p.add_argument('--seed', type=int, default=5); p.add_argument('--preset', default='r6')
+    p.add_argument('--init', default='', help="constructor options that cannot be set afterwards, e.g. \"mask_keep=[0,3,6,7]\"")
     a = p.parse_args()
     d = pickle.load(open(a.dump, 'rb'))['sets']['41']
     W, XC, H, nr, ns = [], [], [], 0, 0
@@ -45,7 +46,8 @@ def main():
         nr += int(ring.sum()); ns += int((~ring).sum())
     report('real 41 GT', np.array(W), np.array(XC), np.array(H), nr, ns, len(d))
     from realsim.factory import make_realbkg_sim
-    sim = make_realbkg_sim(device='cuda', preset=a.preset)
+    init = {k: ast.literal_eval(v) for k, v in (x.split('=', 1) for x in a.init.split(';') if x)}
+    sim = make_realbkg_sim(device='cuda', preset=a.preset, overrides=init)
     base = {k: copy.deepcopy(getattr(sim, k)) for k in dir(sim) if not k.startswith('_') and isinstance(getattr(sim, k), (int, float, str, bool, tuple, type(None), dict)) and k not in ('device',)}
     for spec in a.cfg:
         name, _, kv = spec.partition(':')
