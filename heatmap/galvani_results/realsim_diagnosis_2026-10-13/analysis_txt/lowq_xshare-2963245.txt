@@ -1,0 +1,16 @@
+git: heatmap 8eb4191
+== E1b_lowq_xshare: 150 frames, rings/frame 16.2, segments/frame 12.9
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.8     5.3     8.1    12.6    23.3
+   ring centre q column           163.3   339.0   522.3   712.5   927.6
+   ring box height px              79.7   436.0   485.0   495.0   505.0
+   rings with q column    0- 200:  1.52 per frame, median width   8.5
+   rings with q column  200- 400:  3.82 per frame, median width   8.1
+   rings with q column  400- 600:  4.43 per frame, median width   7.8
+   rings with q column  600- 800:  3.73 per frame, median width   8.1
+   rings with q column  800-1100:  2.73 per frame, median width   8.4
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 4 of 13 detector geometries, q_max 3.61-4.03, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+[realsim] real-background sim ON (r6 settings, overrides {'mask_keep': [0, 3, 6, 7], 'ring_x_share': (0.106, 0.179, 0.257, 0.238, 0.22)}), box convention a_coef,w_coef = (2.8, 1.3)
+wrote sheet_E1b_lowq_xshare.png ((1536, 1024, 3)) boxes/frame 26.8 rings/frame 14.2

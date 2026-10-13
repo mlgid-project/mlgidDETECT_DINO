@@ -1,0 +1,16 @@
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+[realsim] real-background sim ON (r6 settings, overrides {}), box convention a_coef,w_coef = (2.8, 1.3)
+58459 powder entries, 675474 oriented entries
+frame q_max (donor frames): quantiles 5/25/50/75/95 %:    3.61    3.61    3.61    3.61    3.61
+entry q min   (A^-1)  5/25/50/75/95 %:    0.31    0.40    0.48    0.56    0.69
+entry q max   (A^-1)  5/25/50/75/95 %:    3.96    4.27    4.65    4.88    4.94
+entry reflections     5/25/50/75/95 %:   47.00   65.00   81.00   99.00  122.00
+ring x position (px)  5/25/50/75/95 %:  198.85  361.91  518.48  703.96  931.06
+  share of rings with x    0- 200: 0.051
+  share of rings with x  200- 400: 0.259
+  share of rings with x  400- 600: 0.309
+  share of rings with x  600- 800: 0.230
+  share of rings with x  800-1100: 0.151
+real 41 for comparison (ring centres): median 571, shares  0-200 0.106 | 200-400 0.179 | 400-600 0.257 | 600-800 0.238 | 800+ 0.218

@@ -1,0 +1,16 @@
+git: heatmap 6f025af
+== E1b_lowq_masks: 150 frames, rings/frame 17.0, segments/frame 13.8
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.5     4.7     7.3    11.1    21.4
+   ring centre q column           184.6   332.1   487.1   666.1   904.1
+   ring box height px             103.0   476.0   487.0   496.0   504.0
+   rings with q column    0- 200:  1.17 per frame, median width   6.5
+   rings with q column  200- 400:  5.01 per frame, median width   7.1
+   rings with q column  400- 600:  5.11 per frame, median width   7.2
+   rings with q column  600- 800:  3.58 per frame, median width   7.4
+   rings with q column  800-1100:  2.11 per frame, median width   7.9
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 4 of 13 detector geometries, q_max 3.61-4.03, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+[realsim] real-background sim ON (r6 settings, overrides {'mask_keep': [0, 3, 6, 7]}), box convention a_coef,w_coef = (2.8, 1.3)
+wrote sheet_E1b_lowq.png ((1536, 1024, 3)) boxes/frame 33.3 rings/frame 16.2

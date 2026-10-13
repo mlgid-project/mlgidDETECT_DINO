@@ -1,0 +1,27 @@
+git: heatmap 74ef917
+
+== real 41 GT: 41 frames, rings/frame 17.0, segments/frame 24.0
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.6     5.0     7.6    10.7    17.7
+   ring centre q column           121.9   365.8   571.4   780.7   949.7
+   ring box height px              51.0   261.4   446.7   466.1   488.2
+   rings with q column    0- 200:  1.80 per frame, median width   7.7
+   rings with q column  200- 400:  3.05 per frame, median width   4.9
+   rings with q column  400- 600:  4.37 per frame, median width   6.4
+   rings with q column  600- 800:  4.05 per frame, median width   8.0
+   rings with q column  800-1100:  3.71 per frame, median width  11.1
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+[realsim] real-background sim ON (r6 settings, overrides {}), box convention a_coef,w_coef = (2.8, 1.3)
+
+== E1b: 150 frames, rings/frame 13.9, segments/frame 14.3
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.7     5.0     7.5    11.7    21.2
+   ring centre q column           144.2   274.6   406.6   581.6   854.2
+   ring box height px             165.6   421.0   480.0   493.0   503.0
+   rings with q column    0- 200:  1.71 per frame, median width   6.9
+   rings with q column  200- 400:  5.07 per frame, median width   7.2
+   rings with q column  400- 600:  3.99 per frame, median width   7.7
+   rings with q column  600- 800:  2.10 per frame, median width   8.2
+   rings with q column  800-1100:  1.07 per frame, median width   8.3
