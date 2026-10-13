@@ -85,8 +85,9 @@ def missing_wedge(q_max, energy_keV, alpha_i_deg, height=HEIGHT, width=WIDTH):
 class MaskBank:
     """The converted detector masks, drawn one per frame and combined with a fresh wedge."""
 
-    def __init__(self, path=MASK_DIR, keep='default', alpha_i=ALPHA_I_DEG, seed=None, no_gaps=False):
+    def __init__(self, path=MASK_DIR, keep='default', alpha_i=ALPHA_I_DEG, seed=None, no_gaps=False, wedge_only_frac=0.0):
         self.rng = np.random.default_rng(seed)
+        self.wedge_only_frac = 1.0 if no_gaps else float(wedge_only_frac)   # share of frames whose mask is the generated wedge alone (no detector gaps); 1.0 = always, 0.2 = like one extra 'no detector mask' entry among 4 geometries
         self.no_gaps = bool(no_gaps)      # True: only the generated missing wedge, no detector module gaps / edge falloff (real 41 shows none); q_max and energy still come from the drawn geometry
         self.alpha_i = alpha_i
         recs = json.load(open(os.path.join(path, 'manifest.json')))['masks']
@@ -127,4 +128,5 @@ class MaskBank:
         md = dict(self.meta[i])
         md['alpha_i_deg'] = float(self.rng.uniform(*self.alpha_i))
         w = missing_wedge(md['q_max'], md['energy_keV'], md['alpha_i_deg'])
-        return (w if self.no_gaps else (self.masks[i] & w)), md
+        wedge_only = self.wedge_only_frac >= 1.0 or (self.wedge_only_frac > 0 and self.rng.random() < self.wedge_only_frac)
+        return (w if wedge_only else (self.masks[i] & w)), md

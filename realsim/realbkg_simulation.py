@@ -72,7 +72,7 @@ class RealBkgSimulation:
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
                  ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0,
                  ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0, ring_follow_bkg=False,
-                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0, ring_x_share=None, ring_rel_shuffle=0.0, bkg_flat_q=0.0, mask_no_gaps=False):
+                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0, ring_x_share=None, ring_rel_shuffle=0.0, bkg_flat_q=0.0, mask_no_gaps=False, mask_wedge_only_frac=0.0):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -250,6 +250,8 @@ class RealBkgSimulation:
         self.bkg_flat_q = float(bkg_flat_q)
         #: mask_no_gaps: draw only the generated missing wedge as the frame mask (no detector module gaps / edge falloff): real 41 frames show no gap bands, every simulated frame had 2-4 curved ones.
         self.mask_no_gaps = bool(mask_no_gaps)
+        #: mask_wedge_only_frac: share of the frames whose mask is the generated wedge only (see detector_masks.MaskBank); 0.2 = one extra 'no detector mask' entry next to 4 geometries.
+        self.mask_wedge_only_frac = float(mask_wedge_only_frac)
         self.ring_x_share = None if ring_x_share is None else np.asarray(ring_x_share, float) / float(np.sum(ring_x_share))
         #: width_jitter=(sd_q, sd_chi): replaces the within-frame scatter of log sigma (fitted on real frames: 0.53 / 0.83, which includes
         #: several phases per frame) by a smaller value, so the peaks of one frame have similar widths.
@@ -307,7 +309,7 @@ class RealBkgSimulation:
         self._masks = None
         if self.mask_bank:
             from realsim.realbkg_sim.detector_masks import MaskBank
-            self._masks = MaskBank(seed=seed, keep=self.mask_keep, no_gaps=self.mask_no_gaps)
+            self._masks = MaskBank(seed=seed, keep=self.mask_keep, no_gaps=self.mask_no_gaps, wedge_only_frac=self.mask_wedge_only_frac)
         qp = os.path.join(os.environ.get('GIWAXS_WORK', '/mnt/lustre/work/schreiber/szb389'),
                           'datasets/realbkg_donors_mm/qmax.npy')
         self._qsrc = np.load(qp) if os.path.exists(qp) else np.array([], np.float32)
