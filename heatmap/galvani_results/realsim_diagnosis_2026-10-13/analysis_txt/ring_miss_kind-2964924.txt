@@ -1,0 +1,20 @@
+#### hm_simmim_frozen_ridge_realsimE1b_tf32_seed42_2.80_1.30 (epoch 59), score > 0.3
+  GT rings x< 781: 522 | matched 367 (0.70) | missed: ring-class det within 10 px but unmatched 20 (0.04) | segment-class det near 51 (0.10) | nothing near 84 (0.16)
+      of the unmatched-but-near: median IoU 0.032, median det height 92 px vs GT height 450 px
+  GT rings x>= 781: 174 | matched 93 (0.53) | missed: ring-class det within 10 px but unmatched 2 (0.01) | segment-class det near 17 (0.10) | nothing near 62 (0.36)
+      of the unmatched-but-near: median IoU 0.040, median det height 62 px vs GT height 228 px
+#### hm_simmim_frozen_ridge_realsimE5_tf32_seed42_2.80_1.30 (epoch 59), score > 0.3
+  GT rings x< 781: 522 | matched 424 (0.81) | missed: ring-class det within 10 px but unmatched 21 (0.04) | segment-class det near 27 (0.05) | nothing near 50 (0.10)
+      of the unmatched-but-near: median IoU 0.056, median det height 355 px vs GT height 458 px
+  GT rings x>= 781: 174 | matched 93 (0.53) | missed: ring-class det within 10 px but unmatched 0 (0.00) | segment-class det near 15 (0.09) | nothing near 66 (0.38)
+      of the unmatched-but-near: median IoU 0.045, median det height 44 px vs GT height 228 px
+#### hm_simmim_frozen_ridge_realsimE6_tf32_seed42_2.80_1.30 (epoch 59), score > 0.3
+  GT rings x< 781: 522 | matched 430 (0.82) | missed: ring-class det within 10 px but unmatched 13 (0.02) | segment-class det near 40 (0.08) | nothing near 39 (0.07)
+      of the unmatched-but-near: median IoU 0.025, median det height 101 px vs GT height 456 px
+  GT rings x>= 781: 174 | matched 80 (0.46) | missed: ring-class det within 10 px but unmatched 2 (0.01) | segment-class det near 17 (0.10) | nothing near 75 (0.43)
+      of the unmatched-but-near: median IoU 0.038, median det height 62 px vs GT height 233 px
+#### hm_simmim_frozen_ridge_realsimE7_tf32_seed42_2.80_1.30 (epoch 59), score > 0.3
+  GT rings x< 781: 522 | matched 405 (0.78) | missed: ring-class det within 10 px but unmatched 13 (0.02) | segment-class det near 42 (0.08) | nothing near 62 (0.12)
+      of the unmatched-but-near: median IoU 0.036, median det height 92 px vs GT height 453 px
+  GT rings x>= 781: 174 | matched 76 (0.44) | missed: ring-class det within 10 px but unmatched 0 (0.00) | segment-class det near 4 (0.02) | nothing near 94 (0.54)
+      of the unmatched-but-near: median IoU 0.022, median det height 95 px vs GT height 235 px
