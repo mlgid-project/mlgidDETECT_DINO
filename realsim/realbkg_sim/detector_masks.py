@@ -85,8 +85,9 @@ def missing_wedge(q_max, energy_keV, alpha_i_deg, height=HEIGHT, width=WIDTH):
 class MaskBank:
     """The converted detector masks, drawn one per frame and combined with a fresh wedge."""
 
-    def __init__(self, path=MASK_DIR, keep='default', alpha_i=ALPHA_I_DEG, seed=None):
+    def __init__(self, path=MASK_DIR, keep='default', alpha_i=ALPHA_I_DEG, seed=None, no_gaps=False):
         self.rng = np.random.default_rng(seed)
+        self.no_gaps = bool(no_gaps)      # True: only the generated missing wedge, no detector module gaps / edge falloff (real 41 shows none); q_max and energy still come from the drawn geometry
         self.alpha_i = alpha_i
         recs = json.load(open(os.path.join(path, 'manifest.json')))['masks']
         n_all = len(recs)
@@ -126,4 +127,4 @@ class MaskBank:
         md = dict(self.meta[i])
         md['alpha_i_deg'] = float(self.rng.uniform(*self.alpha_i))
         w = missing_wedge(md['q_max'], md['energy_keV'], md['alpha_i_deg'])
-        return (self.masks[i] & w), md
+        return (w if self.no_gaps else (self.masks[i] & w)), md
