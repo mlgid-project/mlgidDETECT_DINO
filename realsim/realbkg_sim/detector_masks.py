@@ -129,4 +129,11 @@ class MaskBank:
         md['alpha_i_deg'] = float(self.rng.uniform(*self.alpha_i))
         w = missing_wedge(md['q_max'], md['energy_keV'], md['alpha_i_deg'])
         wedge_only = self.wedge_only_frac >= 1.0 or (self.wedge_only_frac > 0 and self.rng.random() < self.wedge_only_frac)
-        return (w if wedge_only else (self.masks[i] & w)), md
+        if wedge_only:
+            # no detector module gaps, but the detector's corner falloff (the narrowing tip at high q, 60-90 % invalid in real 41) stays: fill every row between its first and last valid pixel
+            m = self.masks[i]
+            first = np.where(m.any(1), m.argmax(1), 0); last = np.where(m.any(1), m.shape[1] - 1 - m[:, ::-1].argmax(1), -1)
+            cols = np.arange(m.shape[1])[None, :]
+            m = (cols >= first[:, None]) & (cols <= last[:, None])
+            return (m & w), md
+        return (self.masks[i] & w), md
