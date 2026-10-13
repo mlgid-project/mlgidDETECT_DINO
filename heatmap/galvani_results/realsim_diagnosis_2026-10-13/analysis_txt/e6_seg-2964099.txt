@@ -1,0 +1,52 @@
+git: heatmap 50e70d2
+== F_or13_spots30-150: 150 frames, rings/frame 16.9, segments/frame 17.9
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.3     4.3     7.1    11.7    22.8
+   ring centre q column           169.3   325.5   501.1   693.2   928.1
+   ring box height px              79.1   456.0   486.0   496.0   505.0
+   SEGMENT box width px             1.5     2.9     4.6     7.3    14.7
+   SEGMENT box height px            5.6    16.2    36.4    80.4   233.9
+   rings with q column    0- 200:  1.65 per frame, median width   3.8
+   rings with q column  200- 400:  4.37 per frame, median width   5.5
+   rings with q column  400- 600:  4.59 per frame, median width   7.3
+   rings with q column  600- 800:  3.62 per frame, median width   8.7
+   rings with q column  800-1100:  2.71 per frame, median width  11.3
+
+== G_or23_spots25-120: 150 frames, rings/frame 15.7, segments/frame 20.7
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.3     4.6     7.4    11.6    22.7
+   ring centre q column           173.0   343.6   527.6   711.8   919.2
+   ring box height px              88.0   434.0   485.0   495.0   505.0
+   SEGMENT box width px             1.4     2.8     4.7     7.6    15.3
+   SEGMENT box height px            5.6    15.3    32.3    64.0   169.7
+   rings with q column    0- 200:  1.43 per frame, median width   4.4
+   rings with q column  200- 400:  3.68 per frame, median width   5.6
+   rings with q column  400- 600:  4.34 per frame, median width   7.6
+   rings with q column  600- 800:  3.55 per frame, median width   8.9
+   rings with q column  800-1100:  2.73 per frame, median width  10.3
+
+== H_or24_spots25-120: 150 frames, rings/frame 15.2, segments/frame 20.5
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.1     4.6     7.4    12.1    23.7
+   ring centre q column           166.2   332.4   512.5   702.5   913.2
+   ring box height px              94.0   438.0   486.0   496.0   505.0
+   SEGMENT box width px             1.6     3.1     4.9     7.6    15.7
+   SEGMENT box height px            5.6    16.6    35.8    73.1   197.8
+   rings with q column    0- 200:  1.51 per frame, median width   3.9
+   rings with q column  200- 400:  3.72 per frame, median width   5.5
+   rings with q column  400- 600:  3.94 per frame, median width   7.7
+   rings with q column  600- 800:  3.58 per frame, median width   9.3
+   rings with q column  800-1100:  2.43 per frame, median width  11.0
+
+== I_or23_spots40-180: 150 frames, rings/frame 16.0, segments/frame 20.2
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.1     4.3     6.9    11.4    23.1
+   ring centre q column           162.1   313.1   491.4   681.6   913.7
+   ring box height px              93.0   471.0   487.0   496.5   505.0
+   SEGMENT box width px             1.5     3.0     4.8     7.7    15.2
+   SEGMENT box height px            5.6    14.7    33.6    67.3   191.5
+   rings with q column    0- 200:  1.87 per frame, median width   3.8
+   rings with q column  200- 400:  3.97 per frame, median width   5.5
+   rings with q column  400- 600:  4.52 per frame, median width   7.0
+   rings with q column  600- 800:  3.28 per frame, median width   8.7
+   rings with q column  800-1100:  2.33 per frame, median width  12.2
