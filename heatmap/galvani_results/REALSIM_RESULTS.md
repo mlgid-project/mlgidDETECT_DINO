@@ -21,10 +21,12 @@ Score > 0.3 columns: recall / ring recall / precision / FP. NN<5 = recall of GT 
 | E8 | 0.5302 | 0.6346 | 0.479 / 0.567 / 0.856 / 66 | 0.582 / 0.626 / 0.846 / 178 | 0.388 / 0.411 |
 | E9 | 0.6316 | 0.6154 | 0.646 / 0.600 / 0.766 / 161 | 0.738 / 0.767 / 0.675 / 597 | 0.446 / 0.425 |
 | E10 | 0.5587 | 0.6019 | 0.558 / 0.600 / 0.751 / 151 | 0.628 / 0.674 / 0.781 / 295 | 0.372 / 0.411 |
+| E11a | 0.6083 | 0.5707 | 0.645 / 0.533 / 0.712 / 213 | 0.671 / 0.681 / 0.673 / 547 | 0.413 / 0.397 |
+| E11b | 0.6120 | 0.5901 | 0.670 / 0.667 / 0.687 / 249 | 0.713 / 0.737 / 0.636 / 684 | 0.413 / 0.438 |
 
 Every number in the table is parsed from the `[hm+nms]` blocks of each run folder's `evaluate_final.txt`, which also holds the rest (recall seg/ring, preds, NN buckets at both score cut-offs, AP by GT confidence, operating points).
 
-Best realsim run per set: organic E9 0.6316 (E6 0.6266), 41 E8 0.6346 (E10 0.5587 / 0.6019). All realsim runs are **below the plain simulator on 41 by 0.09-0.18** (0.7259) and on organic E6 / E9 are slightly above the plain simulator (0.6266 / 0.6316 vs 0.6057), E8 and E7 below.
+Best realsim run per set: organic E9 0.6316 (E6 0.6266), 41 E8 0.6346 (E10 0.5587 / 0.6019, E11a 0.6083 / 0.5707, E11b 0.6120 / 0.5901). All realsim runs are **below the plain simulator on 41 by 0.09-0.18** (0.7259) and on organic E6 / E9 are slightly above the plain simulator (0.6266 / 0.6316 vs 0.6057), E8 and E7 below.
 Never reached: DINO's 41 (0.744-0.763), best realsim 41 is 0.6346.
 Single seed (42) everywhere; no realsim replicates were run (E5 seeds 2 and 3 were prepared, then cancelled by the user). The unfrozen runs of the same recipe swung by about 0.07 in organic AP from epoch to epoch (0.540-0.606), so small differences between single realsim runs are not separable.
 
@@ -44,5 +46,6 @@ Single seed (42) everywhere; no realsim replicates were run (E5 seeds 2 and 3 we
 
 ## Open / next
 - **E10 (job 2966092, 2026-10-14, 60 epochs):** E8 structure (one powder phase + one oriented crystal) with a bit more rings and spots (rings_cap (6,16), spots_cap (10,40) -> 8.6 rings / 8.4 segments per frame) and `bkg_noise_edge_fix=True`. Final +nms: organic 0.5587, 41 0.6019 (E8 0.5302 / 0.6346; E9 0.6316 / 0.6154). Organic improved over E8 (+0.03), 41 fell (-0.03); score>0.3 recall rose on both sets (organic 0.479 -> 0.558, 41 0.582 -> 0.628) and precision fell (organic 0.856 -> 0.751, 41 0.846 -> 0.781). Organic AP during training ranged 0.52-0.57 after epoch 24 (epoch 54: 0.5680). Candidate E10b (rings_cap (8,24), spots_cap (15,60), 11.5 / 12.2 per frame) not trained.
-- To discuss afterwards: 100 % wedge-only frames; ring boxes sitting inside the dark invalid tip at the far right of some sim frames (seen in E10 sheets, not yet investigated).
+- **E11a / E11b (jobs 2966880 / 2966881, 2026-10-14, 60 epochs):** E6 settings + edge fix + wedge-only masks in 100 % (E11a) / 50 % (E11b) of the frames, to test whether the detector gap bands cause the high-q ring misses. Final +nms: E11a organic 0.6083, 41 0.5707; E11b organic 0.6120, 41 0.5901 (E6 0.6266 / 0.6104, E9 with 20 % 0.6316 / 0.6154). **Result: more wedge-only frames did not help, 41 got worse (100 % 0.5707, 50 % 0.5901, 20 % 0.6154, 0 % 0.6104), and 41 false positives at score > 0.3 rose (E9 597, E11b 684, E11a 547 with lower precision).** Hypothesis 'the gap bands cause the high-q ring misses' is not supported by the AP; the high-q ring hit rate of these two runs was not measured.
+- To discuss afterwards: ring boxes sitting inside the dark invalid tip at the far right of some sim frames (seen in E10 sheets, not yet investigated).
 - Later, user ideas: rebuild the hkl bank/peak lists from the pygid sim and add in-plane crystal rotation, once AP is higher.
