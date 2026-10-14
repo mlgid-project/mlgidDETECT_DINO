@@ -37,6 +37,8 @@ LABELS = [  # run-dir tag -> readable name, in reading order (unknown runs are a
     ('ridge_realsimE8_tf32_seed42', 'realsim E8 (E6 appearance, sparse frames ~5 rings + ~5 segments), seed 42, galvani'),
     ('ridge_realsimE9_tf32_seed42', 'realsim E9 (E6 + 20 % wedge-only masks, no detector gaps), seed 42, galvani'),
     ('ridge_realsimE10_tf32_seed42', 'realsim E10 (E8 structure, rings_cap 6-16, spots_cap 10-40, bkg_noise_edge_fix), seed 42, galvani'),
+    ('ridge_realsimE11a_tf32_seed42', 'realsim E11a (E6 + 100 % wedge-only masks + edge fix), seed 42, galvani'),
+    ('ridge_realsimE11b_tf32_seed42', 'realsim E11b (E6 + 50 % wedge-only masks + edge fix), seed 42, galvani'),
     ('ridge_realsimE5_tf32_seed2', 'realsim E5, seed 2, colorbox'), ('ridge_realsimE5_tf32_seed3', 'realsim E5, seed 3, colorbox'),
     ('hm_boxconv1_unfrozen_ridge_tf32_seed1_bblr4e-5', 'unfrozen boxconv1 backbone (bs 4, 60 ep, colorbox), bblr 4e-5, seed 1'),
     ('hm_simmim_unfrozen_ridge_he_tf32_seed1_bblr4e-5', 'unfrozen swin (bs 4, 60 ep, colorbox), bblr 4e-5, seed 1'),
