@@ -17,3 +17,4 @@ User: E8 structure (ONE powder phase + ONE oriented crystal per frame) but a bit
 - E10a: rings_cap (6,16), spots_cap (10,40) -> 8.6 rings / 8.4 segments per frame (E8 5.4 / 5.1, E6 ~15 / ~21, real 41 17 / 24)
 - E10b: rings_cap (8,24), spots_cap (15,60) -> 11.5 rings / 12.2 segments per frame
 Not trained; waiting for the user's choice after seeing the sheets.
+- (2026-10-14) E10 with bkg_noise_edge_fix=True (user saw bright borders along the invalid-pixel mask in sim frames 1, 3, 6 of sheets_e10): sheets_e10_edgefix/ (same candidates, same seed; RNG path differs so the frames are not the same), analysis_txt/e10_edgefix_profile.txt: mean value vs distance to invalid pixel, E10a without the fix 0.52 at 1-2 px vs 0.43 at 12 px (rim), with the fix 0.423-0.435 flat; real 41 0.44-0.48. Job 2966075 (heatmap/sbatch/e10_edgefix.sbatch).
