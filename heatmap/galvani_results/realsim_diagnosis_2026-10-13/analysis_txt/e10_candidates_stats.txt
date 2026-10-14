@@ -1,0 +1,27 @@
+== E10a: 150 frames, rings/frame 8.6, segments/frame 8.4
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.3     4.7     7.7    12.5    25.8
+   ring centre q column           165.9   340.9   544.1   737.8   928.0
+   ring box height px              79.0   397.5   484.0   494.5   505.0
+   SEGMENT box width px             1.7     3.3     5.6     8.9    16.8
+   SEGMENT box height px            6.8    17.0    33.4    70.7   187.4
+   rings with q column    0- 200:  0.85 per frame, median width   3.9
+   rings with q column  200- 400:  1.89 per frame, median width   6.3
+   rings with q column  400- 600:  2.17 per frame, median width   7.8
+   rings with q column  600- 800:  2.07 per frame, median width   9.2
+   rings with q column  800-1100:  1.63 per frame, median width  10.2
+
+== E10b: 150 frames, rings/frame 11.5, segments/frame 12.2
+   quantiles 5/25/50/75/95 %:          5     25     50     75     95
+   ring box width px                2.4     4.6     7.6    12.8    24.8
+   ring centre q column           157.0   307.6   501.6   694.9   907.5
+   ring box height px              97.0   452.0   487.0   497.0   505.0
+   SEGMENT box width px             1.7     3.4     5.5     8.5    17.7
+   SEGMENT box height px            5.8    16.1    33.9    73.7   184.6
+   rings with q column    0- 200:  1.33 per frame, median width   4.5
+   rings with q column  200- 400:  2.79 per frame, median width   5.9
+   rings with q column  400- 600:  3.17 per frame, median width   7.5
+   rings with q column  600- 800:  2.49 per frame, median width  10.6
+   rings with q column  800-1100:  1.76 per frame, median width  11.0
+wrote sheet_E10a.png ((1536, 1024, 3)) boxes/frame 15.5 rings/frame 7.0
+wrote sheet_E10b.png ((1536, 1024, 3)) boxes/frame 22.8 rings/frame 10.3
