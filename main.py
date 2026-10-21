@@ -65,6 +65,14 @@ class SimulationDataset(torch.utils.data.Dataset):
         # cancel: changing them RELABELS the same image rather than changing the physics.
         # None => SimulationConfig's defaults 3.5 / 1.0, i.e. every prior run's RNG path untouched.
         _coefs = getattr(args, 'box_coef_override', None)
+        # box_sigma_halfwidth: (a, w) in units of SIGMA, i.e. a box edge sits +-coef*sigma from the
+        # centre (1.0 = the re-fitted 2026-10-21 validation boxes: stored width = 2 sigma, box = centre
+        # +- width/2 = +-sigma). The simulators' own a_coef / w_coef are FULL extent in sigma units
+        # (half-width = coef*sigma/2: legacy `widths` = sigma/2, realbkg hw = coef*s/2), so the sigma
+        # convention is 2x. Wins over box_coef_override, which keeps its old meaning for every old config.
+        _sig = getattr(args, 'box_sigma_halfwidth', None)
+        if _sig:
+            _coefs = (2.0 * float(_sig[0]), 2.0 * float(_sig[1]))
         _sim_config = None
         if _coefs:
             from simulation import SimulationConfig
