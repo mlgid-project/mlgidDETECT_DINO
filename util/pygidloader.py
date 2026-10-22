@@ -154,6 +154,11 @@ def _load_fittedpeaks(f, key: str, frame_nr: int, data_loader: 'PyGIDDataset') -
         radius_pixel + radius_half_pixel,  # x2
         angle_pixel + angle_half_pixel,    # y2
     ], axis=-1).astype(np.float32)
+    # Rings may store angle_width = inf (the newer perovskite file does, for every ring): a ring spans
+    # the whole angular range, so clamp to it instead of producing infinite box edges.
+    ring_chi = ~np.isfinite(angle_width)
+    boxes[ring_chi, 1] = 0.0
+    boxes[ring_chi, 3] = float(polar_shape[0])
 
     # Exclude visibility=0 peaks (not reliably visible) from the ground truth.
     keep = visibility != 0
