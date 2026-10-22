@@ -56,6 +56,8 @@ def run(name, kind, ckpt):
         model, a = load_heatmap(ckpt); nch = 1
     out = {}
     from models.heatmap_head import RING_DECODE_MODES
+    if kind != 'dino' and os.environ.get('HM_GT_BOX_COEF') == 'auto':       # score against GT boxes scaled to the run's training box convention
+        print('  GT box scale (x,y):', E.set_gt_box_coef(*a['box_coef'].split(',')), flush=True)
     for ds, path in E.DATASETS.items():
         gts, d_main, d_nms, d_modes = [], [], [], {}
         for cfg, ic in E.iter_frames(path):

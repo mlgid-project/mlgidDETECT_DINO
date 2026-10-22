@@ -154,6 +154,12 @@ def main():
         start = ck['epoch'] + 1
         print(f'[train] resumed at epoch {start}', flush=True)
     json.dump(vars(a), open(os.path.join(a.out, 'args.json'), 'w'), indent=2)
+    if os.environ.get('HM_GT_BOX_COEF') == 'auto' and a.box_coef != 'legacy':      # in-training evals score against GT scaled to this run's box convention
+        try:
+            from heatmap import evaluation as _E
+            print('[train] eval GT box scale (x,y):', _E.set_gt_box_coef(*a.box_coef.split(',')), flush=True)
+        except Exception as e:
+            print(f'[train] GT box scale not set: {type(e).__name__}: {e}', flush=True)
     print('[train] trainable params:', sum(p.numel() for p in model.parameters() if p.requires_grad), flush=True)
 
     from simulation import FastSimulation
