@@ -1,0 +1,225 @@
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/functional.py:534: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3595.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP/models/heatmap_head.py:80: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  sd = torch.load(backbone_ckpt, map_location='cpu')
+[heatmap] backbone load: _IncompatibleKeys(missing_keys=['norm0.weight', 'norm0.bias'], unexpected_keys=[])
+[train] eval GT box scale (x,y): (2.0, 2.0)
+[train] trainable params: 1228582
+[train] sim box convention: a_coef,w_coef = 4.0,4.0
+[epoch 0] loss 3.9619 heat 1.9494 reg 0.5031 (66s)
+[epoch 0] organic: 0	0.5160	recall0.3 0.346	prec0.3 0.860	chigap<5 0.285	eu<5 0.298	n<5 chi=137 eu=131	apnms 0.5392	nms0.3 rec 0.346 prec 0.901 ring 0.161 fp 31
+[epoch 0] organic +nms (deployed): AP 0.5392 | score>0.3 recall 0.346 prec 0.901 ring recall 0.161 FP 31
+[epoch 0] 41: 0	0.4212	recall0.3 0.355	prec0.3 0.650	chigap<5 0.000	eu<5 0.348	n<5 chi=4 eu=69	apnms 0.5342	nms0.3 rec 0.340 prec 0.763 ring 0.148 fp 177
+[epoch 0] 41 +nms (deployed): AP 0.5342 | score>0.3 recall 0.340 prec 0.763 ring recall 0.148 FP 177
+[epoch 0] eval took 15s (both sets)
+[epoch 1] loss 2.3140 heat 1.1570 reg 0.2892 (66s)
+[epoch 2] loss 1.8237 heat 0.8782 reg 0.2364 (66s)
+[epoch 2] organic: 2	0.5988	recall0.3 0.480	prec0.3 0.887	chigap<5 0.380	eu<5 0.382	n<5 chi=137 eu=131	apnms 0.6160	nms0.3 rec 0.479 prec 0.907 ring 0.323 fp 40
+[epoch 2] organic +nms (deployed): AP 0.6160 | score>0.3 recall 0.479 prec 0.907 ring recall 0.323 FP 40
+[epoch 2] 41: 2	0.5204	recall0.3 0.520	prec0.3 0.746	chigap<5 0.250	eu<5 0.377	n<5 chi=4 eu=69	apnms 0.6223	nms0.3 rec 0.503 prec 0.810 ring 0.377 fp 198
+[epoch 2] 41 +nms (deployed): AP 0.6223 | score>0.3 recall 0.503 prec 0.810 ring recall 0.377 FP 198
+[epoch 2] eval took 14s (both sets)
+[epoch 3] loss 1.5683 heat 0.7025 reg 0.2165 (66s)
+[epoch 4] loss 1.5448 heat 0.6850 reg 0.2149 (66s)
+[epoch 4] organic: 4	0.5773	recall0.3 0.536	prec0.3 0.813	chigap<5 0.401	eu<5 0.389	n<5 chi=137 eu=131	apnms 0.6098	nms0.3 rec 0.529 prec 0.852 ring 0.516 fp 75
+[epoch 4] organic +nms (deployed): AP 0.6098 | score>0.3 recall 0.529 prec 0.852 ring recall 0.516 FP 75
+[epoch 4] 41: 4	0.4278	recall0.3 0.667	prec0.3 0.631	chigap<5 0.250	eu<5 0.377	n<5 chi=4 eu=69	apnms 0.6394	nms0.3 rec 0.628 prec 0.752 ring 0.583 fp 347
+[epoch 4] 41 +nms (deployed): AP 0.6394 | score>0.3 recall 0.628 prec 0.752 ring recall 0.583 FP 347
+[epoch 4] eval took 14s (both sets)
+[epoch 5] loss 1.4186 heat 0.6237 reg 0.1987 (65s)
+[epoch 6] loss 1.3498 heat 0.5779 reg 0.1930 (65s)
+[epoch 6] organic: 6	0.5808	recall0.3 0.506	prec0.3 0.838	chigap<5 0.431	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.6106	nms0.3 rec 0.502 prec 0.874 ring 0.452 fp 59
+[epoch 6] organic +nms (deployed): AP 0.6106 | score>0.3 recall 0.502 prec 0.874 ring recall 0.452 FP 59
+[epoch 6] 41: 6	0.4195	recall0.3 0.648	prec0.3 0.658	chigap<5 0.250	eu<5 0.377	n<5 chi=4 eu=69	apnms 0.6698	nms0.3 rec 0.610 prec 0.823 ring 0.599 fp 220
+[epoch 6] 41 +nms (deployed): AP 0.6698 | score>0.3 recall 0.610 prec 0.823 ring recall 0.599 FP 220
+[epoch 6] eval took 14s (both sets)
+[epoch 7] loss 1.3370 heat 0.6021 reg 0.1837 (65s)
+[epoch 8] loss 1.2281 heat 0.4935 reg 0.1836 (66s)
+[epoch 8] organic: 8	0.5888	recall0.3 0.550	prec0.3 0.799	chigap<5 0.423	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.6196	nms0.3 rec 0.542 prec 0.817 ring 0.484 fp 99
+[epoch 8] organic +nms (deployed): AP 0.6196 | score>0.3 recall 0.542 prec 0.817 ring recall 0.484 FP 99
+[epoch 8] 41: 8	0.4355	recall0.3 0.731	prec0.3 0.609	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.6523	nms0.3 rec 0.687 prec 0.711 ring 0.665 fp 468
+[epoch 8] 41 +nms (deployed): AP 0.6523 | score>0.3 recall 0.687 prec 0.711 ring recall 0.665 FP 468
+[epoch 8] eval took 14s (both sets)
+[epoch 9] loss 1.2151 heat 0.5139 reg 0.1753 (66s)
+[epoch 10] loss 1.2153 heat 0.5150 reg 0.1751 (66s)
+[epoch 10] organic: 10	0.6016	recall0.3 0.539	prec0.3 0.861	chigap<5 0.431	eu<5 0.427	n<5 chi=137 eu=131	apnms 0.6284	nms0.3 rec 0.534 prec 0.897 ring 0.548 fp 50
+[epoch 10] organic +nms (deployed): AP 0.6284 | score>0.3 recall 0.534 prec 0.897 ring recall 0.548 FP 50
+[epoch 10] 41: 10	0.4455	recall0.3 0.669	prec0.3 0.685	chigap<5 0.250	eu<5 0.377	n<5 chi=4 eu=69	apnms 0.6841	nms0.3 rec 0.638 prec 0.829 ring 0.628 fp 220
+[epoch 10] 41 +nms (deployed): AP 0.6841 | score>0.3 recall 0.638 prec 0.829 ring recall 0.628 FP 220
+[epoch 10] eval took 14s (both sets)
+[epoch 11] loss 1.1643 heat 0.4745 reg 0.1724 (66s)
+[epoch 12] loss 1.1355 heat 0.4648 reg 0.1677 (66s)
+[epoch 12] organic: 12	0.5876	recall0.3 0.590	prec0.3 0.781	chigap<5 0.438	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.6274	nms0.3 rec 0.586 prec 0.819 ring 0.581 fp 106
+[epoch 12] organic +nms (deployed): AP 0.6274 | score>0.3 recall 0.586 prec 0.819 ring recall 0.581 FP 106
+[epoch 12] 41: 12	0.4072	recall0.3 0.718	prec0.3 0.566	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.6618	nms0.3 rec 0.681 prec 0.733 ring 0.654 fp 417
+[epoch 12] 41 +nms (deployed): AP 0.6618 | score>0.3 recall 0.681 prec 0.733 ring recall 0.654 FP 417
+[epoch 12] eval took 14s (both sets)
+[epoch 13] loss 1.1293 heat 0.4634 reg 0.1665 (66s)
+[epoch 14] loss 1.0640 heat 0.4126 reg 0.1629 (66s)
+[epoch 14] organic: 14	0.5592	recall0.3 0.530	prec0.3 0.833	chigap<5 0.409	eu<5 0.397	n<5 chi=137 eu=131	apnms 0.5932	nms0.3 rec 0.523 prec 0.863 ring 0.581 fp 68
+[epoch 14] organic +nms (deployed): AP 0.5932 | score>0.3 recall 0.523 prec 0.863 ring recall 0.581 FP 68
+[epoch 14] 41: 14	0.3750	recall0.3 0.737	prec0.3 0.551	chigap<5 0.250	eu<5 0.362	n<5 chi=4 eu=69	apnms 0.6612	nms0.3 rec 0.685 prec 0.769 ring 0.743 fp 346
+[epoch 14] 41 +nms (deployed): AP 0.6612 | score>0.3 recall 0.685 prec 0.769 ring recall 0.743 FP 346
+[epoch 14] eval took 14s (both sets)
+[epoch 15] loss 1.1154 heat 0.4493 reg 0.1665 (66s)
+[epoch 16] loss 1.0848 heat 0.4334 reg 0.1628 (65s)
+[epoch 16] organic: 16	0.5999	recall0.3 0.547	prec0.3 0.847	chigap<5 0.416	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.6186	nms0.3 rec 0.545 prec 0.867 ring 0.452 fp 68
+[epoch 16] organic +nms (deployed): AP 0.6186 | score>0.3 recall 0.545 prec 0.867 ring recall 0.452 FP 68
+[epoch 16] 41: 16	0.4665	recall0.3 0.662	prec0.3 0.702	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6583	nms0.3 rec 0.628 prec 0.782 ring 0.587 fp 293
+[epoch 16] 41 +nms (deployed): AP 0.6583 | score>0.3 recall 0.628 prec 0.782 ring recall 0.587 FP 293
+[epoch 16] eval took 14s (both sets)
+[epoch 17] loss 1.0207 heat 0.3930 reg 0.1569 (65s)
+[epoch 18] loss 0.9976 heat 0.3762 reg 0.1554 (66s)
+[epoch 18] organic: 18	0.5871	recall0.3 0.551	prec0.3 0.814	chigap<5 0.438	eu<5 0.443	n<5 chi=137 eu=131	apnms 0.6278	nms0.3 rec 0.548 prec 0.841 ring 0.548 fp 85
+[epoch 18] organic +nms (deployed): AP 0.6278 | score>0.3 recall 0.548 prec 0.841 ring recall 0.548 FP 85
+[epoch 18] 41: 18	0.4627	recall0.3 0.701	prec0.3 0.657	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6785	nms0.3 rec 0.671 prec 0.777 ring 0.674 fp 324
+[epoch 18] 41 +nms (deployed): AP 0.6785 | score>0.3 recall 0.671 prec 0.777 ring recall 0.674 FP 324
+[epoch 18] eval took 14s (both sets)
+[epoch 19] loss 1.0210 heat 0.4253 reg 0.1489 (66s)
+[epoch 20] loss 0.9389 heat 0.3635 reg 0.1438 (66s)
+[epoch 20] organic: 20	0.6270	recall0.3 0.625	prec0.3 0.771	chigap<5 0.453	eu<5 0.450	n<5 chi=137 eu=131	apnms 0.6520	nms0.3 rec 0.614 prec 0.798 ring 0.613 fp 127
+[epoch 20] organic +nms (deployed): AP 0.6520 | score>0.3 recall 0.614 prec 0.798 ring recall 0.613 FP 127
+[epoch 20] 41: 20	0.4495	recall0.3 0.754	prec0.3 0.610	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.6582	nms0.3 rec 0.715 prec 0.724 ring 0.713 fp 458
+[epoch 20] 41 +nms (deployed): AP 0.6582 | score>0.3 recall 0.715 prec 0.724 ring recall 0.713 FP 458
+[epoch 20] eval took 14s (both sets)
+[epoch 21] loss 0.9619 heat 0.3890 reg 0.1432 (66s)
+[epoch 22] loss 0.8823 heat 0.3398 reg 0.1356 (66s)
+[epoch 22] organic: 22	0.5867	recall0.3 0.607	prec0.3 0.749	chigap<5 0.467	eu<5 0.458	n<5 chi=137 eu=131	apnms 0.6207	nms0.3 rec 0.602 prec 0.794 ring 0.516 fp 128
+[epoch 22] organic +nms (deployed): AP 0.6207 | score>0.3 recall 0.602 prec 0.794 ring recall 0.516 FP 128
+[epoch 22] 41: 22	0.3965	recall0.3 0.722	prec0.3 0.596	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6422	nms0.3 rec 0.673 prec 0.746 ring 0.681 fp 385
+[epoch 22] 41 +nms (deployed): AP 0.6422 | score>0.3 recall 0.673 prec 0.746 ring recall 0.681 FP 385
+[epoch 22] eval took 14s (both sets)
+[epoch 23] loss 0.8791 heat 0.3394 reg 0.1349 (65s)
+[epoch 24] loss 0.8539 heat 0.3291 reg 0.1312 (66s)
+[epoch 24] organic: 24	0.6184	recall0.3 0.590	prec0.3 0.797	chigap<5 0.438	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.6371	nms0.3 rec 0.580 prec 0.835 ring 0.548 fp 94
+[epoch 24] organic +nms (deployed): AP 0.6371 | score>0.3 recall 0.580 prec 0.835 ring recall 0.548 FP 94
+[epoch 24] 41: 24	0.4326	recall0.3 0.716	prec0.3 0.626	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6670	nms0.3 rec 0.656 prec 0.789 ring 0.626 fp 295
+[epoch 24] 41 +nms (deployed): AP 0.6670 | score>0.3 recall 0.656 prec 0.789 ring recall 0.626 FP 295
+[epoch 24] eval took 14s (both sets)
+[epoch 25] loss 0.8406 heat 0.3171 reg 0.1309 (65s)
+[epoch 26] loss 0.8635 heat 0.3443 reg 0.1298 (66s)
+[epoch 26] organic: 26	0.5745	recall0.3 0.633	prec0.3 0.719	chigap<5 0.489	eu<5 0.473	n<5 chi=137 eu=131	apnms 0.6250	nms0.3 rec 0.621 prec 0.767 ring 0.613 fp 154
+[epoch 26] organic +nms (deployed): AP 0.6250 | score>0.3 recall 0.621 prec 0.767 ring recall 0.613 FP 154
+[epoch 26] 41: 26	0.3813	recall0.3 0.812	prec0.3 0.470	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6816	nms0.3 rec 0.745 prec 0.693 ring 0.799 fp 555
+[epoch 26] 41 +nms (deployed): AP 0.6816 | score>0.3 recall 0.745 prec 0.693 ring recall 0.799 FP 555
+[epoch 26] eval took 14s (both sets)
+[epoch 27] loss 0.8349 heat 0.3178 reg 0.1293 (65s)
+[epoch 28] loss 0.8251 heat 0.3037 reg 0.1304 (66s)
+[epoch 28] organic: 28	0.5851	recall0.3 0.539	prec0.3 0.822	chigap<5 0.453	eu<5 0.443	n<5 chi=137 eu=131	apnms 0.6162	nms0.3 rec 0.535 prec 0.849 ring 0.484 fp 78
+[epoch 28] organic +nms (deployed): AP 0.6162 | score>0.3 recall 0.535 prec 0.849 ring recall 0.484 FP 78
+[epoch 28] 41: 28	0.4534	recall0.3 0.681	prec0.3 0.692	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.6832	nms0.3 rec 0.650 prec 0.808 ring 0.661 fp 259
+[epoch 28] 41 +nms (deployed): AP 0.6832 | score>0.3 recall 0.650 prec 0.808 ring recall 0.661 FP 259
+[epoch 28] eval took 14s (both sets)
+[epoch 29] loss 0.8393 heat 0.3190 reg 0.1301 (65s)
+[epoch 30] loss 0.7889 heat 0.2833 reg 0.1264 (65s)
+[epoch 30] organic: 30	0.5818	recall0.3 0.586	prec0.3 0.760	chigap<5 0.445	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6292	nms0.3 rec 0.575 prec 0.839 ring 0.581 fp 90
+[epoch 30] organic +nms (deployed): AP 0.6292 | score>0.3 recall 0.575 prec 0.839 ring recall 0.581 FP 90
+[epoch 30] 41: 30	0.3529	recall0.3 0.788	prec0.3 0.417	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.7132	nms0.3 rec 0.722 prec 0.791 ring 0.748 fp 320
+[epoch 30] 41 +nms (deployed): AP 0.7132 | score>0.3 recall 0.722 prec 0.791 ring recall 0.748 FP 320
+[epoch 30] eval took 14s (both sets)
+[epoch 31] loss 0.7997 heat 0.2954 reg 0.1261 (65s)
+[epoch 32] loss 0.8152 heat 0.3048 reg 0.1276 (65s)
+[epoch 32] organic: 32	0.6251	recall0.3 0.639	prec0.3 0.706	chigap<5 0.467	eu<5 0.450	n<5 chi=137 eu=131	apnms 0.6526	nms0.3 rec 0.634 prec 0.745 ring 0.710 fp 177
+[epoch 32] organic +nms (deployed): AP 0.6526 | score>0.3 recall 0.634 prec 0.745 ring recall 0.710 FP 177
+[epoch 32] 41: 32	0.4432	recall0.3 0.775	prec0.3 0.542	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.6641	nms0.3 rec 0.728 prec 0.691 ring 0.726 fp 545
+[epoch 32] 41 +nms (deployed): AP 0.6641 | score>0.3 recall 0.728 prec 0.691 ring recall 0.726 FP 545
+[epoch 32] eval took 14s (both sets)
+[epoch 33] loss 0.7862 heat 0.2975 reg 0.1222 (65s)
+[epoch 34] loss 0.7752 heat 0.2877 reg 0.1219 (66s)
+[epoch 34] organic: 34	0.5601	recall0.3 0.536	prec0.3 0.828	chigap<5 0.416	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.6026	nms0.3 rec 0.526 prec 0.883 ring 0.645 fp 57
+[epoch 34] organic +nms (deployed): AP 0.6026 | score>0.3 recall 0.526 prec 0.883 ring recall 0.645 FP 57
+[epoch 34] 41: 34	0.4419	recall0.3 0.688	prec0.3 0.615	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6903	nms0.3 rec 0.651 prec 0.826 ring 0.677 fp 231
+[epoch 34] 41 +nms (deployed): AP 0.6903 | score>0.3 recall 0.651 prec 0.826 ring recall 0.677 FP 231
+[epoch 34] eval took 14s (both sets)
+[epoch 35] loss 0.7853 heat 0.2753 reg 0.1275 (65s)
+[epoch 36] loss 0.7866 heat 0.2965 reg 0.1225 (65s)
+[epoch 36] organic: 36	0.5992	recall0.3 0.581	prec0.3 0.752	chigap<5 0.453	eu<5 0.450	n<5 chi=137 eu=131	apnms 0.6229	nms0.3 rec 0.575 prec 0.794 ring 0.548 fp 122
+[epoch 36] organic +nms (deployed): AP 0.6229 | score>0.3 recall 0.575 prec 0.794 ring recall 0.548 FP 122
+[epoch 36] 41: 36	0.4483	recall0.3 0.768	prec0.3 0.535	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6823	nms0.3 rec 0.715 prec 0.751 ring 0.713 fp 397
+[epoch 36] 41 +nms (deployed): AP 0.6823 | score>0.3 recall 0.715 prec 0.751 ring recall 0.713 FP 397
+[epoch 36] eval took 14s (both sets)
+[epoch 37] loss 0.7715 heat 0.2831 reg 0.1221 (66s)
+[epoch 38] loss 0.7523 heat 0.2693 reg 0.1207 (65s)
+[epoch 38] organic: 38	0.6322	recall0.3 0.600	prec0.3 0.777	chigap<5 0.467	eu<5 0.466	n<5 chi=137 eu=131	apnms 0.6634	nms0.3 rec 0.594 prec 0.806 ring 0.548 fp 117
+[epoch 38] organic +nms (deployed): AP 0.6634 | score>0.3 recall 0.594 prec 0.806 ring recall 0.548 FP 117
+[epoch 38] 41: 38	0.4857	recall0.3 0.725	prec0.3 0.609	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.6934	nms0.3 rec 0.700 prec 0.742 ring 0.713 fp 408
+[epoch 38] 41 +nms (deployed): AP 0.6934 | score>0.3 recall 0.700 prec 0.742 ring recall 0.713 FP 408
+[epoch 38] eval took 14s (both sets)
+[epoch 39] loss 0.7648 heat 0.2808 reg 0.1210 (65s)
+[epoch 40] loss 0.7522 heat 0.2667 reg 0.1214 (66s)
+[epoch 40] organic: 40	0.6089	recall0.3 0.581	prec0.3 0.781	chigap<5 0.467	eu<5 0.473	n<5 chi=137 eu=131	apnms 0.6345	nms0.3 rec 0.579 prec 0.804 ring 0.581 fp 115
+[epoch 40] organic +nms (deployed): AP 0.6345 | score>0.3 recall 0.579 prec 0.804 ring recall 0.581 FP 115
+[epoch 40] 41: 40	0.4201	recall0.3 0.696	prec0.3 0.590	chigap<5 0.250	eu<5 0.435	n<5 chi=4 eu=69	apnms 0.6470	nms0.3 rec 0.655 prec 0.762 ring 0.614 fp 343
+[epoch 40] 41 +nms (deployed): AP 0.6470 | score>0.3 recall 0.655 prec 0.762 ring recall 0.614 FP 343
+[epoch 40] eval took 14s (both sets)
+[epoch 41] loss 0.7495 heat 0.2627 reg 0.1217 (66s)
+[epoch 42] loss 0.7662 heat 0.2704 reg 0.1239 (66s)
+[epoch 42] organic: 42	0.6021	recall0.3 0.584	prec0.3 0.785	chigap<5 0.467	eu<5 0.443	n<5 chi=137 eu=131	apnms 0.6419	nms0.3 rec 0.576 prec 0.818 ring 0.581 fp 105
+[epoch 42] organic +nms (deployed): AP 0.6419 | score>0.3 recall 0.576 prec 0.818 ring recall 0.581 FP 105
+[epoch 42] 41: 42	0.4231	recall0.3 0.760	prec0.3 0.571	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.7175	nms0.3 rec 0.703 prec 0.807 ring 0.730 fp 282
+[epoch 42] 41 +nms (deployed): AP 0.7175 | score>0.3 recall 0.703 prec 0.807 ring recall 0.730 FP 282
+[epoch 42] eval took 14s (both sets)
+[epoch 43] loss 0.7331 heat 0.2554 reg 0.1194 (65s)
+[epoch 44] loss 0.7415 heat 0.2673 reg 0.1185 (65s)
+[epoch 44] organic: 44	0.6169	recall0.3 0.621	prec0.3 0.740	chigap<5 0.482	eu<5 0.458	n<5 chi=137 eu=131	apnms 0.6366	nms0.3 rec 0.608 prec 0.778 ring 0.548 fp 142
+[epoch 44] organic +nms (deployed): AP 0.6366 | score>0.3 recall 0.608 prec 0.778 ring recall 0.548 FP 142
+[epoch 44] 41: 44	0.4774	recall0.3 0.794	prec0.3 0.532	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6775	nms0.3 rec 0.756 prec 0.679 ring 0.742 fp 599
+[epoch 44] 41 +nms (deployed): AP 0.6775 | score>0.3 recall 0.756 prec 0.679 ring recall 0.742 FP 599
+[epoch 44] eval took 14s (both sets)
+[epoch 45] loss 0.6326 heat 0.2124 reg 0.1050 (65s)
+[epoch 46] loss 0.6026 heat 0.1984 reg 0.1010 (65s)
+[epoch 46] organic: 46	0.6253	recall0.3 0.606	prec0.3 0.762	chigap<5 0.489	eu<5 0.466	n<5 chi=137 eu=131	apnms 0.6420	nms0.3 rec 0.596 prec 0.792 ring 0.581 fp 128
+[epoch 46] organic +nms (deployed): AP 0.6420 | score>0.3 recall 0.596 prec 0.792 ring recall 0.581 FP 128
+[epoch 46] 41: 46	0.4687	recall0.3 0.760	prec0.3 0.561	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.6865	nms0.3 rec 0.723 prec 0.734 ring 0.715 fp 439
+[epoch 46] 41 +nms (deployed): AP 0.6865 | score>0.3 recall 0.723 prec 0.734 ring recall 0.715 FP 439
+[epoch 46] eval took 14s (both sets)
+[epoch 47] loss 0.6153 heat 0.2056 reg 0.1024 (66s)
+[epoch 48] loss 0.6166 heat 0.2105 reg 0.1015 (66s)
+[epoch 48] organic: 48	0.6264	recall0.3 0.610	prec0.3 0.747	chigap<5 0.489	eu<5 0.473	n<5 chi=137 eu=131	apnms 0.6424	nms0.3 rec 0.601 prec 0.784 ring 0.613 fp 135
+[epoch 48] organic +nms (deployed): AP 0.6424 | score>0.3 recall 0.601 prec 0.784 ring recall 0.613 FP 135
+[epoch 48] 41: 48	0.4624	recall0.3 0.769	prec0.3 0.552	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6861	nms0.3 rec 0.726 prec 0.733 ring 0.729 fp 443
+[epoch 48] 41 +nms (deployed): AP 0.6861 | score>0.3 recall 0.726 prec 0.733 ring recall 0.729 FP 443
+[epoch 48] eval took 14s (both sets)
+[epoch 49] loss 0.6026 heat 0.1960 reg 0.1016 (66s)
+[epoch 50] loss 0.6111 heat 0.2035 reg 0.1019 (66s)
+[epoch 50] organic: 50	0.6117	recall0.3 0.614	prec0.3 0.747	chigap<5 0.482	eu<5 0.473	n<5 chi=137 eu=131	apnms 0.6359	nms0.3 rec 0.607 prec 0.775 ring 0.581 fp 144
+[epoch 50] organic +nms (deployed): AP 0.6359 | score>0.3 recall 0.607 prec 0.775 ring recall 0.581 FP 144
+[epoch 50] 41: 50	0.4481	recall0.3 0.774	prec0.3 0.537	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.6819	nms0.3 rec 0.729 prec 0.733 ring 0.722 fp 446
+[epoch 50] 41 +nms (deployed): AP 0.6819 | score>0.3 recall 0.729 prec 0.733 ring recall 0.722 FP 446
+[epoch 50] eval took 14s (both sets)
+[epoch 51] loss 0.5927 heat 0.1905 reg 0.1006 (65s)
+[epoch 52] loss 0.5772 heat 0.1807 reg 0.0991 (66s)
+[epoch 52] organic: 52	0.6220	recall0.3 0.630	prec0.3 0.724	chigap<5 0.489	eu<5 0.466	n<5 chi=137 eu=131	apnms 0.6463	nms0.3 rec 0.618 prec 0.756 ring 0.613 fp 163
+[epoch 52] organic +nms (deployed): AP 0.6463 | score>0.3 recall 0.618 prec 0.756 ring recall 0.613 FP 163
+[epoch 52] 41: 52	0.4503	recall0.3 0.787	prec0.3 0.518	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6860	nms0.3 rec 0.744 prec 0.701 ring 0.745 fp 532
+[epoch 52] 41 +nms (deployed): AP 0.6860 | score>0.3 recall 0.744 prec 0.701 ring recall 0.745 FP 532
+[epoch 52] eval took 14s (both sets)
+[epoch 53] loss 0.5762 heat 0.1869 reg 0.0973 (66s)
+[epoch 54] loss 0.6158 heat 0.2027 reg 0.1033 (65s)
+[epoch 54] organic: 54	0.6297	recall0.3 0.638	prec0.3 0.722	chigap<5 0.489	eu<5 0.466	n<5 chi=137 eu=131	apnms 0.6534	nms0.3 rec 0.629 prec 0.756 ring 0.581 fp 166
+[epoch 54] organic +nms (deployed): AP 0.6534 | score>0.3 recall 0.629 prec 0.756 ring recall 0.581 FP 166
+[epoch 54] 41: 54	0.4600	recall0.3 0.800	prec0.3 0.521	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6884	nms0.3 rec 0.756 prec 0.685 ring 0.762 fp 584
+[epoch 54] 41 +nms (deployed): AP 0.6884 | score>0.3 recall 0.756 prec 0.685 ring recall 0.762 FP 584
+[epoch 54] eval took 14s (both sets)
+[epoch 55] loss 0.6052 heat 0.2019 reg 0.1008 (66s)
+[epoch 56] loss 0.5905 heat 0.1894 reg 0.1003 (66s)
+[epoch 56] organic: 56	0.6156	recall0.3 0.633	prec0.3 0.711	chigap<5 0.489	eu<5 0.466	n<5 chi=137 eu=131	apnms 0.6432	nms0.3 rec 0.624 prec 0.742 ring 0.581 fp 177
+[epoch 56] organic +nms (deployed): AP 0.6432 | score>0.3 recall 0.624 prec 0.742 ring recall 0.581 FP 177
+[epoch 56] 41: 56	0.4719	recall0.3 0.779	prec0.3 0.543	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6871	nms0.3 rec 0.735 prec 0.701 ring 0.729 fp 527
+[epoch 56] 41 +nms (deployed): AP 0.6871 | score>0.3 recall 0.735 prec 0.701 ring recall 0.729 FP 527
+[epoch 56] eval took 14s (both sets)
+[epoch 57] loss 0.6050 heat 0.1941 reg 0.1027 (66s)
+[epoch 58] loss 0.6061 heat 0.1956 reg 0.1026 (65s)
+[epoch 58] organic: 58	0.6149	recall0.3 0.636	prec0.3 0.698	chigap<5 0.489	eu<5 0.466	n<5 chi=137 eu=131	apnms 0.6359	nms0.3 rec 0.627 prec 0.730 ring 0.581 fp 189
+[epoch 58] organic +nms (deployed): AP 0.6359 | score>0.3 recall 0.627 prec 0.730 ring recall 0.581 FP 189
+[epoch 58] 41: 58	0.4665	recall0.3 0.787	prec0.3 0.521	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.6789	nms0.3 rec 0.742 prec 0.685 ring 0.738 fp 573
+[epoch 58] 41 +nms (deployed): AP 0.6789 | score>0.3 recall 0.742 prec 0.685 ring recall 0.738 FP 573
+[epoch 58] eval took 14s (both sets)
+[epoch 59] loss 0.6062 heat 0.1997 reg 0.1016 (65s)
+[epoch 59] organic: 59	0.6238	recall0.3 0.628	prec0.3 0.739	chigap<5 0.496	eu<5 0.473	n<5 chi=137 eu=131	apnms 0.6480	nms0.3 rec 0.617 prec 0.771 ring 0.581 fp 150
+[epoch 59] organic +nms (deployed): AP 0.6480 | score>0.3 recall 0.617 prec 0.771 ring recall 0.581 FP 150
+[epoch 59] 41: 59	0.4461	recall0.3 0.782	prec0.3 0.517	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6942	nms0.3 rec 0.735 prec 0.733 ring 0.735 fp 449
+[epoch 59] 41 +nms (deployed): AP 0.6942 | score>0.3 recall 0.735 prec 0.733 ring recall 0.735 FP 449
+[epoch 59] eval took 14s (both sets)
