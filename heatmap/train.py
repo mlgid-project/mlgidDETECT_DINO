@@ -231,10 +231,12 @@ def main():
         print(f'[epoch {epoch}] loss {agg["loss"]/n:.4f} heat {agg["loss_heat"]/n:.4f} reg {agg["loss_reg"]/n:.4f} '
               + (f'ring {agg["loss_ring"]/n:.4f} ' if ring_stride else '') + f'({time.time()-t0:.0f}s)', flush=True)
         # (a random-init backbone can't be re-read from a file, so that arm saves it)
+        # tmp + rename: a failed write (disk quota) must not leave a truncated checkpoint.pth that cannot be resumed
         torch.save(dict(model={k: v for k, v in model.state_dict().items()
                                if not (k.startswith('backbone.') and not a.unfreeze and a.bb != 'random')},
                         optimizer=opt.state_dict(), lr_scheduler=sched.state_dict(), epoch=epoch, hm_args=hm_args),
-                   ck_path)
+                   ck_path + '.tmp')
+        os.replace(ck_path + '.tmp', ck_path)
         if epoch % eval_interval(a) == 0 or epoch == a.epochs - 1:
             quick_eval(model, epoch, a.out)
 
