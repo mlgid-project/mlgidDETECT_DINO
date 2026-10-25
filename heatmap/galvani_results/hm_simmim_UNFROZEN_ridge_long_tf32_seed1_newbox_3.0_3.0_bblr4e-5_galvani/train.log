@@ -1,0 +1,558 @@
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/functional.py:534: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3595.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP/models/heatmap_head.py:80: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  sd = torch.load(backbone_ckpt, map_location='cpu')
+[heatmap] backbone load: _IncompatibleKeys(missing_keys=['norm0.weight', 'norm0.bias'], unexpected_keys=[])
+[train] eval GT box scale (x,y): (1.5, 1.5)
+[train] trainable params: 196714666
+[train] sim box convention: a_coef,w_coef = 3.0,3.0
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 0] loss 4.1711 heat 2.0121 reg 0.5397 (168s)
+[epoch 0] organic: 0	0.4962	recall0.3 0.367	prec0.3 0.809	chigap<5 0.270	eu<5 0.282	n<5 chi=137 eu=131	apnms 0.5501	nms0.3 rec 0.365 prec 0.854 ring 0.484 fp 51
+[epoch 0] organic +nms (deployed): AP 0.5501 | score>0.3 recall 0.365 prec 0.854 ring recall 0.484 FP 51
+[epoch 0] 41: 0	0.4193	recall0.3 0.565	prec0.3 0.470	chigap<5 0.000	eu<5 0.333	n<5 chi=4 eu=69	apnms 0.5581	nms0.3 rec 0.537 prec 0.684 ring 0.528 fp 416
+[epoch 0] 41 +nms (deployed): AP 0.5581 | score>0.3 recall 0.537 prec 0.684 ring recall 0.528 FP 416
+[epoch 0] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 1] loss 1.9533 heat 0.8795 reg 0.2685 (167s)
+[epoch 2] loss 1.4933 heat 0.6189 reg 0.2186 (167s)
+[epoch 2] organic: 2	0.5906	recall0.3 0.507	prec0.3 0.845	chigap<5 0.380	eu<5 0.382	n<5 chi=137 eu=131	apnms 0.5970	nms0.3 rec 0.506 prec 0.859 ring 0.452 fp 68
+[epoch 2] organic +nms (deployed): AP 0.5970 | score>0.3 recall 0.506 prec 0.859 ring recall 0.452 FP 68
+[epoch 2] 41: 2	0.6222	recall0.3 0.676	prec0.3 0.684	chigap<5 0.500	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.6656	nms0.3 rec 0.660 prec 0.739 ring 0.650 fp 391
+[epoch 2] 41 +nms (deployed): AP 0.6656 | score>0.3 recall 0.660 prec 0.739 ring recall 0.650 FP 391
+[epoch 2] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 3] loss 1.3375 heat 0.5345 reg 0.2007 (167s)
+[epoch 4] loss 1.2670 heat 0.4911 reg 0.1940 (167s)
+[epoch 4] organic: 4	0.5519	recall0.3 0.528	prec0.3 0.816	chigap<5 0.365	eu<5 0.374	n<5 chi=137 eu=131	apnms 0.5667	nms0.3 rec 0.524 prec 0.839 ring 0.419 fp 82
+[epoch 4] organic +nms (deployed): AP 0.5667 | score>0.3 recall 0.524 prec 0.839 ring recall 0.419 FP 82
+[epoch 4] 41: 4	0.5862	recall0.3 0.713	prec0.3 0.654	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.6441	nms0.3 rec 0.698 prec 0.703 ring 0.706 fp 495
+[epoch 4] 41 +nms (deployed): AP 0.6441 | score>0.3 recall 0.698 prec 0.703 ring recall 0.706 FP 495
+[epoch 4] eval took 15s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 5] loss 1.1534 heat 0.4514 reg 0.1755 (167s)
+[epoch 6] loss 1.0995 heat 0.4224 reg 0.1693 (167s)
+[epoch 6] organic: 6	0.5587	recall0.3 0.531	prec0.3 0.788	chigap<5 0.372	eu<5 0.374	n<5 chi=137 eu=131	apnms 0.5805	nms0.3 rec 0.530 prec 0.833 ring 0.613 fp 87
+[epoch 6] organic +nms (deployed): AP 0.5805 | score>0.3 recall 0.530 prec 0.833 ring recall 0.613 FP 87
+[epoch 6] 41: 6	0.5179	recall0.3 0.771	prec0.3 0.558	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.6485	nms0.3 rec 0.749 prec 0.657 ring 0.791 fp 657
+[epoch 6] 41 +nms (deployed): AP 0.6485 | score>0.3 recall 0.749 prec 0.657 ring recall 0.791 FP 657
+[epoch 6] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 7] loss 1.0680 heat 0.4132 reg 0.1637 (167s)
+[epoch 8] loss 1.0292 heat 0.3854 reg 0.1610 (167s)
+[epoch 8] organic: 8	0.5393	recall0.3 0.546	prec0.3 0.753	chigap<5 0.365	eu<5 0.366	n<5 chi=137 eu=131	apnms 0.5679	nms0.3 rec 0.541 prec 0.815 ring 0.710 fp 100
+[epoch 8] organic +nms (deployed): AP 0.5679 | score>0.3 recall 0.541 prec 0.815 ring recall 0.710 FP 100
+[epoch 8] 41: 8	0.5418	recall0.3 0.769	prec0.3 0.543	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.6585	nms0.3 rec 0.751 prec 0.672 ring 0.806 fp 615
+[epoch 8] 41 +nms (deployed): AP 0.6585 | score>0.3 recall 0.751 prec 0.672 ring recall 0.806 FP 615
+[epoch 8] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 9] loss 0.9837 heat 0.3742 reg 0.1524 (167s)
+[epoch 10] loss 0.9938 heat 0.3598 reg 0.1585 (167s)
+[epoch 10] organic: 10	0.5181	recall0.3 0.472	prec0.3 0.806	chigap<5 0.343	eu<5 0.344	n<5 chi=137 eu=131	apnms 0.5264	nms0.3 rec 0.470 prec 0.822 ring 0.613 fp 83
+[epoch 10] organic +nms (deployed): AP 0.5264 | score>0.3 recall 0.470 prec 0.822 ring recall 0.613 FP 83
+[epoch 10] 41: 10	0.5652	recall0.3 0.733	prec0.3 0.633	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.6201	nms0.3 rec 0.707 prec 0.699 ring 0.716 fp 512
+[epoch 10] 41 +nms (deployed): AP 0.6201 | score>0.3 recall 0.707 prec 0.699 ring recall 0.716 FP 512
+[epoch 10] eval took 15s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 11] loss 0.9366 heat 0.3438 reg 0.1482 (167s)
+[epoch 12] loss 0.9065 heat 0.3303 reg 0.1440 (167s)
+[epoch 12] organic: 12	0.5575	recall0.3 0.550	prec0.3 0.774	chigap<5 0.394	eu<5 0.397	n<5 chi=137 eu=131	apnms 0.5748	nms0.3 rec 0.543 prec 0.806 ring 0.645 fp 107
+[epoch 12] organic +nms (deployed): AP 0.5748 | score>0.3 recall 0.543 prec 0.806 ring recall 0.645 FP 107
+[epoch 12] 41: 12	0.6159	recall0.3 0.755	prec0.3 0.671	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.6845	nms0.3 rec 0.740 prec 0.734 ring 0.782 fp 450
+[epoch 12] 41 +nms (deployed): AP 0.6845 | score>0.3 recall 0.740 prec 0.734 ring recall 0.782 FP 450
+[epoch 12] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 13] loss 0.8971 heat 0.3341 reg 0.1407 (167s)
+[epoch 14] loss 0.8701 heat 0.3342 reg 0.1340 (167s)
+[epoch 14] organic: 14	0.5384	recall0.3 0.466	prec0.3 0.874	chigap<5 0.336	eu<5 0.336	n<5 chi=137 eu=131	apnms 0.5631	nms0.3 rec 0.463 prec 0.894 ring 0.548 fp 45
+[epoch 14] organic +nms (deployed): AP 0.5631 | score>0.3 recall 0.463 prec 0.894 ring recall 0.548 FP 45
+[epoch 14] 41: 14	0.5071	recall0.3 0.759	prec0.3 0.637	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6981	nms0.3 rec 0.725 prec 0.811 ring 0.782 fp 284
+[epoch 14] 41 +nms (deployed): AP 0.6981 | score>0.3 recall 0.725 prec 0.811 ring recall 0.782 FP 284
+[epoch 14] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 15] loss 0.8342 heat 0.2988 reg 0.1339 (167s)
+[epoch 16] loss 0.8022 heat 0.3015 reg 0.1252 (167s)
+[epoch 16] organic: 16	0.5414	recall0.3 0.530	prec0.3 0.773	chigap<5 0.380	eu<5 0.382	n<5 chi=137 eu=131	apnms 0.5566	nms0.3 rec 0.526 prec 0.799 ring 0.516 fp 108
+[epoch 16] organic +nms (deployed): AP 0.5566 | score>0.3 recall 0.526 prec 0.799 ring recall 0.516 FP 108
+[epoch 16] 41: 16	0.5514	recall0.3 0.748	prec0.3 0.623	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.6851	nms0.3 rec 0.723 prec 0.736 ring 0.732 fp 434
+[epoch 16] 41 +nms (deployed): AP 0.6851 | score>0.3 recall 0.723 prec 0.736 ring recall 0.732 FP 434
+[epoch 16] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 17] loss 0.7596 heat 0.2671 reg 0.1231 (167s)
+[epoch 18] loss 0.7158 heat 0.2376 reg 0.1196 (167s)
+[epoch 18] organic: 18	0.5890	recall0.3 0.546	prec0.3 0.837	chigap<5 0.401	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.5977	nms0.3 rec 0.542 prec 0.862 ring 0.677 fp 71
+[epoch 18] organic +nms (deployed): AP 0.5977 | score>0.3 recall 0.542 prec 0.862 ring recall 0.677 FP 71
+[epoch 18] 41: 18	0.6033	recall0.3 0.768	prec0.3 0.675	chigap<5 0.000	eu<5 0.362	n<5 chi=4 eu=69	apnms 0.7002	nms0.3 rec 0.740 prec 0.772 ring 0.806 fp 367
+[epoch 18] 41 +nms (deployed): AP 0.7002 | score>0.3 recall 0.740 prec 0.772 ring recall 0.806 FP 367
+[epoch 18] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 19] loss 0.6815 heat 0.2308 reg 0.1127 (167s)
+[epoch 20] loss 0.6941 heat 0.2378 reg 0.1141 (167s)
+[epoch 20] organic: 20	0.5726	recall0.3 0.592	prec0.3 0.747	chigap<5 0.423	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.5834	nms0.3 rec 0.584 prec 0.785 ring 0.645 fp 131
+[epoch 20] organic +nms (deployed): AP 0.5834 | score>0.3 recall 0.584 prec 0.785 ring recall 0.645 FP 131
+[epoch 20] 41: 20	0.6206	recall0.3 0.788	prec0.3 0.585	chigap<5 0.500	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6900	nms0.3 rec 0.768 prec 0.674 ring 0.818 fp 624
+[epoch 20] 41 +nms (deployed): AP 0.6900 | score>0.3 recall 0.768 prec 0.674 ring recall 0.818 FP 624
+[epoch 20] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 21] loss 0.6540 heat 0.2113 reg 0.1107 (167s)
+[epoch 22] loss 0.6147 heat 0.1979 reg 0.1042 (167s)
+[epoch 22] organic: 22	0.5432	recall0.3 0.574	prec0.3 0.711	chigap<5 0.365	eu<5 0.374	n<5 chi=137 eu=131	apnms 0.5576	nms0.3 rec 0.567 prec 0.755 ring 0.645 fp 150
+[epoch 22] organic +nms (deployed): AP 0.5576 | score>0.3 recall 0.567 prec 0.755 ring recall 0.645 FP 150
+[epoch 22] 41: 22	0.5540	recall0.3 0.791	prec0.3 0.544	chigap<5 0.750	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.6888	nms0.3 rec 0.766 prec 0.656 ring 0.837 fp 673
+[epoch 22] 41 +nms (deployed): AP 0.6888 | score>0.3 recall 0.766 prec 0.656 ring recall 0.837 FP 673
+[epoch 22] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 23] loss 0.6228 heat 0.1912 reg 0.1079 (167s)
+[epoch 24] loss 0.6102 heat 0.1945 reg 0.1039 (167s)
+[epoch 24] organic: 24	0.5912	recall0.3 0.581	prec0.3 0.802	chigap<5 0.409	eu<5 0.397	n<5 chi=137 eu=131	apnms 0.6056	nms0.3 rec 0.575 prec 0.836 ring 0.645 fp 92
+[epoch 24] organic +nms (deployed): AP 0.6056 | score>0.3 recall 0.575 prec 0.836 ring recall 0.645 FP 92
+[epoch 24] 41: 24	0.5954	recall0.3 0.784	prec0.3 0.648	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.7025	nms0.3 rec 0.769 prec 0.727 ring 0.831 fp 485
+[epoch 24] 41 +nms (deployed): AP 0.7025 | score>0.3 recall 0.769 prec 0.727 ring recall 0.831 FP 485
+[epoch 24] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 25] loss 0.5723 heat 0.1787 reg 0.0984 (167s)
+[epoch 26] loss 0.6078 heat 0.1925 reg 0.1038 (167s)
+[epoch 26] organic: 26	0.5809	recall0.3 0.556	prec0.3 0.790	chigap<5 0.431	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.5895	nms0.3 rec 0.553 prec 0.816 ring 0.581 fp 102
+[epoch 26] organic +nms (deployed): AP 0.5895 | score>0.3 recall 0.553 prec 0.816 ring recall 0.581 FP 102
+[epoch 26] 41: 26	0.6416	recall0.3 0.769	prec0.3 0.641	chigap<5 0.750	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7051	nms0.3 rec 0.753 prec 0.721 ring 0.759 fp 488
+[epoch 26] 41 +nms (deployed): AP 0.7051 | score>0.3 recall 0.753 prec 0.721 ring recall 0.759 FP 488
+[epoch 26] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 27] loss 0.6206 heat 0.2197 reg 0.1002 (166s)
+[epoch 28] loss 0.5366 heat 0.1620 reg 0.0937 (167s)
+[epoch 28] organic: 28	0.5587	recall0.3 0.572	prec0.3 0.789	chigap<5 0.387	eu<5 0.389	n<5 chi=137 eu=131	apnms 0.5877	nms0.3 rec 0.568 prec 0.826 ring 0.677 fp 98
+[epoch 28] organic +nms (deployed): AP 0.5877 | score>0.3 recall 0.568 prec 0.826 ring recall 0.677 FP 98
+[epoch 28] 41: 28	0.5746	recall0.3 0.803	prec0.3 0.526	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.6751	nms0.3 rec 0.779 prec 0.639 ring 0.855 fp 738
+[epoch 28] 41 +nms (deployed): AP 0.6751 | score>0.3 recall 0.779 prec 0.639 ring recall 0.855 FP 738
+[epoch 28] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 29] loss 0.5922 heat 0.1909 reg 0.1003 (166s)
+[epoch 30] loss 0.5370 heat 0.1598 reg 0.0943 (167s)
+[epoch 30] organic: 30	0.6034	recall0.3 0.602	prec0.3 0.794	chigap<5 0.460	eu<5 0.443	n<5 chi=137 eu=131	apnms 0.6121	nms0.3 rec 0.594 prec 0.819 ring 0.677 fp 107
+[epoch 30] organic +nms (deployed): AP 0.6121 | score>0.3 recall 0.594 prec 0.819 ring recall 0.677 FP 107
+[epoch 30] 41: 30	0.6269	recall0.3 0.781	prec0.3 0.620	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.7027	nms0.3 rec 0.763 prec 0.710 ring 0.831 fp 522
+[epoch 30] 41 +nms (deployed): AP 0.7027 | score>0.3 recall 0.763 prec 0.710 ring recall 0.831 FP 522
+[epoch 30] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 31] loss 0.5463 heat 0.1574 reg 0.0972 (166s)
+[epoch 32] loss 0.5162 heat 0.1479 reg 0.0921 (167s)
+[epoch 32] organic: 32	0.5690	recall0.3 0.567	prec0.3 0.786	chigap<5 0.416	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.5857	nms0.3 rec 0.558 prec 0.825 ring 0.613 fp 97
+[epoch 32] organic +nms (deployed): AP 0.5857 | score>0.3 recall 0.558 prec 0.825 ring recall 0.613 FP 97
+[epoch 32] 41: 32	0.6236	recall0.3 0.778	prec0.3 0.642	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7071	nms0.3 rec 0.757 prec 0.748 ring 0.820 fp 427
+[epoch 32] 41 +nms (deployed): AP 0.7071 | score>0.3 recall 0.757 prec 0.748 ring recall 0.820 FP 427
+[epoch 32] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 33] loss 0.5669 heat 0.1727 reg 0.0985 (167s)
+[epoch 34] loss 0.5369 heat 0.1648 reg 0.0930 (167s)
+[epoch 34] organic: 34	0.5942	recall0.3 0.588	prec0.3 0.784	chigap<5 0.431	eu<5 0.427	n<5 chi=137 eu=131	apnms 0.6109	nms0.3 rec 0.585 prec 0.823 ring 0.677 fp 103
+[epoch 34] organic +nms (deployed): AP 0.6109 | score>0.3 recall 0.585 prec 0.823 ring recall 0.677 FP 103
+[epoch 34] 41: 34	0.5751	recall0.3 0.790	prec0.3 0.617	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7109	nms0.3 rec 0.766 prec 0.735 ring 0.817 fp 464
+[epoch 34] 41 +nms (deployed): AP 0.7109 | score>0.3 recall 0.766 prec 0.735 ring recall 0.817 FP 464
+[epoch 34] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 35] loss 0.5676 heat 0.1751 reg 0.0981 (167s)
+[epoch 36] loss 0.5428 heat 0.1622 reg 0.0951 (167s)
+[epoch 36] organic: 36	0.5709	recall0.3 0.575	prec0.3 0.830	chigap<5 0.416	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.6004	nms0.3 rec 0.567 prec 0.872 ring 0.677 fp 68
+[epoch 36] organic +nms (deployed): AP 0.6004 | score>0.3 recall 0.567 prec 0.872 ring recall 0.677 FP 68
+[epoch 36] 41: 36	0.5841	recall0.3 0.803	prec0.3 0.604	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7290	nms0.3 rec 0.773 prec 0.771 ring 0.834 fp 386
+[epoch 36] 41 +nms (deployed): AP 0.7290 | score>0.3 recall 0.773 prec 0.771 ring recall 0.834 FP 386
+[epoch 36] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 37] loss 0.5374 heat 0.1606 reg 0.0942 (167s)
+[epoch 38] loss 0.5314 heat 0.1623 reg 0.0923 (167s)
+[epoch 38] organic: 38	0.6094	recall0.3 0.643	prec0.3 0.721	chigap<5 0.474	eu<5 0.466	n<5 chi=137 eu=131	apnms 0.6332	nms0.3 rec 0.638 prec 0.749 ring 0.710 fp 175
+[epoch 38] organic +nms (deployed): AP 0.6332 | score>0.3 recall 0.638 prec 0.749 ring recall 0.710 FP 175
+[epoch 38] 41: 38	0.6035	recall0.3 0.834	prec0.3 0.523	chigap<5 0.750	eu<5 0.435	n<5 chi=4 eu=69	apnms 0.7015	nms0.3 rec 0.813 prec 0.611 ring 0.851 fp 867
+[epoch 38] 41 +nms (deployed): AP 0.7015 | score>0.3 recall 0.813 prec 0.611 ring recall 0.851 FP 867
+[epoch 38] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 39] loss 0.4813 heat 0.1301 reg 0.0878 (167s)
+[epoch 40] loss 0.4894 heat 0.1450 reg 0.0861 (167s)
+[epoch 40] organic: 40	0.5885	recall0.3 0.590	prec0.3 0.802	chigap<5 0.401	eu<5 0.397	n<5 chi=137 eu=131	apnms 0.5935	nms0.3 rec 0.580 prec 0.829 ring 0.645 fp 98
+[epoch 40] organic +nms (deployed): AP 0.5935 | score>0.3 recall 0.580 prec 0.829 ring recall 0.645 FP 98
+[epoch 40] 41: 40	0.6452	recall0.3 0.795	prec0.3 0.620	chigap<5 0.250	eu<5 0.391	n<5 chi=4 eu=69	apnms 0.7048	nms0.3 rec 0.780 prec 0.692 ring 0.824 fp 582
+[epoch 40] 41 +nms (deployed): AP 0.7048 | score>0.3 recall 0.780 prec 0.692 ring recall 0.824 FP 582
+[epoch 40] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 41] loss 0.5577 heat 0.1807 reg 0.0943 (167s)
+[epoch 42] loss 0.5131 heat 0.1558 reg 0.0893 (167s)
+[epoch 42] organic: 42	0.5900	recall0.3 0.543	prec0.3 0.862	chigap<5 0.416	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.5928	nms0.3 rec 0.539 prec 0.876 ring 0.581 fp 62
+[epoch 42] organic +nms (deployed): AP 0.5928 | score>0.3 recall 0.539 prec 0.876 ring recall 0.581 FP 62
+[epoch 42] 41: 42	0.6880	recall0.3 0.764	prec0.3 0.736	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7253	nms0.3 rec 0.751 prec 0.803 ring 0.799 fp 310
+[epoch 42] 41 +nms (deployed): AP 0.7253 | score>0.3 recall 0.751 prec 0.803 ring recall 0.799 FP 310
+[epoch 42] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 43] loss 0.4674 heat 0.1350 reg 0.0831 (167s)
+[epoch 44] loss 0.5041 heat 0.1468 reg 0.0893 (167s)
+[epoch 44] organic: 44	0.6260	recall0.3 0.621	prec0.3 0.784	chigap<5 0.445	eu<5 0.443	n<5 chi=137 eu=131	apnms 0.6409	nms0.3 rec 0.616 prec 0.810 ring 0.710 fp 118
+[epoch 44] organic +nms (deployed): AP 0.6409 | score>0.3 recall 0.616 prec 0.810 ring recall 0.710 FP 118
+[epoch 44] 41: 44	0.6419	recall0.3 0.829	prec0.3 0.581	chigap<5 0.250	eu<5 0.435	n<5 chi=4 eu=69	apnms 0.7178	nms0.3 rec 0.810 prec 0.650 ring 0.865 fp 733
+[epoch 44] 41 +nms (deployed): AP 0.7178 | score>0.3 recall 0.810 prec 0.650 ring recall 0.865 FP 733
+[epoch 44] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 45] loss 0.4861 heat 0.1388 reg 0.0868 (167s)
+[epoch 46] loss 0.5002 heat 0.1526 reg 0.0869 (167s)
+[epoch 46] organic: 46	0.5846	recall0.3 0.573	prec0.3 0.833	chigap<5 0.423	eu<5 0.427	n<5 chi=137 eu=131	apnms 0.5931	nms0.3 rec 0.572 prec 0.865 ring 0.645 fp 73
+[epoch 46] organic +nms (deployed): AP 0.5931 | score>0.3 recall 0.572 prec 0.865 ring recall 0.645 FP 73
+[epoch 46] 41: 46	0.6335	recall0.3 0.776	prec0.3 0.653	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.7150	nms0.3 rec 0.763 prec 0.739 ring 0.821 fp 453
+[epoch 46] 41 +nms (deployed): AP 0.7150 | score>0.3 recall 0.763 prec 0.739 ring recall 0.821 FP 453
+[epoch 46] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 47] loss 0.4759 heat 0.1279 reg 0.0870 (167s)
+[epoch 48] loss 0.5284 heat 0.1617 reg 0.0917 (167s)
+[epoch 48] organic: 48	0.5719	recall0.3 0.607	prec0.3 0.737	chigap<5 0.438	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6022	nms0.3 rec 0.603 prec 0.768 ring 0.645 fp 149
+[epoch 48] organic +nms (deployed): AP 0.6022 | score>0.3 recall 0.603 prec 0.768 ring recall 0.645 FP 149
+[epoch 48] 41: 48	0.6064	recall0.3 0.824	prec0.3 0.594	chigap<5 0.500	eu<5 0.435	n<5 chi=4 eu=69	apnms 0.7240	nms0.3 rec 0.809 prec 0.682 ring 0.835 fp 634
+[epoch 48] 41 +nms (deployed): AP 0.7240 | score>0.3 recall 0.809 prec 0.682 ring recall 0.835 FP 634
+[epoch 48] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 49] loss 0.4809 heat 0.1376 reg 0.0858 (167s)
+[epoch 50] loss 0.5037 heat 0.1603 reg 0.0859 (167s)
+[epoch 50] organic: 50	0.6038	recall0.3 0.613	prec0.3 0.741	chigap<5 0.431	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6185	nms0.3 rec 0.608 prec 0.771 ring 0.645 fp 148
+[epoch 50] organic +nms (deployed): AP 0.6185 | score>0.3 recall 0.608 prec 0.771 ring recall 0.645 FP 148
+[epoch 50] 41: 50	0.6013	recall0.3 0.808	prec0.3 0.563	chigap<5 0.750	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7171	nms0.3 rec 0.780 prec 0.703 ring 0.810 fp 552
+[epoch 50] 41 +nms (deployed): AP 0.7171 | score>0.3 recall 0.780 prec 0.703 ring recall 0.810 FP 552
+[epoch 50] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 51] loss 0.4848 heat 0.1334 reg 0.0879 (167s)
+[epoch 52] loss 0.4470 heat 0.1138 reg 0.0833 (167s)
+[epoch 52] organic: 52	0.6080	recall0.3 0.600	prec0.3 0.809	chigap<5 0.438	eu<5 0.443	n<5 chi=137 eu=131	apnms 0.6108	nms0.3 rec 0.595 prec 0.828 ring 0.613 fp 101
+[epoch 52] organic +nms (deployed): AP 0.6108 | score>0.3 recall 0.595 prec 0.828 ring recall 0.613 FP 101
+[epoch 52] 41: 52	0.6858	recall0.3 0.818	prec0.3 0.633	chigap<5 0.750	eu<5 0.435	n<5 chi=4 eu=69	apnms 0.7384	nms0.3 rec 0.806 prec 0.684 ring 0.850 fp 626
+[epoch 52] 41 +nms (deployed): AP 0.7384 | score>0.3 recall 0.806 prec 0.684 ring recall 0.850 FP 626
+[epoch 52] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 53] loss 0.4645 heat 0.1301 reg 0.0836 (167s)
+[epoch 54] loss 0.5001 heat 0.1442 reg 0.0890 (167s)
+[epoch 54] organic: 54	0.5691	recall0.3 0.525	prec0.3 0.830	chigap<5 0.394	eu<5 0.389	n<5 chi=137 eu=131	apnms 0.5783	nms0.3 rec 0.521 prec 0.859 ring 0.613 fp 70
+[epoch 54] organic +nms (deployed): AP 0.5783 | score>0.3 recall 0.521 prec 0.859 ring recall 0.613 FP 70
+[epoch 54] 41: 54	0.6107	recall0.3 0.805	prec0.3 0.642	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7118	nms0.3 rec 0.787 prec 0.726 ring 0.818 fp 499
+[epoch 54] 41 +nms (deployed): AP 0.7118 | score>0.3 recall 0.787 prec 0.726 ring recall 0.818 FP 499
+[epoch 54] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 55] loss 0.5346 heat 0.1679 reg 0.0917 (167s)
+[epoch 56] loss 0.4499 heat 0.1255 reg 0.0811 (167s)
+[epoch 56] organic: 56	0.5524	recall0.3 0.541	prec0.3 0.807	chigap<5 0.416	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.5718	nms0.3 rec 0.536 prec 0.844 ring 0.677 fp 81
+[epoch 56] organic +nms (deployed): AP 0.5718 | score>0.3 recall 0.536 prec 0.844 ring recall 0.677 FP 81
+[epoch 56] 41: 56	0.5891	recall0.3 0.800	prec0.3 0.595	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7264	nms0.3 rec 0.775 prec 0.753 ring 0.838 fp 427
+[epoch 56] 41 +nms (deployed): AP 0.7264 | score>0.3 recall 0.775 prec 0.753 ring recall 0.838 FP 427
+[epoch 56] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 57] loss 0.4404 heat 0.1162 reg 0.0811 (167s)
+[epoch 58] loss 0.4703 heat 0.1292 reg 0.0853 (167s)
+[epoch 58] organic: 58	0.6047	recall0.3 0.589	prec0.3 0.826	chigap<5 0.416	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.6146	nms0.3 rec 0.583 prec 0.847 ring 0.645 fp 86
+[epoch 58] organic +nms (deployed): AP 0.6146 | score>0.3 recall 0.583 prec 0.847 ring recall 0.645 FP 86
+[epoch 58] 41: 58	0.6572	recall0.3 0.810	prec0.3 0.637	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7344	nms0.3 rec 0.794 prec 0.729 ring 0.841 fp 494
+[epoch 58] 41 +nms (deployed): AP 0.7344 | score>0.3 recall 0.794 prec 0.729 ring recall 0.841 FP 494
+[epoch 58] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 59] loss 0.4521 heat 0.1224 reg 0.0824 (167s)
+[epoch 60] loss 0.4435 heat 0.1198 reg 0.0809 (167s)
+[epoch 60] organic: 60	0.5568	recall0.3 0.518	prec0.3 0.860	chigap<5 0.401	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.5742	nms0.3 rec 0.517 prec 0.883 ring 0.613 fp 56
+[epoch 60] organic +nms (deployed): AP 0.5742 | score>0.3 recall 0.517 prec 0.883 ring recall 0.613 FP 56
+[epoch 60] 41: 60	0.6043	recall0.3 0.785	prec0.3 0.647	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.7076	nms0.3 rec 0.761 prec 0.777 ring 0.838 fp 366
+[epoch 60] 41 +nms (deployed): AP 0.7076 | score>0.3 recall 0.761 prec 0.777 ring recall 0.838 FP 366
+[epoch 60] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 61] loss 0.4727 heat 0.1420 reg 0.0827 (167s)
+[epoch 62] loss 0.4500 heat 0.1209 reg 0.0823 (167s)
+[epoch 62] organic: 62	0.5756	recall0.3 0.558	prec0.3 0.822	chigap<5 0.416	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.5905	nms0.3 rec 0.556 prec 0.852 ring 0.645 fp 79
+[epoch 62] organic +nms (deployed): AP 0.5905 | score>0.3 recall 0.556 prec 0.852 ring recall 0.645 FP 79
+[epoch 62] 41: 62	0.6322	recall0.3 0.806	prec0.3 0.595	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7011	nms0.3 rec 0.787 prec 0.698 ring 0.867 fp 571
+[epoch 62] 41 +nms (deployed): AP 0.7011 | score>0.3 recall 0.787 prec 0.698 ring recall 0.867 FP 571
+[epoch 62] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 63] loss 0.4672 heat 0.1356 reg 0.0829 (167s)
+[epoch 64] loss 0.4474 heat 0.1292 reg 0.0796 (167s)
+[epoch 64] organic: 64	0.6056	recall0.3 0.608	prec0.3 0.767	chigap<5 0.431	eu<5 0.427	n<5 chi=137 eu=131	apnms 0.6164	nms0.3 rec 0.605 prec 0.798 ring 0.677 fp 125
+[epoch 64] organic +nms (deployed): AP 0.6164 | score>0.3 recall 0.605 prec 0.798 ring recall 0.677 FP 125
+[epoch 64] 41: 64	0.6488	recall0.3 0.796	prec0.3 0.604	chigap<5 0.250	eu<5 0.435	n<5 chi=4 eu=69	apnms 0.7101	nms0.3 rec 0.775 prec 0.687 ring 0.827 fp 592
+[epoch 64] 41 +nms (deployed): AP 0.7101 | score>0.3 recall 0.775 prec 0.687 ring recall 0.827 FP 592
+[epoch 64] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 65] loss 0.4658 heat 0.1363 reg 0.0824 (167s)
+[epoch 66] loss 0.4351 heat 0.1233 reg 0.0779 (167s)
+[epoch 66] organic: 66	0.5793	recall0.3 0.573	prec0.3 0.827	chigap<5 0.401	eu<5 0.397	n<5 chi=137 eu=131	apnms 0.5936	nms0.3 rec 0.568 prec 0.869 ring 0.710 fp 70
+[epoch 66] organic +nms (deployed): AP 0.5936 | score>0.3 recall 0.568 prec 0.869 ring recall 0.710 FP 70
+[epoch 66] 41: 66	0.6261	recall0.3 0.800	prec0.3 0.625	chigap<5 0.250	eu<5 0.406	n<5 chi=4 eu=69	apnms 0.7230	nms0.3 rec 0.779 prec 0.736 ring 0.841 fp 468
+[epoch 66] 41 +nms (deployed): AP 0.7230 | score>0.3 recall 0.779 prec 0.736 ring recall 0.841 FP 468
+[epoch 66] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 67] loss 0.3919 heat 0.0993 reg 0.0732 (167s)
+[epoch 68] loss 0.4353 heat 0.1185 reg 0.0792 (167s)
+[epoch 68] organic: 68	0.5873	recall0.3 0.558	prec0.3 0.859	chigap<5 0.401	eu<5 0.397	n<5 chi=137 eu=131	apnms 0.5988	nms0.3 rec 0.554 prec 0.885 ring 0.581 fp 59
+[epoch 68] organic +nms (deployed): AP 0.5988 | score>0.3 recall 0.554 prec 0.885 ring recall 0.581 FP 59
+[epoch 68] 41: 68	0.6568	recall0.3 0.759	prec0.3 0.695	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7129	nms0.3 rec 0.745 prec 0.770 ring 0.780 fp 374
+[epoch 68] 41 +nms (deployed): AP 0.7129 | score>0.3 recall 0.745 prec 0.770 ring recall 0.780 FP 374
+[epoch 68] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 69] loss 0.4319 heat 0.1170 reg 0.0787 (167s)
+[epoch 70] loss 0.4024 heat 0.1053 reg 0.0743 (167s)
+[epoch 70] organic: 70	0.6151	recall0.3 0.599	prec0.3 0.832	chigap<5 0.438	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6256	nms0.3 rec 0.597 prec 0.858 ring 0.613 fp 81
+[epoch 70] organic +nms (deployed): AP 0.6256 | score>0.3 recall 0.597 prec 0.858 ring recall 0.613 FP 81
+[epoch 70] 41: 70	0.6689	recall0.3 0.773	prec0.3 0.683	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7332	nms0.3 rec 0.757 prec 0.770 ring 0.799 fp 379
+[epoch 70] 41 +nms (deployed): AP 0.7332 | score>0.3 recall 0.757 prec 0.770 ring recall 0.799 FP 379
+[epoch 70] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 71] loss 0.4537 heat 0.1279 reg 0.0814 (167s)
+[epoch 72] loss 0.4350 heat 0.1254 reg 0.0774 (167s)
+[epoch 72] organic: 72	0.6040	recall0.3 0.579	prec0.3 0.806	chigap<5 0.423	eu<5 0.427	n<5 chi=137 eu=131	apnms 0.6177	nms0.3 rec 0.576 prec 0.840 ring 0.645 fp 90
+[epoch 72] organic +nms (deployed): AP 0.6177 | score>0.3 recall 0.576 prec 0.840 ring recall 0.645 FP 90
+[epoch 72] 41: 72	0.6780	recall0.3 0.804	prec0.3 0.649	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7328	nms0.3 rec 0.776 prec 0.735 ring 0.811 fp 469
+[epoch 72] 41 +nms (deployed): AP 0.7328 | score>0.3 recall 0.776 prec 0.735 ring recall 0.811 FP 469
+[epoch 72] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 73] loss 0.4293 heat 0.1248 reg 0.0761 (167s)
+[epoch 74] loss 0.4309 heat 0.1137 reg 0.0793 (167s)
+[epoch 74] organic: 74	0.5729	recall0.3 0.528	prec0.3 0.859	chigap<5 0.401	eu<5 0.397	n<5 chi=137 eu=131	apnms 0.5816	nms0.3 rec 0.525 prec 0.883 ring 0.645 fp 57
+[epoch 74] organic +nms (deployed): AP 0.5816 | score>0.3 recall 0.525 prec 0.883 ring recall 0.645 FP 57
+[epoch 74] 41: 74	0.6624	recall0.3 0.810	prec0.3 0.651	chigap<5 0.250	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7393	nms0.3 rec 0.795 prec 0.743 ring 0.857 fp 461
+[epoch 74] 41 +nms (deployed): AP 0.7393 | score>0.3 recall 0.795 prec 0.743 ring recall 0.857 FP 461
+[epoch 74] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 75] loss 0.4287 heat 0.1096 reg 0.0798 (167s)
+[epoch 76] loss 0.4189 heat 0.1078 reg 0.0778 (167s)
+[epoch 76] organic: 76	0.6036	recall0.3 0.596	prec0.3 0.792	chigap<5 0.438	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6126	nms0.3 rec 0.594 prec 0.808 ring 0.613 fp 115
+[epoch 76] organic +nms (deployed): AP 0.6126 | score>0.3 recall 0.594 prec 0.808 ring recall 0.613 FP 115
+[epoch 76] 41: 76	0.6933	recall0.3 0.822	prec0.3 0.610	chigap<5 0.250	eu<5 0.435	n<5 chi=4 eu=69	apnms 0.7369	nms0.3 rec 0.806 prec 0.667 ring 0.844 fp 676
+[epoch 76] 41 +nms (deployed): AP 0.7369 | score>0.3 recall 0.806 prec 0.667 ring recall 0.844 FP 676
+[epoch 76] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 77] loss 0.4139 heat 0.1064 reg 0.0769 (167s)
+[epoch 78] loss 0.4104 heat 0.1066 reg 0.0759 (167s)
+[epoch 78] organic: 78	0.5730	recall0.3 0.552	prec0.3 0.856	chigap<5 0.431	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.5779	nms0.3 rec 0.547 prec 0.875 ring 0.581 fp 64
+[epoch 78] organic +nms (deployed): AP 0.5779 | score>0.3 recall 0.547 prec 0.875 ring recall 0.581 FP 64
+[epoch 78] 41: 78	0.6755	recall0.3 0.798	prec0.3 0.651	chigap<5 0.250	eu<5 0.435	n<5 chi=4 eu=69	apnms 0.7183	nms0.3 rec 0.783 prec 0.734 ring 0.838 fp 477
+[epoch 78] 41 +nms (deployed): AP 0.7183 | score>0.3 recall 0.783 prec 0.734 ring recall 0.838 FP 477
+[epoch 78] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 79] loss 0.4323 heat 0.1225 reg 0.0774 (167s)
+[epoch 80] loss 0.4165 heat 0.1175 reg 0.0748 (167s)
+[epoch 80] organic: 80	0.5818	recall0.3 0.562	prec0.3 0.830	chigap<5 0.401	eu<5 0.405	n<5 chi=137 eu=131	apnms 0.5894	nms0.3 rec 0.561 prec 0.854 ring 0.613 fp 78
+[epoch 80] organic +nms (deployed): AP 0.5894 | score>0.3 recall 0.561 prec 0.854 ring recall 0.613 FP 78
+[epoch 80] 41: 80	0.6966	recall0.3 0.809	prec0.3 0.651	chigap<5 0.250	eu<5 0.435	n<5 chi=4 eu=69	apnms 0.7207	nms0.3 rec 0.796 prec 0.694 ring 0.820 fp 590
+[epoch 80] 41 +nms (deployed): AP 0.7207 | score>0.3 recall 0.796 prec 0.694 ring recall 0.820 FP 590
+[epoch 80] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 81] loss 0.4047 heat 0.1103 reg 0.0736 (167s)
+[epoch 82] loss 0.4279 heat 0.1205 reg 0.0768 (167s)
+[epoch 82] organic: 82	0.5909	recall0.3 0.595	prec0.3 0.789	chigap<5 0.409	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.5931	nms0.3 rec 0.591 prec 0.817 ring 0.677 fp 108
+[epoch 82] organic +nms (deployed): AP 0.5931 | score>0.3 recall 0.591 prec 0.817 ring recall 0.677 FP 108
+[epoch 82] 41: 82	0.6554	recall0.3 0.814	prec0.3 0.615	chigap<5 0.500	eu<5 0.420	n<5 chi=4 eu=69	apnms 0.7098	nms0.3 rec 0.796 prec 0.689 ring 0.850 fp 602
+[epoch 82] 41 +nms (deployed): AP 0.7098 | score>0.3 recall 0.796 prec 0.689 ring recall 0.850 FP 602
+[epoch 82] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 83] loss 0.3923 heat 0.0974 reg 0.0737 (167s)
+[epoch 84] loss 0.4102 heat 0.1147 reg 0.0739 (167s)
+[epoch 84] organic: 84	0.5990	recall0.3 0.580	prec0.3 0.810	chigap<5 0.423	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.6038	nms0.3 rec 0.579 prec 0.824 ring 0.613 fp 101
+[epoch 84] organic +nms (deployed): AP 0.6038 | score>0.3 recall 0.579 prec 0.824 ring recall 0.613 FP 101
+[epoch 84] 41: 84	0.6775	recall0.3 0.785	prec0.3 0.688	chigap<5 0.250	eu<5 0.449	n<5 chi=4 eu=69	apnms 0.7143	nms0.3 rec 0.779 prec 0.726 ring 0.806 fp 493
+[epoch 84] 41 +nms (deployed): AP 0.7143 | score>0.3 recall 0.779 prec 0.726 ring recall 0.806 FP 493
+[epoch 84] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 85] loss 0.4161 heat 0.1092 reg 0.0767 (167s)
+[epoch 86] loss 0.4093 heat 0.1096 reg 0.0749 (167s)
+[epoch 86] organic: 86	0.5627	recall0.3 0.507	prec0.3 0.912	chigap<5 0.387	eu<5 0.397	n<5 chi=137 eu=131	apnms 0.5680	nms0.3 rec 0.504 prec 0.932 ring 0.548 fp 30
+[epoch 86] organic +nms (deployed): AP 0.5680 | score>0.3 recall 0.504 prec 0.932 ring recall 0.548 FP 30
+[epoch 86] 41: 86	0.6987	recall0.3 0.734	prec0.3 0.763	chigap<5 0.250	eu<5 0.435	n<5 chi=4 eu=69	apnms 0.7323	nms0.3 rec 0.726 prec 0.825 ring 0.783 fp 258
+[epoch 86] 41 +nms (deployed): AP 0.7323 | score>0.3 recall 0.726 prec 0.825 ring recall 0.783 FP 258
+[epoch 86] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 87] loss 0.4198 heat 0.1109 reg 0.0772 (167s)
+[epoch 88] loss 0.4271 heat 0.1169 reg 0.0776 (167s)
+[epoch 88] organic: 88	0.6185	recall0.3 0.673	prec0.3 0.649	chigap<5 0.504	eu<5 0.496	n<5 chi=137 eu=131	apnms 0.6382	nms0.3 rec 0.665 prec 0.665 ring 0.613 fp 273
+[epoch 88] organic +nms (deployed): AP 0.6382 | score>0.3 recall 0.665 prec 0.665 ring recall 0.613 FP 273
+[epoch 88] 41: 88	0.5718	recall0.3 0.834	prec0.3 0.483	chigap<5 0.750	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7150	nms0.3 rec 0.818 prec 0.571 ring 0.854 fp 1031
+[epoch 88] 41 +nms (deployed): AP 0.7150 | score>0.3 recall 0.818 prec 0.571 ring recall 0.854 FP 1031
+[epoch 88] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 89] loss 0.4224 heat 0.1187 reg 0.0759 (167s)
+[epoch 90] loss 0.3744 heat 0.1046 reg 0.0674 (167s)
+[epoch 90] organic: 90	0.6040	recall0.3 0.588	prec0.3 0.793	chigap<5 0.438	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6123	nms0.3 rec 0.586 prec 0.826 ring 0.677 fp 101
+[epoch 90] organic +nms (deployed): AP 0.6123 | score>0.3 recall 0.586 prec 0.826 ring recall 0.677 FP 101
+[epoch 90] 41: 90	0.6672	recall0.3 0.818	prec0.3 0.627	chigap<5 0.250	eu<5 0.449	n<5 chi=4 eu=69	apnms 0.7174	nms0.3 rec 0.803 prec 0.683 ring 0.835 fp 626
+[epoch 90] 41 +nms (deployed): AP 0.7174 | score>0.3 recall 0.803 prec 0.683 ring recall 0.835 FP 626
+[epoch 90] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 91] loss 0.3261 heat 0.0860 reg 0.0600 (167s)
+[epoch 92] loss 0.3184 heat 0.0803 reg 0.0595 (167s)
+[epoch 92] organic: 92	0.6080	recall0.3 0.594	prec0.3 0.789	chigap<5 0.445	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6179	nms0.3 rec 0.594 prec 0.819 ring 0.710 fp 107
+[epoch 92] organic +nms (deployed): AP 0.6179 | score>0.3 recall 0.594 prec 0.819 ring recall 0.710 FP 107
+[epoch 92] 41: 92	0.6784	recall0.3 0.825	prec0.3 0.634	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7269	nms0.3 rec 0.807 prec 0.681 ring 0.848 fp 635
+[epoch 92] 41 +nms (deployed): AP 0.7269 | score>0.3 recall 0.807 prec 0.681 ring recall 0.848 FP 635
+[epoch 92] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 93] loss 0.3187 heat 0.0809 reg 0.0594 (167s)
+[epoch 94] loss 0.3348 heat 0.0885 reg 0.0616 (167s)
+[epoch 94] organic: 94	0.6032	recall0.3 0.585	prec0.3 0.794	chigap<5 0.438	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6105	nms0.3 rec 0.585 prec 0.824 ring 0.677 fp 102
+[epoch 94] organic +nms (deployed): AP 0.6105 | score>0.3 recall 0.585 prec 0.824 ring recall 0.677 FP 102
+[epoch 94] 41: 94	0.6863	recall0.3 0.811	prec0.3 0.659	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7297	nms0.3 rec 0.792 prec 0.712 ring 0.838 fp 537
+[epoch 94] 41 +nms (deployed): AP 0.7297 | score>0.3 recall 0.792 prec 0.712 ring recall 0.838 FP 537
+[epoch 94] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 95] loss 0.3292 heat 0.0860 reg 0.0608 (167s)
+[epoch 96] loss 0.3284 heat 0.0848 reg 0.0609 (167s)
+[epoch 96] organic: 96	0.6109	recall0.3 0.599	prec0.3 0.796	chigap<5 0.445	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6183	nms0.3 rec 0.599 prec 0.825 ring 0.677 fp 104
+[epoch 96] organic +nms (deployed): AP 0.6183 | score>0.3 recall 0.599 prec 0.825 ring recall 0.677 FP 104
+[epoch 96] 41: 96	0.6855	recall0.3 0.822	prec0.3 0.640	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7283	nms0.3 rec 0.803 prec 0.690 ring 0.850 fp 606
+[epoch 96] 41 +nms (deployed): AP 0.7283 | score>0.3 recall 0.803 prec 0.690 ring recall 0.850 FP 606
+[epoch 96] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 97] loss 0.3218 heat 0.0821 reg 0.0599 (167s)
+[epoch 98] loss 0.3319 heat 0.0963 reg 0.0589 (167s)
+[epoch 98] organic: 98	0.6146	recall0.3 0.595	prec0.3 0.809	chigap<5 0.445	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6212	nms0.3 rec 0.594 prec 0.830 ring 0.645 fp 99
+[epoch 98] organic +nms (deployed): AP 0.6212 | score>0.3 recall 0.594 prec 0.830 ring recall 0.645 FP 99
+[epoch 98] 41: 98	0.6853	recall0.3 0.821	prec0.3 0.646	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7192	nms0.3 rec 0.803 prec 0.689 ring 0.848 fp 607
+[epoch 98] 41 +nms (deployed): AP 0.7192 | score>0.3 recall 0.803 prec 0.689 ring recall 0.848 FP 607
+[epoch 98] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 99] loss 0.3161 heat 0.0849 reg 0.0578 (167s)
+[epoch 100] loss 0.3177 heat 0.0858 reg 0.0580 (167s)
+[epoch 100] organic: 100	0.5951	recall0.3 0.585	prec0.3 0.799	chigap<5 0.423	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.6064	nms0.3 rec 0.584 prec 0.827 ring 0.645 fp 100
+[epoch 100] organic +nms (deployed): AP 0.6064 | score>0.3 recall 0.584 prec 0.827 ring recall 0.645 FP 100
+[epoch 100] 41: 100	0.6891	recall0.3 0.816	prec0.3 0.667	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7269	nms0.3 rec 0.794 prec 0.712 ring 0.844 fp 539
+[epoch 100] 41 +nms (deployed): AP 0.7269 | score>0.3 recall 0.794 prec 0.712 ring recall 0.844 FP 539
+[epoch 100] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 101] loss 0.3138 heat 0.0804 reg 0.0583 (167s)
+[epoch 102] loss 0.3345 heat 0.0936 reg 0.0602 (167s)
+[epoch 102] organic: 102	0.6114	recall0.3 0.595	prec0.3 0.805	chigap<5 0.438	eu<5 0.427	n<5 chi=137 eu=131	apnms 0.6158	nms0.3 rec 0.594 prec 0.823 ring 0.645 fp 104
+[epoch 102] organic +nms (deployed): AP 0.6158 | score>0.3 recall 0.594 prec 0.823 ring recall 0.645 FP 104
+[epoch 102] 41: 102	0.6912	recall0.3 0.816	prec0.3 0.666	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7241	nms0.3 rec 0.797 prec 0.703 ring 0.843 fp 565
+[epoch 102] 41 +nms (deployed): AP 0.7241 | score>0.3 recall 0.797 prec 0.703 ring recall 0.843 FP 565
+[epoch 102] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 103] loss 0.3093 heat 0.0851 reg 0.0561 (167s)
+[epoch 104] loss 0.3316 heat 0.0888 reg 0.0607 (167s)
+[epoch 104] organic: 104	0.6009	recall0.3 0.576	prec0.3 0.816	chigap<5 0.423	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.6035	nms0.3 rec 0.575 prec 0.832 ring 0.613 fp 95
+[epoch 104] organic +nms (deployed): AP 0.6035 | score>0.3 recall 0.575 prec 0.832 ring recall 0.613 FP 95
+[epoch 104] 41: 104	0.7035	recall0.3 0.808	prec0.3 0.689	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7254	nms0.3 rec 0.792 prec 0.722 ring 0.844 fp 512
+[epoch 104] 41 +nms (deployed): AP 0.7254 | score>0.3 recall 0.792 prec 0.722 ring recall 0.844 FP 512
+[epoch 104] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 105] loss 0.3081 heat 0.0789 reg 0.0573 (167s)
+[epoch 106] loss 0.3181 heat 0.0878 reg 0.0576 (167s)
+[epoch 106] organic: 106	0.6098	recall0.3 0.601	prec0.3 0.801	chigap<5 0.445	eu<5 0.435	n<5 chi=137 eu=131	apnms 0.6152	nms0.3 rec 0.599 prec 0.820 ring 0.645 fp 107
+[epoch 106] organic +nms (deployed): AP 0.6152 | score>0.3 recall 0.599 prec 0.820 ring recall 0.645 FP 107
+[epoch 106] 41: 106	0.6889	recall0.3 0.823	prec0.3 0.646	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7218	nms0.3 rec 0.806 prec 0.685 ring 0.850 fp 622
+[epoch 106] 41 +nms (deployed): AP 0.7218 | score>0.3 recall 0.806 prec 0.685 ring recall 0.850 FP 622
+[epoch 106] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 107] loss 0.3082 heat 0.0797 reg 0.0571 (167s)
+[epoch 108] loss 0.3122 heat 0.0823 reg 0.0575 (167s)
+[epoch 108] organic: 108	0.6005	recall0.3 0.579	prec0.3 0.813	chigap<5 0.416	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.6040	nms0.3 rec 0.576 prec 0.832 ring 0.645 fp 95
+[epoch 108] organic +nms (deployed): AP 0.6040 | score>0.3 recall 0.576 prec 0.832 ring recall 0.645 FP 95
+[epoch 108] 41: 108	0.6941	recall0.3 0.806	prec0.3 0.698	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7300	nms0.3 rec 0.789 prec 0.741 ring 0.841 fp 462
+[epoch 108] 41 +nms (deployed): AP 0.7300 | score>0.3 recall 0.789 prec 0.741 ring recall 0.841 FP 462
+[epoch 108] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 109] loss 0.3096 heat 0.0792 reg 0.0576 (167s)
+[epoch 110] loss 0.2975 heat 0.0696 reg 0.0570 (167s)
+[epoch 110] organic: 110	0.6025	recall0.3 0.581	prec0.3 0.805	chigap<5 0.431	eu<5 0.420	n<5 chi=137 eu=131	apnms 0.6066	nms0.3 rec 0.580 prec 0.827 ring 0.645 fp 99
+[epoch 110] organic +nms (deployed): AP 0.6066 | score>0.3 recall 0.580 prec 0.827 ring recall 0.645 FP 99
+[epoch 110] 41: 110	0.6734	recall0.3 0.814	prec0.3 0.671	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7326	nms0.3 rec 0.797 prec 0.716 ring 0.845 fp 531
+[epoch 110] 41 +nms (deployed): AP 0.7326 | score>0.3 recall 0.797 prec 0.716 ring recall 0.845 FP 531
+[epoch 110] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 111] loss 0.3232 heat 0.0879 reg 0.0588 (167s)
+[epoch 112] loss 0.3097 heat 0.0869 reg 0.0557 (167s)
+[epoch 112] organic: 112	0.6036	recall0.3 0.585	prec0.3 0.806	chigap<5 0.416	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.6061	nms0.3 rec 0.583 prec 0.829 ring 0.645 fp 98
+[epoch 112] organic +nms (deployed): AP 0.6061 | score>0.3 recall 0.583 prec 0.829 ring recall 0.645 FP 98
+[epoch 112] 41: 112	0.6847	recall0.3 0.812	prec0.3 0.677	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7235	nms0.3 rec 0.796 prec 0.710 ring 0.838 fp 546
+[epoch 112] 41 +nms (deployed): AP 0.7235 | score>0.3 recall 0.796 prec 0.710 ring recall 0.838 FP 546
+[epoch 112] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 113] loss 0.3077 heat 0.0820 reg 0.0564 (167s)
+[epoch 114] loss 0.2891 heat 0.0710 reg 0.0545 (167s)
+[epoch 114] organic: 114	0.5988	recall0.3 0.584	prec0.3 0.813	chigap<5 0.416	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.6017	nms0.3 rec 0.583 prec 0.829 ring 0.645 fp 98
+[epoch 114] organic +nms (deployed): AP 0.6017 | score>0.3 recall 0.583 prec 0.829 ring recall 0.645 FP 98
+[epoch 114] 41: 114	0.6988	recall0.3 0.811	prec0.3 0.678	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7253	nms0.3 rec 0.794 prec 0.712 ring 0.838 fp 538
+[epoch 114] 41 +nms (deployed): AP 0.7253 | score>0.3 recall 0.794 prec 0.712 ring recall 0.838 FP 538
+[epoch 114] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 115] loss 0.3032 heat 0.0799 reg 0.0558 (167s)
+[epoch 116] loss 0.3072 heat 0.0802 reg 0.0568 (167s)
+[epoch 116] organic: 116	0.5998	recall0.3 0.585	prec0.3 0.806	chigap<5 0.416	eu<5 0.412	n<5 chi=137 eu=131	apnms 0.6026	nms0.3 rec 0.583 prec 0.825 ring 0.645 fp 101
+[epoch 116] organic +nms (deployed): AP 0.6026 | score>0.3 recall 0.583 prec 0.825 ring recall 0.645 FP 101
+[epoch 116] 41: 116	0.6965	recall0.3 0.812	prec0.3 0.673	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7269	nms0.3 rec 0.794 prec 0.709 ring 0.840 fp 548
+[epoch 116] 41 +nms (deployed): AP 0.7269 | score>0.3 recall 0.794 prec 0.709 ring recall 0.840 FP 548
+[epoch 116] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 117] loss 0.3070 heat 0.0863 reg 0.0552 (167s)
+[epoch 118] loss 0.3101 heat 0.0835 reg 0.0566 (167s)
+[epoch 118] organic: 118	0.6028	recall0.3 0.589	prec0.3 0.806	chigap<5 0.431	eu<5 0.427	n<5 chi=137 eu=131	apnms 0.6040	nms0.3 rec 0.586 prec 0.824 ring 0.645 fp 102
+[epoch 118] organic +nms (deployed): AP 0.6040 | score>0.3 recall 0.586 prec 0.824 ring recall 0.645 FP 102
+[epoch 118] 41: 118	0.6928	recall0.3 0.814	prec0.3 0.670	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7268	nms0.3 rec 0.798 prec 0.705 ring 0.844 fp 560
+[epoch 118] 41 +nms (deployed): AP 0.7268 | score>0.3 recall 0.798 prec 0.705 ring recall 0.844 FP 560
+[epoch 118] eval took 14s (both sets)
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+[epoch 119] loss 0.2956 heat 0.0741 reg 0.0554 (167s)
+[epoch 119] organic: 119	0.6066	recall0.3 0.590	prec0.3 0.806	chigap<5 0.431	eu<5 0.427	n<5 chi=137 eu=131	apnms 0.6089	nms0.3 rec 0.588 prec 0.826 ring 0.645 fp 101
+[epoch 119] organic +nms (deployed): AP 0.6089 | score>0.3 recall 0.588 prec 0.826 ring recall 0.645 FP 101
+[epoch 119] 41: 119	0.6959	recall0.3 0.813	prec0.3 0.669	chigap<5 0.250	eu<5 0.464	n<5 chi=4 eu=69	apnms 0.7275	nms0.3 rec 0.794 prec 0.703 ring 0.837 fp 562
+[epoch 119] 41 +nms (deployed): AP 0.7275 | score>0.3 recall 0.794 prec 0.703 ring recall 0.837 FP 562
+[epoch 119] eval took 14s (both sets)
