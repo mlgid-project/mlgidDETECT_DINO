@@ -32,7 +32,7 @@ def main():
     p.add_argument('--ckpt', required=True); p.add_argument('--out', required=True)
     p.add_argument('--sets', nargs='*', default=['organic', '41'])
     p.add_argument('--sim', type=int, default=0, help='number of simulator frames to add as set "sim"')
-    p.add_argument('--sim_seed', type=int, default=0); p.add_argument('--box_coef', default='2.80,1.30')
+    p.add_argument('--no_img', action='store_true', help='store no image (tiny pickle; frames keep dataset order)'); p.add_argument('--sim_seed', type=int, default=0); p.add_argument('--box_coef', default='2.80,1.30')
     p.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     a = p.parse_args()
     model, ep = load(a.ckpt, a.device)
@@ -47,7 +47,7 @@ def main():
             o = forward(model, x, E.frame_mask(ic, a.device), a.device)
             b, s, c = detect(cfg, decode(o, model.out_stride, 225)[0])
             g = E.gt_of(ic)
-            fr.append(dict(img=np.asarray(ic.converted_polar_image[0, 0]).astype(np.float16), mask=g['mask'], gt=g['gt'], gtconf=g['gtconf'],
+            fr.append(dict(img=None if a.no_img else np.asarray(ic.converted_polar_image[0, 0]).astype(np.float16), mask=g['mask'], gt=g['gt'], gtconf=g['gtconf'],
                            boxes=b, scores=s, cls=c))
             print(f'{ds} frame {len(fr) - 1}: {len(b)} detections', flush=True)
         sets[ds] = fr

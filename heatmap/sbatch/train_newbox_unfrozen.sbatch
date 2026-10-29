@@ -42,4 +42,9 @@ if [ $RC = 0 ] && [ -f "$OUT/checkpoint.pth" ]; then
   cp "$OUT/checkpoint.pth" "$OUT/final_checkpoint.pth"
   $PY -u heatmap/evaluate.py hm=heatmap:"$OUT/final_checkpoint.pth" > "$OUT/evaluate_final_gtscaled.txt" 2>&1; echo "eval (scaled GT) rc=$?"
 fi
+# optional: re-score finished runs whose evaluate_final_gtscaled.txt is empty (env EXTRA_EVAL="<run_dir> <run_dir> ...", scores each <run_dir>/checkpoint.pth, same job so no extra small Slurm jobs)
+for D in ${EXTRA_EVAL:-}; do
+  if [ -f "$D/checkpoint.pth" ]; then $PY -u heatmap/evaluate.py hm=heatmap:"$D/checkpoint.pth" > "$D/evaluate_final_gtscaled.txt" 2>&1; echo "extra eval (scaled GT) $D rc=$?"
+  else echo "extra eval: no checkpoint in $D"; fi
+done
 kill $MON
