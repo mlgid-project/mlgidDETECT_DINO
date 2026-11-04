@@ -1,0 +1,38 @@
+{
+ "nsites": [
+  16,
+  200
+ ],
+ "base_seed": 20261103,
+ "perm_seed": 7,
+ "shard_size": 4,
+ "q_range": [
+  0.0,
+  5.0
+ ],
+ "energy": 18000,
+ "max_index": 2,
+ "polar_shape": [
+  512,
+  1024
+ ],
+ "mode_probs": {
+  "oriented": 0.25,
+  "both": 0.5,
+  "rings": 0.25
+ },
+ "box_ratio": [
+  3.0,
+  3.0
+ ],
+ "box_fmt": "px_cxcywh",
+ "flip_chi": false,
+ "iou_ss": 0.1,
+ "iou_rr": 0.1,
+ "iomin_sr": 0.5,
+ "min_snr": [
+  1.1,
+  1.1
+ ],
+ "tables_only": true
+}

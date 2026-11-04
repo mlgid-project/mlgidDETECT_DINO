@@ -1,0 +1,13 @@
+pygidsim 0.1.7 numpy 2.5.1 scipy 1.18.0
+426359 structures, 8 images, 2 shards, 0 done, 2 to do
+shard     0: 4 ok, 0 failed, 33 s | 1/2 shards, 4 images, 0 failed, elapsed 0.6 min, eta 1 min
+shard     1: 4 ok, 0 failed, 51 s | 2/2 shards, 8 images, 0 failed, elapsed 0.9 min, eta 0 min
+generate rc=0 wall 60 s
+0 mid 601db09192 (ref 601db09192) MID_OK n=15 (ref 15) N_OK md5 689773658b (ref 689773658b) BIT_IDENTICAL
+1 mid 8c622fb196 (ref 8c622fb196) MID_OK n=249 (ref 249) N_OK md5 5a0c7ee318 (ref b2acee8fa1) md5_differs
+2 mid ff77757ff2 (ref ff77757ff2) MID_OK n=238 (ref 238) N_OK md5 92240f21b5 (ref c845401214) md5_differs
+3 mid e7e11f9b36 (ref e7e11f9b36) MID_OK n=183 (ref 183) N_OK md5 64726395bf (ref cf4295e66e) md5_differs
+4 mid 822bb07bb9 (ref 822bb07bb9) MID_OK n=264 (ref 264) N_OK md5 080731dd7d (ref 642ca23346) md5_differs
+5 mid e1aa631c13 (ref e1aa631c13) MID_OK n=206 (ref 206) N_OK md5 f163010bd5 (ref 9b276ab94f) md5_differs
+6 mid e853c5dd33 (ref e853c5dd33) MID_OK n=297 (ref 297) N_OK md5 066b789b0a (ref 0c9d55da96) md5_differs
+7 mid 2defb86220 (ref 2defb86220) MID_OK n=154 (ref 154) N_OK md5 f567bfbbb9 (ref 53f87eaa7a) md5_differs
