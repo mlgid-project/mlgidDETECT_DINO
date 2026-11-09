@@ -1,0 +1,29 @@
+
+===== ssl1 (dino) /mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detector_runs/dino_nb_legacy_lr4e5_1/checkpoint.pth
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/functional.py:534: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3595.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP/models/dino/backbone.py:198: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP/heatmap/evaluate.py:26: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  ck = torch.load(ckpt, map_location='cpu')
+  load: <All keys matched successfully>
+  [ssl1] organic: ap_total 0.6047 (AP by GT confidence: high 0.738 / med 0.603 / low 0.425)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.124 recall 0.645 FP/GT 0.24; fp<=0.1/GT: score>=0.315 recall 0.536 FP/GT 0.10; high_recall>=95: score>=0.106 recall 0.662 FP/GT 0.29
+    score>0.1: recall 0.666 (seg 0.664, ring 0.710) precision 0.683 preds 796 FP 252
+      recall by NN Euclid dist  <5:0.420(n=131) 5-10:0.438(n=73) >10:0.747(n=582)
+      recall by same-radius chi-gap  <5:0.431(n=137) 5-10:0.486(n=35) >10:0.720(n=529)
+    score>0.3: recall 0.546 (seg 0.541, ring 0.677) precision 0.845 preds 528 FP 82
+      recall by NN Euclid dist  <5:0.389(n=131) 5-10:0.384(n=73) >10:0.595(n=582)
+      recall by same-radius chi-gap  <5:0.409(n=137) 5-10:0.429(n=35) >10:0.577(n=529)
+  [ssl1] 41: ap_total 0.7217 (AP by GT confidence: high 0.812 / med 0.752 / low 0.618)
+    evaluator operating points (full PR curve): best_accuracy: score>=0.461 recall 0.697 FP/GT 0.22; fp<=0.1/GT: score>=0.729 recall 0.527 FP/GT 0.10; high_recall>=95: score>=0.100 recall 0.853 FP/GT 1.09
+    score>0.1: recall 0.853 (seg 0.837, ring 0.875) precision 0.439 preds 3262 FP 1831
+      recall by NN Euclid dist  <5:0.449(n=69) 5-10:0.742(n=66) >10:0.878(n=833)
+      recall by same-radius chi-gap  <5:0.750(n=4) 5-10:0.500(n=4) >10:0.877(n=562)
+    score>0.3: recall 0.765 (seg 0.744, ring 0.793) precision 0.678 preds 1893 FP 610
+      recall by NN Euclid dist  <5:0.406(n=69) 5-10:0.636(n=66) >10:0.783(n=833)
+      recall by same-radius chi-gap  <5:0.500(n=4) 5-10:0.500(n=4) >10:0.788(n=562)
