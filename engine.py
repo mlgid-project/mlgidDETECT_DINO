@@ -17,6 +17,18 @@ from datasets.coco_eval import CocoEvaluator
 from datasets.panoptic_eval import PanopticEvaluator
 
 
+def _grad_norm(model):
+    """Total L2 norm of the current gradients, for the non-finite check when clipping is off.
+
+    clip_grad_norm_ already returns this, so it is only called on the max_norm == 0 path.
+    """
+    total = torch.zeros((), device=next(model.parameters()).device)
+    for p_ in model.parameters():
+        if p_.grad is not None:
+            total += p_.grad.detach().float().pow(2).sum()
+    return total.sqrt()
+
+
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0, 
@@ -37,8 +49,32 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
 
+    warmup_steps = getattr(args, 'warmup_steps', 0) if not args.onecyclelr else 0
+
+    # GRADIENT ACCUMULATION. effective batch = batch_size * grad_accum_steps, at the memory cost
+    # of batch_size alone. accum == 1 reproduces the previous behaviour exactly: is_update is then
+    # always True, losses/1 is losses, and moving zero_grad() from before the backward to after
+    # the step is equivalent once the grads are zeroed before the loop.
+    accum = max(1, int(getattr(args, 'grad_accum_steps', 1)))
+    # warmup counts OPTIMIZER steps, not iterations -- otherwise a 300-step warmup silently
+    # becomes 300*accum iterations, i.e. 7 epochs instead of 0.6 at accum 12.
+    opt_steps_per_epoch = math.ceil(len(data_loader) / accum)
+    optimizer.zero_grad()
+    _nan_steps = 0
+
     _cnt = 0
-    for samples, targets in metric_logger.log_every(data_loader, print_freq, header, logger=logger):
+    for _step, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header, logger=logger)):
+        is_update = ((_step + 1) % accum == 0) or (_step + 1 == len(data_loader))
+
+        if warmup_steps > 0:
+            gstep = epoch * opt_steps_per_epoch + (_step // accum)
+            if gstep < warmup_steps:
+                factor = (gstep + 1) / warmup_steps
+                for g in optimizer.param_groups:
+                    g['lr'] = g['initial_lr'] * factor
+            elif gstep == warmup_steps:
+                for g in optimizer.param_groups:
+                    g['lr'] = g['initial_lr']
 
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
@@ -70,28 +106,50 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             sys.exit(1)
 
 
-        # amp backward function
+        # amp backward function. The loss is divided by accum so the accumulated gradient is the
+        # MEAN over the effective batch, not the sum -- without this, lr would be scaled by accum
+        # implicitly. clip_grad_norm_ is applied to the ACCUMULATED gradient, on update steps only.
         if args.amp:
-            optimizer.zero_grad()
-            scaler.scale(losses).backward()
-            if max_norm > 0:
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-            scaler.step(optimizer)
-            scaler.update()
+            scaler.scale(losses / accum).backward()
+            if is_update:
+                if max_norm > 0:
+                    scaler.unscale_(optimizer)
+                    gnorm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+                else:
+                    gnorm = _grad_norm(model)
+                if torch.isfinite(gnorm):
+                    scaler.step(optimizer)
+                else:
+                    _nan_steps += 1
+                    print(f"[nan-guard] non-finite grad norm at epoch {epoch} step {_step}; "
+                          f"update SKIPPED ({_nan_steps} so far this epoch)", flush=True)
+                # update() runs whether or not we stepped: skipping it would leave the loss
+                # scale pinned high after the very overflow that should lower it.
+                scaler.update()
+                optimizer.zero_grad()
         else:
             # original backward function
-            optimizer.zero_grad()
-            losses.backward()
-            if max_norm > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-            optimizer.step()
+            (losses / accum).backward()
+            if is_update:
+                if max_norm > 0:
+                    gnorm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+                else:
+                    gnorm = _grad_norm(model)
+                if torch.isfinite(gnorm):
+                    optimizer.step()
+                else:
+                    _nan_steps += 1
+                    print(f"[nan-guard] non-finite grad norm at epoch {epoch} step {_step}; "
+                          f"update SKIPPED ({_nan_steps} so far this epoch)", flush=True)
+                optimizer.zero_grad()
 
-        if args.onecyclelr:
-            lr_scheduler.step()
-        if args.use_ema:
-            if epoch >= args.ema_epoch:
-                ema_m.update(model)
+        # both are per-OPTIMIZER-step semantics, so they move inside the update guard
+        if is_update:
+            if args.onecyclelr:
+                lr_scheduler.step()
+            if args.use_ema:
+                if epoch >= args.ema_epoch:
+                    ema_m.update(model)
 
         metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
         if 'class_error' in loss_dict_reduced:

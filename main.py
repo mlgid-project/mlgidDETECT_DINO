@@ -24,6 +24,8 @@ from util.labeleddataset import H5GIWAXSDataset
 from util.pygidloader import PyGIDDataset, detect_dataset_type
 import util.misc as utils
 from util.postprocessing import onnx_to_xyxy, filter_boxes
+from util.channels import (build_channels, build_contrast_channels, mask_channel,
+                           CONTRAST_CHANNELS)
 
 import datasets
 from datasets import build_dataset, get_coco_api_from_dataset
@@ -63,6 +65,14 @@ class SimulationDataset(torch.utils.data.Dataset):
         # cancel: changing them RELABELS the same image rather than changing the physics.
         # None => SimulationConfig's defaults 3.5 / 1.0, i.e. every prior run's RNG path untouched.
         _coefs = getattr(args, 'box_coef_override', None)
+        # box_sigma_halfwidth: (a, w) in units of SIGMA, i.e. a box edge sits +-coef*sigma from the
+        # centre (1.0 = the re-fitted 2026-10-21 validation boxes: stored width = 2 sigma, box = centre
+        # +- width/2 = +-sigma). The simulators' own a_coef / w_coef are FULL extent in sigma units
+        # (half-width = coef*sigma/2: legacy `widths` = sigma/2, realbkg hw = coef*s/2), so the sigma
+        # convention is 2x. Wins over box_coef_override, which keeps its old meaning for every old config.
+        _sig = getattr(args, 'box_sigma_halfwidth', None)
+        if _sig:
+            _coefs = (2.0 * float(_sig[0]), 2.0 * float(_sig[1]))
         _sim_config = None
         if _coefs:
             from simulation import SimulationConfig
@@ -71,17 +81,198 @@ class SimulationDataset(torch.utils.data.Dataset):
             _sim_config.w_coef = float(_coefs[1])
             print(f"[sim] box convention overridden: a_coef={_sim_config.a_coef} "
                   f"w_coef={_sim_config.w_coef}", flush=True)
+        if getattr(args, 'use_raw_intensity', False):
+            if _sim_config is None: 
+                from simulation import  SimulationConfig
+                _sim_config = SimulationConfig()
+            _sim_config.raw_intensity = True
+            _sim_config.raw_contrast = not getattr(args, 'raw_counts_only', False)
+            print(f"[sim] raw-intensity model ON (contrast: {'real-style' if _sim_config.raw_contrast else 'legacy'})")
+        #edge peaks (config DINO_4scale_swin_edge.py): keep peaks cut off by the dark wedge or a
+        #detector gap with their FULL box, instead of clamping/deleting them. Matches the real
+        #labels, where 34.8% (41) / 20.1% (organic) of GT boxes overlap an invalid pixel.
+        if getattr(args, 'edge_peaks', False):
+            if _sim_config is None:
+                from simulation import SimulationConfig
+                _sim_config = SimulationConfig()
+            _sim_config.edge_peaks = True
+            print(f"[sim] edge peaks ON: keep wedge-cut peaks with >= "
+                  f"{_sim_config.edge_peaks_vis_frac:.0%} visible, gap-hit peaks below "
+                  f"{_sim_config.edge_peaks_gap_frac:.0%} gap", flush=True)
+        #channel_mode 'contrast' (config DINO_4scale_swin_mcc.py): the 4 channels are three
+        #CONTRASTS of the same image + mask, instead of three quantities derived from one
+        #contrast. The simulator then returns a (3, H, W) stack; the mask is added below.
+        self.channel_mode = getattr(args, 'channel_mode', 'derived')
+        if self.channel_mode == 'contrast':
+            if _sim_config is None:
+                from simulation import SimulationConfig
+                _sim_config = SimulationConfig()
+            _sim_config.contrast_channels = True
+            print("[sim] multi-contrast channels ON: "
+                  + ", ".join(c['name'] for c in CONTRAST_CHANNELS) + ", mask", flush=True)
         self.simulation = FastSimulation(sim_config=_sim_config, device=self.device)
+
+        #PHYSICS SIM (MODIFICATIONS.md section I): a fraction of each epoch's images get their peak
+        #configuration from real crystallography instead of random draws -- positions AND, the
+        #point of the track, structure-factor INTENSITIES, which the standard sim draws uniformly
+        #in (2,50)/(10,50). Off by default; nothing about eval or ONNX changes.
+        self.physics = None
+        self.physics_fraction = float(getattr(args, 'physics_sim_fraction', 0.0))
+        #REALBKG MIXING. The realbkg branch in __getitem__ used to be unconditional, so
+        #use_realbkg_sim supplied 100% of every epoch's images and `physics_sim_fraction` -- which
+        #only ever mixed PHYSICS with LEGACY -- could not reach it. conv1/conv2/conv3 were all pure
+        #realbkg as a result. That blocked the one lever the 2026-09-15 precision analysis queues
+        #for the 41 gate: the legacy sim scores 0.74-0.77 on 41 and 0.55-0.62 on organic, the
+        #realbkg/physics sims the reverse, so a mixture tests whether the two failure modes cancel
+        #instead of compounding. Default 1.0 keeps every existing config byte-identical.
+        self.realbkg_fraction = float(getattr(args, 'realbkg_fraction', 1.0))
+        if getattr(args, 'use_physics_sim', False):
+            from physics_simulation import PhysicsSimulation
+            bank = getattr(args, 'physics_bank_path', None)
+            if not bank:
+                raise ValueError("use_physics_sim is set but physics_bank_path is not")
+            #physics_n_powder overrides the per-image powder-entry count, the ring:segment
+            #lever -- see the PhysicsSimulation docstring. Absent => the (0, 1) default, so
+            #every run up to dino_physics3_2 is unchanged.
+            self.physics = PhysicsSimulation(
+                bank, sim_config=_sim_config, device=self.device,
+                unify_contrast=bool(getattr(args, 'unify_contrast', False)),
+                n_powder=getattr(args, 'physics_n_powder', None),
+                real_tail_only=bool(getattr(args, 'real_tail_only', False)),
+                frame_types=getattr(args, 'physics_frame_types', None))
+            print(f"[sim] physics sim ON: {self.physics_fraction:.0%} of images from {bank} "
+                  f"({len(self.physics.powder_ids)} powder / {len(self.physics.oriented_ids)} "
+                  f"oriented entries), unify_contrast="
+                  f"{bool(getattr(args, 'unify_contrast', False))}, "
+                  f"n_powder={self.physics.n_powder}, "
+                  f"real_tail_only={self.physics.real_tail_only}, "
+                  f"frame_types={self.physics.frame_types}", flush=True)
+
+        #REAL-BACKGROUND SIM (realbkg_simulation.py): pygidSIM peak positions and intensities
+        #drawn onto REAL GIWAXS frames whose own diffraction features have been removed, instead
+        #of a modelled background. When on it replaces the image source entirely -- physics_sim
+        #and the legacy sim are not consulted. Ground truth is still only the peaks we drew.
+        self.realbkg = None
+        if getattr(args, 'use_realbkg_sim', False):
+            from realbkg_simulation import RealBkgSimulation
+            self.realbkg = RealBkgSimulation(
+                bank_path=getattr(args, 'physics_bank_path', None),
+                donor_path=args.realbkg_donor_path,
+                stats_path=args.realbkg_stats_path,
+                sim_config=_sim_config, device=self.device,
+                n_oriented=tuple(getattr(args, 'realbkg_n_oriented', (1, 3))),
+                p_ring=float(getattr(args, 'realbkg_p_ring', 0.15)),
+                #MOSAIC MODE ignores realbkg_donor_path entirely and assembles every background
+                #from tiles of the 90 reviewed peak-free frames, fresh per run and refreshed
+                #during the run, so no background bank is ever reused across runs.
+                mosaic=bool(getattr(args, 'realbkg_mosaic', False)),
+                mosaic_pool=int(getattr(args, 'realbkg_mosaic_pool', 48)),
+                mosaic_refresh=int(getattr(args, 'realbkg_mosaic_refresh', 64)),
+                #seed left None on purpose: a fresh entropy draw per run is what makes the
+                #backgrounds new every time. Set realbkg_mosaic_seed only to reproduce a run.
+                mosaic_seed=getattr(args, 'realbkg_mosaic_seed', None),
+                intensity_decades=getattr(args, 'realbkg_intensity_decades', None),
+                amplitude_mode=getattr(args, 'realbkg_amplitude_mode', 'fitted'),
+                mask_bank=bool(getattr(args, 'realbkg_mask_bank', True)),
+                mask_keep=getattr(args, 'realbkg_mask_keep', 'default'),
+                #LABELLING CONVENTION (agreed 2026-09-21). unified_labels makes one gate govern
+                #drawing AND labelling, so no visible peak is left without a box and no box sits
+                #on nothing -- real labelled frames have no unlabelled-peak tier, and the old
+                #three-tier behaviour taught the model to suppress things that look real.
+                #Defaults keep every earlier run byte-identical.
+                unified_labels=bool(getattr(args, 'realbkg_unified_labels', False)),
+                contrast_min=float(getattr(args, 'realbkg_contrast_min', 1.5)),
+                snr_min=float(getattr(args, 'realbkg_snr_min', 6.0)),
+                ring_iou_max=float(getattr(args, 'realbkg_ring_iou_max', 0.10)),
+                seg_iou_max=getattr(args, 'realbkg_seg_iou_max', None),
+                max_peaks=getattr(args, 'realbkg_max_peaks', None),
+                #PEAK COUNTS. Module constants until now, so this axis could not be reached from
+                #a config at all: the label review ran at (2, 200) and training was pinned at
+                #(8, 60). None keeps the constants.
+                spots_cap=getattr(args, 'realbkg_spots_cap', None),
+                rings_cap=getattr(args, 'realbkg_rings_cap', None),
+                n_powder=tuple(getattr(args, 'realbkg_n_powder', (1, 1))),
+                ring_box_from_mask=bool(getattr(args, 'realbkg_ring_box_from_mask', False)),
+                seg_wide_frac=float(getattr(args, 'realbkg_seg_wide_frac', 0.0)),
+                seg_wide_sigma=getattr(args, 'realbkg_seg_wide_sigma',
+                                       ((8.1, 0.45), (2.9, 0.45))),
+                bkg_v2=bool(getattr(args, 'realbkg_bkg_v2', False)),
+                surrogate_frac=float(getattr(args, 'realbkg_surrogate_frac', 0.0)),
+                v2_canvas=tuple(getattr(args, 'realbkg_v2_canvas', (1536, 3072))),
+                v2_refresh=int(getattr(args, 'realbkg_v2_refresh', 200)),
+                v2_n_pc=int(getattr(args, 'realbkg_v2_n_pc', 6)),
+                #RING APPEARANCE (realbkg-41-gap-split): segments kept on rings, ring box radial
+                #coefficient, ring sigma_q scale, ring spacing, ring chi texture. Defaults reproduce
+                #every earlier run.
+                seg_on_ring_keep=float(getattr(args, 'realbkg_seg_on_ring_keep', 1.0)),
+                ring_w_coef=getattr(args, 'realbkg_ring_w_coef', None),
+                ring_sq_scale=float(getattr(args, 'realbkg_ring_sq_scale', 1.0)),
+                ring_min_gap=float(getattr(args, 'realbkg_ring_min_gap', 0.0)),
+                ring_chi_texture=float(getattr(args, 'realbkg_ring_chi_texture', 0.0)),
+                ring_chi_corr=tuple(getattr(args, 'realbkg_ring_chi_corr', (3.0, 20.0))))
+            src = ('fresh mosaics of reviewed peak-free frames'
+                   if getattr(args, 'realbkg_mosaic', False) else args.realbkg_donor_path)
+            print(f"[sim] real-background sim ON -- image source is {src}", flush=True)
+            #WIRING CHECK. Every knob that used to be unreachable prints its effective value, so
+            #a run whose config keys never made it into args is visible at epoch 0 rather than
+            #after 300 epochs of the wrong simulator.
+            print(f"[sim] labels: {'render-iff-labelled' if self.realbkg.unified_labels else 'THREE-TIER (legacy)'}"
+                  f" | contrast>={self.realbkg.contrast_min} snr>={self.realbkg.snr_min}"
+                  f" | IoU seg {self.realbkg.seg_iou_max} ring {self.realbkg.ring_iou_max}"
+                  f" | max_peaks {self.realbkg.max_peaks}", flush=True)
+            print(f"[sim] counts: spots/entry {self.realbkg.spots_cap}"
+                  f" rings/entry {self.realbkg.rings_cap}"
+                  f" | oriented/frame {self.realbkg.n_oriented}"
+                  f" | p_ring {self.realbkg.p_ring} powder/frame {self.realbkg.n_powder}",
+                  flush=True)
+            print(f"[sim] realbkg share of images: {self.realbkg_fraction:.0%}"
+                  f"{' (remainder from the LEGACY sim)' if self.realbkg_fraction < 1.0 else ''}",
+                  flush=True)
+            print(f"[sim] background: "
+                  + (f"v2 -- fresh crop + PCA envelope per frame, "
+                     f"{self.realbkg.surrogate_frac:.0%} surrogate texture"
+                     if self.realbkg.bkg_v2 else
+                     "48-slot cached pool (v1)"), flush=True)
+            print(f"[sim] geometry: ring box "
+                  f"{'VALID CHI SPAN' if self.realbkg.ring_box_from_mask else 'full frame height'}"
+                  f" | organic-like segment frames {self.realbkg.seg_wide_frac:.2f}"
+                  f" sigma {self.realbkg.seg_wide_sigma}", flush=True)
+            print(f"[sim] rings: segments kept on rings {self.realbkg.seg_on_ring_keep:.2f}"
+                  f" | ring box w_coef {self.realbkg.ring_w_coef or self.realbkg.w_coef}"
+                  f" | ring sigma_q x{self.realbkg.ring_sq_scale}"
+                  f" | ring min gap {self.realbkg.ring_min_gap} px"
+                  f" | ring chi texture sd {self.realbkg.ring_chi_texture}"
+                  f" corr {self.realbkg.ring_chi_corr} px", flush=True)
 
     def __getitem__(self, idx):
         image = None
         while image is None:
             try:
-                image, boxes, mask, is_ring = self.simulation.simulate_img()
+                if self.realbkg is not None and (self.realbkg_fraction >= 1.0
+                                                 or random.random() < self.realbkg_fraction):
+                    image, boxes, mask, is_ring = self.realbkg.simulate_img()
+                elif self.physics is not None and random.random() < self.physics_fraction:
+                    image, boxes, mask, is_ring = self.physics.simulate_img()
+                else:
+                    image, boxes, mask, is_ring = self.simulation.simulate_img()
+                #BELT for both simulators: a non-finite image reaches the matcher as NaN
+                #predictions and trips util/box_ops.py:52 (assert x2 >= x1, False for NaN),
+                #killing the run mid-epoch. Every contrast chain ends in normalize(), which is
+                #0/0 for a constant image, so this is not physics-specific -- FastSimulation can
+                #do it too. Discard and draw again; the cost is one wasted image.
+                if image is not None and not torch.isfinite(image).all():
+                    image = None
             except:
                 pass
 
-        image = image.repeat(self.args.num_channels, 1, 1)
+        if self.args.num_channels == 4:
+            if self.channel_mode == 'contrast':
+                #simulate_img already returned the (3, H, W) contrast stack; add the mask
+                image = torch.cat([image, mask_channel(mask)[None]], dim=0)
+            else:
+                image = build_channels(image, mask)
+        else: 
+            image = image.repeat(self.args.num_channels, 1, 1)
         num_objects = len(boxes[0:])
 
         area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
@@ -182,6 +373,8 @@ def get_args_parser():
     parser.add_argument("--local_rank", type=int, help='local rank for DistributedDataParallel')
     parser.add_argument('--amp', action='store_true',
                         help="Train with mixed precision")
+    parser.add_argument('--use_raw_intensity', action='store_true', help = 'sim: real-matched raw counts')
+    parser.add_argument('--raw_counts_only', action='store_true', help = 'sim: raw counts only, no contrast')
     
     return parser
 
@@ -225,10 +418,22 @@ def evaluate_giwaxs_ap(model, postprocessors, args, dset_path, epoch, output_dir
     evaluator = Evaluator()
 
     for i, giwaxs_img_container in enumerate(data.iter_images()):
-        giwaxs_img = giwaxs_img_container.converted_polar_image
-        giwaxs_img = torch.tensor(giwaxs_img[:, 0, :, :]).unsqueeze(0).cuda().repeat(1, args.num_channels, 1, 1)
+        if args.num_channels == 4 and getattr(args, 'channel_mode', 'derived') == 'contrast':
+            #NOTE the raw_polar_image: these channels apply their own clip/log/HE, so they
+            #must start from the PRE-contrast image, not from converted_polar_image.
+            giwaxs_img = build_contrast_channels(giwaxs_img_container.raw_polar_image,
+                                                 giwaxs_img_container.converted_mask[0,0]).cuda().unsqueeze(0)
+        elif args.num_channels == 4:
+            giwaxs_img = build_channels(torch.as_tensor(giwaxs_img_container.converted_polar_image[0,0]).cuda(),
+                                        torch.as_tensor(giwaxs_img_container.converted_mask[0,0]).bool().cuda()).unsqueeze(0)
+        else: 
+            giwaxs_img = giwaxs_img_container.converted_polar_image
+            giwaxs_img = torch.tensor(giwaxs_img[:, 0, :, :]).unsqueeze(0).cuda().repeat(1, args.num_channels, 1, 1)
         labels = giwaxs_img_container.polar_labels
-        outputs = model(giwaxs_img)
+        #inference only: without no_grad the forward stores activations for a backward that
+        #never comes (~10 GB for swin-L at 512x1024) and OOMs on small GPUs
+        with torch.no_grad():
+            outputs = model(giwaxs_img)
 
         #mimic the ONNX session outputs [pred_logits, pred_boxes] and run the deployed postprocessing
         raw_results = [outputs['pred_logits'].detach().cpu().numpy(),
@@ -406,11 +611,61 @@ def main(args):
 
     print("Start training")
     start_time = time.time()
+    #BUILT ONCE, NOT PER EPOCH. This used to sit inside the loop, so every epoch reconstructed
+    #the simulator: re-reading the peak bank from disk and rebuilding the mosaic pool. That cost
+    #seconds with the 0.9 GB bank and nobody noticed; the 5.4 GB hkl bank makes it ~60 s, which
+    #over 500 epochs is hours of a 72 h budget spent re-reading one unchanging file.
+    #
+    #Safe because __getitem__ ignores its index and draws every image from the module-level RNG,
+    #which the per-epoch reseed below still controls -- the dataset object holds the bank and the
+    #background pool, which are data, not RNG state. Backgrounds stay fresh: mosaic_refresh
+    #replaces one pool slot every 64 frames, so at 1000 images/epoch the 48-slot pool turns over
+    #about every three epochs, which is what the config header already describes ("built fresh at
+    #run start and continuously refreshed").
+    dataset = SimulationDataset(args)
+    #BEST-CHECKPOINT TRACKING. Only checkpoint.pth (latest) and one at lr_drop were ever written,
+    #and the realbkg runs peak EARLY and then decay -- conv4's best organic was 0.613 at epoch 32,
+    #conv3's 0.603 at epoch 68, against plateaus of 0.561 and 0.496. Those weights are gone. Keep
+    #the best of each gate, and of their sum, so a peak can be recovered and resumed from.
+    #On RESUME the bests are rebuilt from the exp_ap_*.txt logs, which hold every eval of the run.
+    #Starting from {} would let the first post-resume eval overwrite an early peak with a worse
+    #score -- exactly the weights this exists to keep. 'sum' only counts epochs where every gate
+    #evaluated, matching how it is formed below.
+    best = {}
+    if args.output_dir:
+        _hist = {}
+        for _f in Path(args.output_dir).glob('exp_ap_*.txt'):
+            _name = _f.stem[len('exp_ap_'):]
+            for _ln in _f.read_text().split('\n'):
+                _p = _ln.split('\t')
+                if len(_p) == 2 and int(_p[0]) < args.start_epoch:
+                    _hist.setdefault(int(_p[0]), {})[_name] = float(_p[1])
+        for _ep, _s in _hist.items():
+            for _k, _v in _s.items():
+                best[_k] = max(best.get(_k, float('-inf')), _v)
+            if len(_s) > 1 and len(_s) == len(getattr(args, 'eval_files', None) or {}):
+                best['sum'] = max(best.get('sum', float('-inf')), sum(_s.values()))
+        if best:
+            print(f'[resume] best scores restored from exp_ap logs: '
+                  + ', '.join(f'{k} {v:.4f}' for k, v in sorted(best.items())), flush=True)
     for epoch in range(args.start_epoch, args.epochs):
-        dataset = SimulationDataset(args)
+        #RESEED PER EPOCH. The seeds are set once, at process start (seed = args.seed + rank,
+        #above), and resume restores model/optimizer/lr_scheduler/epoch but NO RNG state. With
+        #num_workers=0 every training image comes off that one stream in order, so a run that
+        #resumed at epoch 41 regenerated the images of epochs 0-40 verbatim: dino_physics3_1
+        #trained 82 epochs on ~41,000 distinct images, each seen twice, instead of 82,000 fresh
+        #ones. Two crashes landing at the identical stream index from different weights is how
+        #that surfaced. Seeding from the EPOCH makes the stream a function of the epoch number
+        #rather than of how many epochs this process happens to have run, so a resumed epoch 41
+        #draws what an uninterrupted epoch 41 would, and no epoch repeats another.
+        _epoch_seed = seed + 1000 * (epoch + 1)
+        random.seed(_epoch_seed)
+        np.random.seed(_epoch_seed % (2 ** 32))
+        torch.manual_seed(_epoch_seed)
+
         data_loader = torch.utils.data.DataLoader(
             dataset,
-            batch_size=2,
+            batch_size=args.batch_size,
             shuffle=True,
             num_workers=0,
             collate_fn=collate_fn
@@ -462,15 +717,35 @@ def main(args):
                 if single:
                     eval_targets = {'eval': single}
             model.eval()
+            scores = {}
             for name, path in eval_targets.items():
                 try:
                     eval_ap = evaluate_giwaxs_ap(model, postprocessors, args, path, epoch, output_dir)
+                    scores[name] = float(eval_ap)
                     with open(output_dir / f'exp_ap_{name}.txt', 'a+') as f:
                         f.write(f'{epoch}\t{eval_ap}\n')
                     print(f'[epoch {epoch}] {name} ap_total = {eval_ap}')
                 except Exception as e:
                     print(f'[epoch {epoch}] eval on {name} ({path}) failed: {type(e).__name__}: {e}')
             model.train()
+
+            #Keep the best weights per gate and for the sum. `scores` only holds the gates that
+            #actually evaluated this epoch, so a failed eval never overwrites a good checkpoint.
+            if args.output_dir and scores:
+                cands = dict(scores)
+                if len(scores) > 1:
+                    cands['sum'] = sum(scores.values())
+                for tag, val in cands.items():
+                    if val > best.get(tag, float('-inf')):
+                        best[tag] = val
+                        utils.save_on_master(
+                            {'model': model_without_ddp.state_dict(),
+                             'optimizer': optimizer.state_dict(),
+                             'lr_scheduler': lr_scheduler.state_dict(),
+                             'epoch': epoch, 'args': args, 'metric': tag, 'score': val},
+                            output_dir / f'checkpoint_best_{tag}.pth')
+                        print(f'[epoch {epoch}] new best {tag} = {val:.4f} -> '
+                              f'checkpoint_best_{tag}.pth', flush=True)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

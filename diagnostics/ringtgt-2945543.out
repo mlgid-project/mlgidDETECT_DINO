@@ -1,0 +1,15 @@
+real41     frames   41 | rings/frame mean  17.0 p10    6 p50   14 p90   29 max  55 | fraction with 0 / 1-2 / 3-5 / 6-10 / 11-20 / 21-30 / 31-45 / 46+: 0.00 0.05 0.00 0.24 0.37 0.24 0.07 0.02
+           neighbour ring gap px (edge-edge) p10    6.4 p50   26.2 p90  100.6 | ring box width p50 7.6
+organic    frames    8 | rings/frame mean   3.8 p10    0 p50    1 p90   10 max  18 | fraction with 0 / 1-2 / 3-5 / 6-10 / 11-20 / 21-30 / 31-45 / 46+: 0.38 0.25 0.12 0.12 0.12 0.00 0.00 0.00
+           neighbour ring gap px (edge-edge) p10   13.4 p50   33.8 p90   97.1 | ring box width p50 11.5
+legacy     frames  200 | rings/frame mean  17.3 p10    0 p50    2 p90   47 max  56 | fraction with 0 / 1-2 / 3-5 / 6-10 / 11-20 / 21-30 / 31-45 / 46+: 0.34 0.17 0.00 0.01 0.05 0.12 0.20 0.12
+           neighbour ring gap px (edge-edge) p10    7.2 p50   14.6 p90   31.2 | ring box width p50 6.8
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] background v2: fresh crop + PCA envelope PER FRAME from 90 clean donors, canvas (2048, 4096) rebuilt every 25 frames, 50% of frames on a random-phase surrogate texture (99.3% of donor envelope log-variance in 6 PCs)
+realbkg6   frames  200 | rings/frame mean   7.0 p10    0 p50    7 p90   15 max  36 | fraction with 0 / 1-2 / 3-5 / 6-10 / 11-20 / 21-30 / 31-45 / 46+: 0.23 0.09 0.14 0.26 0.24 0.04 0.01 0.00
+           neighbour ring gap px (edge-edge) p10    2.5 p50   31.5 p90  136.2 | ring box width p50 5.0
+powder entries, reflections below q_max 3.6: p10 52 p50 75 p90 89 | >=13: 100%  >=30: 100%
+powder entries, reflections below q_max 4.45: p10 53 p50 80 p90 105 | >=13: 100%  >=30: 100%
+powder entries, reflections below q_max 6.0: p10 54 p50 80 p90 113 | >=13: 100%  >=30: 100%
+powder entries, reflections below q_max 7.8: p10 53 p50 80 p90 114 | >=13: 100%  >=30: 100%

@@ -1,0 +1,23 @@
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+canvas (768, 1536)    build   180.1 ms   area  2.2 frames worth
+   crops hashed distinct: 40/40  (trivially true -- offsets differ)
+   mean pixel overlap between two random crops:  69.1%
+   refresh  200:    0.9 ms/frame amortised, each canvas pixel used ~88.9x,   5 canvases/epoch
+   refresh   50:    3.6 ms/frame amortised, each canvas pixel used ~22.2x,  20 canvases/epoch
+   refresh   25:    7.2 ms/frame amortised, each canvas pixel used ~11.1x,  40 canvases/epoch
+
+canvas (1536, 3072)   build   744.8 ms   area  9.0 frames worth
+   crops hashed distinct: 40/40  (trivially true -- offsets differ)
+   mean pixel overlap between two random crops:  17.0%
+   refresh  200:    3.7 ms/frame amortised, each canvas pixel used ~22.2x,   5 canvases/epoch
+   refresh   50:   14.9 ms/frame amortised, each canvas pixel used ~ 5.6x,  20 canvases/epoch
+   refresh   25:   29.8 ms/frame amortised, each canvas pixel used ~ 2.8x,  40 canvases/epoch
+
+canvas (2048, 4096)   build   984.0 ms   area 16.0 frames worth
+   crops hashed distinct: 40/40  (trivially true -- offsets differ)
+   mean pixel overlap between two random crops:   8.6%
+   refresh  200:    4.9 ms/frame amortised, each canvas pixel used ~12.5x,   5 canvases/epoch
+   refresh   50:   19.7 ms/frame amortised, each canvas pixel used ~ 3.1x,  20 canvases/epoch
+   refresh   25:   39.4 ms/frame amortised, each canvas pixel used ~ 1.6x,  40 canvases/epoch
+
+v1 for reference: 48 FINISHED backgrounds, identical pixels, each seen ~21x per epoch.

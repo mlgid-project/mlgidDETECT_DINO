@@ -27,7 +27,31 @@ class DINOOnnxWrapper(torch.nn.Module):
         return out["pred_logits"], out["pred_boxes"]
 
 
+def _use_pytorch_deform_attn():
+    """Swap MSDeformAttn's CUDA kernel for the pure-PyTorch grid_sample core.
+
+    MSDA.ms_deform_attn_forward is CUDA-only and raises "Not implemented on the CPU", but the
+    tracer must run a forward pass and this export is forced onto the CPU (see below). The
+    pytorch core is mathematically the same op, and it is what the exported graph has to
+    contain anyway -- ONNX has no custom MSDeformAttn node, so every .onnx in this repo runs
+    on grid_sample. This is the documented source of the small PyTorch-vs-ONNX AP gap.
+    """
+    from models.dino.ops.modules import ms_deform_attn as _mod
+    from models.dino.ops.functions.ms_deform_attn_func import ms_deform_attn_core_pytorch
+
+    class _PyTorchCore:
+        @staticmethod
+        def apply(value, spatial_shapes, level_start_index, sampling_locations,
+                  attention_weights, im2col_step):
+            #the CUDA signature carries level_start_index/im2col_step; the core does not need them
+            return ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations,
+                                               attention_weights)
+
+    _mod.MSDeformAttnFunction = _PyTorchCore
+
+
 def export_model_to_onnx(model, input_shape, output_path, device, opset=16, use_dynamic_axes=False):
+    _use_pytorch_deform_attn()
     model.eval()
     # ONNX export must run on CPU regardless of the training device.
     # Custom CUDA kernels (e.g. MSDeformAttnFunction) can segfault when the
@@ -82,6 +106,9 @@ def main():
     checkpoint = torch.load(args.checkpoint, map_location=device)
 
     model_args = _to_namespace(checkpoint["args"])
+    #the saved args have export=False; backbone.py keys gradient checkpointing off this flag
+    #(use_checkpoint and not args.export) and checkpointing does not trace cleanly
+    model_args.export = True
 
     model, _, _ = build_model_main(model_args)
     model.load_state_dict(checkpoint["model"])

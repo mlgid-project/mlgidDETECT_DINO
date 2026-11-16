@@ -1,0 +1,16 @@
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+donor frames: 90   canvas (768, 1536)  tile 128 overlap 16
+tiles per canvas: 7 x 14 = 98
+crop offsets per canvas: 256 x 512 = 131072
+exposure pool size for a random class: 41 donors
+
+STAGE COSTS (ms, median of 5)
+  canvas_image()        assemble 98 tiles      143.0
+  _envelope()           smooth shape               183.2
+  MaskBank.draw()                                   18.3
+  random crop 512x1024                               0.0
+  _noise_map equivalent (GaussianBlur sig 16)       36.1
+  FULL entry (canvas+env+crop+mask+noise)          468.6
+
+For reference: one simulated FRAME (peaks+render+compose) is ~300 ms.

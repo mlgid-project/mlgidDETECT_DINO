@@ -1,0 +1,35 @@
+######## run 1 config (spots 2-200, p_ring 0.30)
+POST-PREPROCESSING z OF LABELLED PEAKS  (what the network sees)
+
+  REAL organic                       n    784  p10     0.36  p50     1.12  p90     2.32
+  REAL 41                            n   1676  p10     0.27  p50     1.11  p90     2.56
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+    20 sim frames...
+    40 sim frames...
+    60 sim frames...
+    80 sim frames...
+  SIM (DINO_4scale_swin_realbkg.py)  n   7326  p10     0.00  p50     1.10  p90     2.45
+
+RAW, for reference: sim labelled peaks p50 222x local noise, real p50 3.1x.
+If the SIM and REAL rows above are close, histogram equalisation absorbs that gap
+and amplitude_mode is NOT the defect. If they are far apart, it is.
+
+######## run 2 config (spots 6-32, p_ring 1.0)
+POST-PREPROCESSING z OF LABELLED PEAKS  (what the network sees)
+
+  REAL organic                       n    784  p10     0.36  p50     1.12  p90     2.32
+  REAL 41                            n   1676  p10     0.27  p50     1.11  p90     2.56
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+    20 sim frames...
+    40 sim frames...
+    60 sim frames...
+    80 sim frames...
+  SIM (DINO_4scale_swin_realbkg_r2.py) n   2004  p10     0.12  p50     1.42  p90     2.94
+
+RAW, for reference: sim labelled peaks p50 222x local noise, real p50 3.1x.
+If the SIM and REAL rows above are close, histogram equalisation absorbs that gap
+and amplitude_mode is NOT the defect. If they are far apart, it is.

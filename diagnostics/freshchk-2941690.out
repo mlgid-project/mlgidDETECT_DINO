@@ -1,0 +1,28 @@
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+  epoch 0: seed 1042  40/40 distinct images, 27 distinct backgrounds
+  epoch 1: seed 2042  40/40 distinct images, 29 distinct backgrounds
+  epoch 2: seed 3042  40/40 distinct images, 27 distinct backgrounds
+  epoch 3: seed 4042  40/40 distinct images, 32 distinct backgrounds
+
+IMAGE-LEVEL REPETITION
+  total frames 160, distinct 160
+  epoch 0 vs 1: 0 identical frames
+  epoch 0 vs 2: 0 identical frames
+  epoch 0 vs 3: 0 identical frames
+  epoch 1 vs 2: 0 identical frames
+  epoch 1 vs 3: 0 identical frames
+  epoch 2 vs 3: 0 identical frames
+
+BACKGROUND REUSE  (the 48-slot mosaic pool)
+  distinct backgrounds across all 160 frames: 48
+  epoch 0 vs 1: 16 shared backgrounds
+  epoch 0 vs 2: 16 shared backgrounds
+  epoch 0 vs 3: 17 shared backgrounds
+  epoch 1 vs 2: 16 shared backgrounds
+  epoch 1 vs 3: 18 shared backgrounds
+  epoch 2 vs 3: 18 shared backgrounds
+
+  At 1000 images/epoch and mosaic_refresh=64, a pool slot is replaced
+  ~15 times per epoch out of 48 slots.

@@ -1,0 +1,55 @@
+######## run 1 config (spots 2-200, p_ring 0.30)
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+  30 frames...
+  60 frames...
+  90 frames...
+  120 frames...
+
+120 frames | 10863 segment boxes, 187 ring boxes | config config/DINO/DINO_4scale_swin_realbkg.py
+  sigma_q   of segments      p10    1.60  p50    3.81  p90    9.00
+  sigma_chi of segments      p10    4.72  p50   19.49  p90   87.15
+
+  EMITTED segment box w px   p10    2.04  p50    4.84  p90   11.60
+  EMITTED segment box h px   p10   11.95  p50   48.82  p90  206.54
+  EMITTED ring box    w px   p10    1.69  p50    4.50  p90   10.79
+
+  box w / sigma_q            1.27   (legacy formula gives 2.60)
+  box h / sigma_chi          2.50   (legacy formula gives 5.60)
+
+REAL GT, measured:
+  organic segments  w p50 10.5  h p50  8.1
+  41      segments  w p50  4.6  h p50 34.2
+legacy sim segments h p50 23.9
+
+If the /2.0 is wrong, DOUBLING these widths and heights is what the boxes should be:
+  doubled segment box w p50    9.67   h p50   97.65
+
+######## run 2 config (spots 6-32, p_ring 1.0)
+[mosaic] 90 donor frames from cache, tile 128 overlap 16, canvas (768, 1536), struct_max 0.12
+[masks] 10 of 13 detector geometries, q_max 3.61-7.80, incidence angle 0.1-0.5 deg
+[realbkg] mosaic mode: 48 fresh backgrounds from 90 clean donor frames, one slot replaced every 64 frames
+  30 frames...
+  60 frames...
+  90 frames...
+  120 frames...
+
+120 frames | 2235 segment boxes, 1138 ring boxes | config config/DINO/DINO_4scale_swin_realbkg_r2.py
+  sigma_q   of segments      p10    1.69  p50    3.88  p90    9.08
+  sigma_chi of segments      p10    5.23  p50   22.94  p90  115.17
+
+  EMITTED segment box w px   p10    2.17  p50    5.02  p90   11.51
+  EMITTED segment box h px   p10   14.34  p50   62.47  p90  270.57
+  EMITTED ring box    w px   p10    2.22  p50    4.95  p90   10.97
+
+  box w / sigma_q            1.29   (legacy formula gives 2.60)
+  box h / sigma_chi          2.72   (legacy formula gives 5.60)
+
+REAL GT, measured:
+  organic segments  w p50 10.5  h p50  8.1
+  41      segments  w p50  4.6  h p50 34.2
+legacy sim segments h p50 23.9
+
+If the /2.0 is wrong, DOUBLING these widths and heights is what the boxes should be:
+  doubled segment box w p50   10.04   h p50  124.93

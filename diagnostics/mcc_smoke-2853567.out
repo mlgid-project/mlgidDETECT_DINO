@@ -1,0 +1,42 @@
+=== [1] simulator side ===
+[sim] box convention overridden: a_coef=2.8 w_coef=1.3
+[sim] multi-contrast channels ON: log_he, log_clahe4_16x16, log_gamma0.7, mask
+[sample 0] (4, 512, 1024), 2 boxes
+    ch0 log_he             min=0.000 max=1.000 mean=0.1485
+    ch1 log_clahe4_16x16   min=0.000 max=1.000 mean=0.1027
+    ch2 log_gamma0.7       min=0.000 max=1.000 mean=0.0872
+    ch3 mask               min=0.000 max=1.000 mean=0.4755
+    pairwise mean|diff| 0-1 0.0528  0-2 0.0617  1-2 0.0280
+[sample 1] (4, 512, 1024), 36 boxes
+    ch0 log_he             min=0.000 max=1.000 mean=0.2064
+    ch1 log_clahe4_16x16   min=0.000 max=1.000 mean=0.2526
+    ch2 log_gamma0.7       min=0.000 max=1.000 mean=0.3630
+    ch3 mask               min=0.000 max=1.000 mean=0.4631
+    pairwise mean|diff| 0-1 0.0774  0-2 0.1570  1-2 0.1111
+[sample 2] (4, 512, 1024), 122 boxes
+    ch0 log_he             min=0.000 max=1.000 mean=0.3482
+    ch1 log_clahe4_16x16   min=0.000 max=1.000 mean=0.5029
+    ch2 log_gamma0.7       min=0.000 max=1.000 mean=0.6216
+    ch3 mask               min=0.000 max=1.000 mean=0.7745
+    pairwise mean|diff| 0-1 0.1817  0-2 0.2734  1-2 0.1206
+MCC SIM SMOKE PASSED
+=== [2] model side ===
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+use_checkpoint!!!!!!!!!!!!!!!!!!!!!!!!
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/functional.py:534: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3595.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/models/dino/backbone.py:198: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
+<All keys matched successfully>
+[1] patch_embed (192, 4, 4, 4); ch0 mean|w| 0.1040; ch1-3 max|w| 0.00e+00 (must be 0.00e+00)
+[sim] box convention overridden: a_coef=2.8 w_coef=1.3
+[sim] multi-contrast channels ON: log_he, log_clahe4_16x16, log_gamma0.7, mask
+[2] sample (4, 512, 1024); B1 range [0.00,1.00]; valid frac 0.77; 35 boxes
+/home/schreiber/szb389/.conda/envs/DINO_GIWAXS/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:632: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. In version 2.5 we will raise an exception if use_reentrant is not passed. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO/models/dino/dino.py:512: UserWarning: torch.range is deprecated and will be removed in a future release because its behavior is inconsistent with Python's range builtin. Instead, use torch.arange, which produces values in [start, end).
+  t = torch.range(0, len(targets[i]['labels']) - 1).long().cuda()
+[3] forward+backward OK, loss 66.841; grad mean|g| ch0 2.35e-02, ch1-3 5.07e-02 (nonzero => new channels can learn)
+[4] step-0 equivalence: junk in ch1-3 changes logits by 0.00e+00, boxes by 0.00e+00 (must be 0 -> net starts exactly as a 1-channel model)
+SMOKE TEST PASSED

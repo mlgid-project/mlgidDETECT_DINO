@@ -204,6 +204,13 @@ def build_backbone(args):
                     return False
                 return True
             _tmp_st = OrderedDict({k:v for k, v in clean_state_dict(checkpoint).items() if key_select_function(k)})
+            # multi-channel: expand the 1-channel SSL patch embed to num_channels
+            # (SSL weights in channel 0, zeros elsewhere -> step-0 network == ssl1)
+            w = _tmp_st.get('patch_embed.proj.weight')
+            if w is not None and w.shape[1] != args.num_channels:
+                w_new = torch.zeros(w.shape[0], args.num_channels, *w.shape[2:], dtype=w.dtype)
+                w_new[:, :w.shape[1]] = w
+                _tmp_st['patch_embed.proj.weight'] = w_new
             _tmp_st_output = backbone.load_state_dict(_tmp_st, strict=False)
             print(str(_tmp_st_output))
         bb_num_channels = backbone.num_features[4 - len(return_interm_indices):]
