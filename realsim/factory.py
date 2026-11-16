@@ -50,7 +50,7 @@ def make_realbkg_sim(device='cuda', box_coef=(2.80, 1.30), overrides=None, bank_
     if unknown:
         raise ValueError(f'unknown RealBkgSimulation option(s): {sorted(unknown)}')
     sim = RealBkgSimulation(
-        bank_path=bank_path or f'{W}/datasets/cif_library_organic/bank/bank_organic_hkl.npz',
+        bank_path=bank_path or os.environ.get('GIWAXS_BANK') or f'{W}/datasets/cif_library_organic/bank/bank_organic_hkl.npz',
         donor_path=f'{W}/datasets/sim_background_bank4.h5',
         stats_path=stats_path or f'{W}/datasets/sim_real_stats.npz',
         sim_config=cfg, device=device, **kw)

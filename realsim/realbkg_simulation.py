@@ -44,9 +44,11 @@ import numpy as np
 import torch
 
 from realsim.simulation_mc import HEIGHT, WIDTH, SimulationConfig
+from simulation import pooled_positions
 from realsim.exp_preprocess_mc import apply_contrast
 
 CHAIN = {'clip': (5, 99.5), 'log': True, 'gamma': None, 'he': True, 'clahe': None}
+Q_MAX_V2 = 5.0*math.sqrt(2.0)      # |q| range of the realsim_v2 polar images (7.07 1/A), for v2_widths
 
 
 class RealBkgSimulation:
@@ -72,7 +74,7 @@ class RealBkgSimulation:
                  ring_min_gap=0.0, ring_chi_texture=0.0, ring_chi_corr=(3.0, 20.0),
                  ring_gain=1.0, seg_gain=1.0, ring_contrast_min=None, seg_sc_scale=1.0,
                  ring_no_elongate=False, ring_cap=None, ring_chi_floor=0.0, ring_follow_bkg=False,
-                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0, ring_x_share=None, ring_rel_shuffle=0.0, bkg_flat_q=0.0, mask_no_gaps=False, mask_wedge_only_frac=0.0, bkg_noise_edge_fix=False):
+                 bkg_noise_blur=None, bkg_noise_aniso=1.3, bkg_noise_power=1.0, ring_x_share=None, ring_rel_shuffle=0.0, bkg_flat_q=0.0, mask_no_gaps=False, mask_wedge_only_frac=0.0, bkg_noise_edge_fix=False, ring_x_gain=None, structure_frames=False, v2_widths=False, v2_width_scale=(1.0, 1.0), v1_width_scale=(1.0, 1.0), extra_structure_p=0.0, extra_bank=None, extra_spots_cap=(25, 120), extra_rings_cap=(6, 30), extra_same_kind=0.1, extra_low_q=None, spot_flat=False):
         from realsim.physics_simulation import PhysicsSimulation, RINGS_PER_POWDER, SPOTS_PER_ORIENTED
         self.device = device
         self.sim_config = sim_config or SimulationConfig()
@@ -188,7 +190,75 @@ class RealBkgSimulation:
         self.ring_chi_corr = tuple(float(v) for v in ring_chi_corr)
 
         self.phys = PhysicsSimulation(bank_path, sim_config=self.sim_config, device=device,
-                                      unify_contrast=True)
+                                      unify_contrast=True, keep_cif=bool(structure_frames))
+        #: spot_flat: COLORBOX1 ADDITION, default off. Only the POSITIONS of the spots change: the k positions of an oriented entry are i.i.d. draws from the pool of all oriented peaks of the bank,
+        #: reweighted to a uniform density in q x chi (simulation.pooled_positions, as --sim_pos_mode pooled_flat of the legacy simulator). The count k and the picked intensities stay those of the entry. Rings: unchanged.
+        self.spot_flat = bool(spot_flat)
+        if self.spot_flat:
+            _q = self.phys.q.cpu().numpy()
+            self._flat_bank = dict(q=_q, chi=self.phys.chi.cpu().numpy(), start=np.asarray(self.phys.entry_start), count=np.asarray(self.phys.entry_count),
+                                   ids=(self.phys.oriented_ids, self.phys.powder_ids), sq=np.zeros_like(_q), sc=np.zeros_like(_q))
+        #: structure_frames: COLORBOX1 ADDITION, default off (the random stream and output of every earlier run are unchanged). A frame is ONE structure of the bank: its oriented entry
+        #: (spots), its powder entry (rings) or both, whichever the bank holds for that entry_cif (bank built from the realsim_v2 shards: mode oriented / rings / both). Entries are
+        #: drawn with equal probability per structure; n_oriented, n_powder and p_ring are not used then. spots_cap / rings_cap still apply.
+        self.structure_frames = bool(structure_frames)
+        #: v2_widths: COLORBOX1 ADDITION, default off. Peak widths and pseudo-Voigt eta are the stored ones of the realsim_v2 shards (bank arrays sigma_q [1/A], sigma_chi [rad], eta) instead of the
+        #: fitted draw of _draw_widths: s_q = sigma_q / 7.0711 * WIDTH px, s_c = sigma_chi / (pi/2) * HEIGHT px, i.e. the pixel widths of the v2 images (rings: full height as always).
+        #: Needs structure_frames. Everything else (background, noise, mask, amplitudes, gate) is unchanged.
+        #: extra_structure_p: COLORBOX1 ADDITION, default 0 = off. With structure_frames: with this probability a SECOND structure of a second bank (default: the old organic bank, dense at
+        #: low q) is added to the frame (at most two structures): a spots-only frame gets a powder entry and a rings-only frame an oriented entry, except with probability extra_same_kind (0.1) where
+        #: it gets the same kind again (2 oriented / 2 powder); a frame that already has both kinds gets a second structure only with probability extra_structure_p*extra_same_kind.
+        #: extra_spots_cap / extra_rings_cap reflections of it, intensities normalised to its own maximum times U(0.15, 1) (a weaker second phase); its peaks
+        #: borrow widths from the v2 peaks of the same q (v2_widths) or get the fitted draw.
+        self.extra_structure_p = float(extra_structure_p)
+        self.extra_spots_cap = tuple(extra_spots_cap)
+        if self.extra_structure_p > 0:
+            if not structure_frames:
+                raise ValueError('extra_structure_p needs structure_frames')
+            xp = extra_bank or os.environ.get('GIWAXS_BANK_EXTRA') or os.path.join(os.environ.get('GIWAXS_WORK', '/mnt/lustre/work/schreiber/szb389'), 'datasets/cif_library_organic/bank/bank_organic_hkl.npz')
+            xd = PhysicsSimulation._load_bank(xp)
+            xk = np.asarray(xd['entry_kind'])
+            self._xb = dict(q=np.asarray(xd['q']), chi=np.asarray(xd['chi']), I=np.asarray(xd['intensity']), start=np.asarray(xd['entry_start']), count=np.asarray(xd['entry_count']),
+                            ids=(np.nonzero(xk == 'oriented')[0], np.nonzero(xk == 'powder')[0]))
+            self.extra_rings_cap, self.extra_same_kind = tuple(extra_rings_cap), float(extra_same_kind)
+            #: extra_low_q: scale in 1/A of an exp(-q/scale) weight for choosing the extra structure's spots (None = uniform draw): favours low q, where the v2 structures are sparse.
+            self.extra_low_q = None if extra_low_q is None else float(extra_low_q)
+            if self.extra_low_q:      # the oriented entry is drawn with probability proportional to its number of reflections below 1.5 1/A (big cells), not uniformly
+                nlow = np.add.reduceat((self._xb['q'] < 1.5), self._xb['start'], dtype=np.int32)[self._xb['ids'][0]].astype(np.float64) + 0.5
+                self._xb['w_or'] = nlow/nlow.sum()
+            del xd
+            print(f'[realsim] extra structure p={self.extra_structure_p}: {len(self._xb["ids"][0])} oriented + {len(self._xb["ids"][1])} powder entries of {xp}', flush=True)
+        self.v2_widths = bool(v2_widths)
+        #: v2_width_scale=(sq, sc): multiplies the stored widths (radial, angular) of v2_widths; boxes follow (3 sigma). (1, 1) = the v2 pixel widths.
+        self.v2_width_scale = (float(v2_width_scale[0]), float(v2_width_scale[1]))
+        #: v1_width_scale=(sq, sc): COLORBOX1 ADDITION, multiplies the fitted widths of _draw_widths (segments in chi, all in q); (1, 1) = unchanged.
+        self.v1_width_scale = (float(v1_width_scale[0]), float(v1_width_scale[1]))
+        if self.v2_widths and not structure_frames:
+            raise ValueError('v2_widths needs structure_frames')
+        if self.v2_widths and self.extra_structure_p > 0:       # pool of spot widths by q, for the peaks of the extra structure
+            ph = self.phys
+            order = np.argsort(ph.entry_start)
+            qq = ph.q.numpy() if torch.is_tensor(ph.q) else np.asarray(ph.q)
+            self._wpool = []
+            for ids in (ph.oriented_ids, ph.powder_ids):
+                isk = np.zeros(len(ph.entry_start), bool); isk[ids] = True
+                pk = np.repeat(isk[order], ph.entry_count[order])
+                pk &= np.isfinite(np.asarray(ph.extra['sigma_q'], np.float64))       # entries without stored widths (organic filler of a mixed bank) are not in the pool
+                o = np.argsort(qq[pk])
+                self._wpool.append((qq[pk][o].astype(np.float64), ph.extra['sigma_q'][pk][o].astype(np.float64), ph.extra['sigma_chi'][pk][o].astype(np.float64)))
+            self._eta_med = float(np.nanmedian(np.asarray(ph.extra['eta'], np.float64)))
+        if self.structure_frames:
+            if self.phys.entry_cif is None:
+                raise ValueError('structure_frames needs a bank with entry_cif')
+            st = {}
+            for kind, ids in ((0, self.phys.oriented_ids), (1, self.phys.powder_ids)):
+                for i in ids:
+                    slot = st.setdefault(str(self.phys.entry_cif[i]), [None, None])
+                    if slot[kind] is not None:
+                        raise ValueError(f'structure_frames: {self.phys.entry_cif[i]} has more than one {"powder" if kind else "oriented"} entry')
+                    slot[kind] = int(i)
+            self._struct = list(st.values())
+            print(f'[realsim] structure_frames: {len(self._struct)} structures ({sum(v[0] is not None for v in self._struct)} with spots, {sum(v[1] is not None for v in self._struct)} with rings)', flush=True)
         S = np.load(stats_path)
         self.R = {k: (float(S[k]) if S[k].ndim == 0 else S[k]) for k in S.files}
         self.mosaic_refresh = int(mosaic_refresh)
@@ -244,6 +314,11 @@ class RealBkgSimulation:
         #: rank-matching of amplitudes, so a ring's brightness no longer follows its q. Real 41: rings at q column >= 781 are as bright (median amplitude 0.23) as the
         #: others (0.20); with the pygidSIM ordering E6's are 3x fainter (0.07). 0 = off (original).
         self.ring_rel_shuffle = float(ring_rel_shuffle)
+        #: ring_x_gain=(g_lo, g_hi): COLORBOX1 ADDITION (not in origin/heatmap), default None = off. Ring amplitudes (fitted amplitude mode) are multiplied by a linear ramp in the
+        #: ring's column x: g_lo at x = 0 to g_hi at x = 1024, before ring_cap. Real 41: rings at x >= 768 (the narrow detector tip, 23 % valid pixels) are the BRIGHTEST (annulus contrast
+        #: median 0.91 against 0.56 / 0.51 / 0.57 in the other column quarters), the simulated ones are not (0.44): the heatmap models then read the real bright, short tip streaks as
+        #: segments (E12d: 50 of 165 missed tip rings were segment-class boxes, 56 had a score <= 0.3).
+        self.ring_x_gain = None if ring_x_gain is None else tuple(float(v) for v in ring_x_gain)
         #: bkg_flat_q: 0..1 -- the background (and its noise map) is multiplied by (median / smoothed column median) ** bkg_flat_q along q before peaks are added, i.e. the
         #: radial fall-off of the donor backgrounds is flattened. Measured on the processed image (bkg_profile_x.py): E6 mean value 0.65 (q column 128) -> 0.09 (896) and
         #: local noise 0.115 -> 0.051, real 41 mean 0.33-0.68-0.35 and noise 0.11-0.14 flat, legacy simulator flat. 0 = off (original).
@@ -470,11 +545,17 @@ class RealBkgSimulation:
 
     def _draw_peaks(self, qmax):
         xs, ys, ii, rg = [], [], [], []
-        if self.single_structure:
-            ring_frame = random.random() < self.p_ring
-        n_or = (0 if ring_frame else 1) if self.single_structure else random.randint(*self.n_oriented)
+        wq, wc, we = [], [], []
+        if self.structure_frames:
+            s_or, s_pw = self._struct[np.random.randint(len(self._struct))]
+            ring_frame = s_pw is not None
+            n_or = 0 if s_or is None else 1
+        else:
+            if self.single_structure:
+                ring_frame = random.random() < self.p_ring
+            n_or = (0 if ring_frame else 1) if self.single_structure else random.randint(*self.n_oriented)
         for _ in range(n_or):
-            q, chi, I = self.phys._entry(int(np.random.choice(self.phys.oriented_ids)))
+            q, chi, I = self.phys._entry(s_or if self.structure_frames else int(np.random.choice(self.phys.oriented_ids)))
             q, chi, I = (np.asarray(v.cpu() if torch.is_tensor(v) else v, float)
                          for v in (q, chi, I))
             v = q < qmax*0.995
@@ -484,11 +565,18 @@ class RealBkgSimulation:
             k = min(len(q), self._count(self.spots_cap))
             top = self._pick(I, k)
             k = len(top)
-            xs.append(q[top]/qmax*WIDTH); ys.append(chi[top]/90.0*HEIGHT)
+            if self.v2_widths:
+                _w = self._borrow(0, q[top], self._ex('sigma_q', s_or)[v][top], self._ex('sigma_chi', s_or)[v][top], self._ex('eta', s_or)[v][top])
+                wq.append(_w[0]); wc.append(_w[1]); we.append(_w[2])
+            if self.spot_flat:
+                fx, fy, _, _ = pooled_positions(self._flat_bank, k, False, 0.048*qmax, 0.995*qmax, qmax, True)
+                xs.append(np.asarray(fx, float)); ys.append(np.asarray(fy, float))
+            else:
+                xs.append(q[top]/qmax*WIDTH); ys.append(chi[top]/90.0*HEIGHT)
             ii.append(I[top]);            rg.append(np.zeros(k, bool))
-        if (ring_frame if self.single_structure else random.random() < self.p_ring):
-            for _ in range(1 if self.single_structure else random.randint(*self.n_powder)):
-                q, _c, I = self.phys._entry(int(np.random.choice(self.phys.powder_ids)))
+        if (ring_frame if (self.single_structure or self.structure_frames) else random.random() < self.p_ring):
+            for _ in range(1 if (self.single_structure or self.structure_frames) else random.randint(*self.n_powder)):
+                q, _c, I = self.phys._entry(s_pw if self.structure_frames else int(np.random.choice(self.phys.powder_ids)))
                 q, I = (np.asarray(v.cpu() if torch.is_tensor(v) else v, float) for v in (q, I))
                 v = q < qmax*0.995
                 if v.sum() < 1:
@@ -497,8 +585,47 @@ class RealBkgSimulation:
                 k = min(len(q), self._count(self.rings_cap))
                 top = self._pick(I, k) if self.ring_x_share is None else self._pick_x(I, q/qmax*WIDTH, k)
                 k = len(top)
+                if self.v2_widths:
+                    _w = self._borrow(1, q[top], self._ex('sigma_q', s_pw)[v][top], self._ex('sigma_chi', s_pw)[v][top], self._ex('eta', s_pw)[v][top])
+                    wq.append(_w[0]); wc.append(_w[1]); we.append(_w[2])
                 xs.append(q[top]/qmax*WIDTH); ys.append(np.full(k, HEIGHT/2.0))
                 ii.append(I[top]);            rg.append(np.ones(k, bool))
+        if self.structure_frames and self.extra_structure_p > 0 and xs:
+            has_s, has_r = n_or > 0, bool(ring_frame)
+            p_eff = self.extra_structure_p*(self.extra_same_kind if (has_s and has_r) else 1.0)
+            if random.random() < p_eff:
+                if has_s and has_r:
+                    kind = random.randint(0, 1)
+                else:
+                    comp = 1 if has_s else 0                      # the kind the frame does not have yet
+                    kind = comp if random.random() >= self.extra_same_kind else 1 - comp
+                xb = self._xb
+                e = int(np.random.choice(xb['ids'][kind], p=xb['w_or'] if (kind == 0 and self.extra_low_q) else None))
+                s0, c0 = int(xb['start'][e]), int(xb['count'][e])
+                q, chi, I = xb['q'][s0:s0 + c0].astype(float), xb['chi'][s0:s0 + c0].astype(float), xb['I'][s0:s0 + c0].astype(float)
+                v = q < qmax*0.995
+                if v.sum() >= 1:
+                    q, chi, I = q[v], chi[v], I[v]
+                    k = min(len(q), self._count(self.extra_spots_cap if kind == 0 else self.extra_rings_cap))
+                    if kind == 1 and self.ring_x_share is not None:
+                        top = self._pick_x(I, q/qmax*WIDTH, k)
+                    elif kind == 0 and self.extra_low_q:
+                        w = np.exp(-q/self.extra_low_q)
+                        top = np.random.choice(len(q), size=min(k, len(q)), replace=False, p=w/w.sum())
+                        bright = np.argsort(-I)[:min(5, len(I))]
+                        if not np.intersect1d(top, bright).size:
+                            top[np.random.randint(len(top))] = bright[np.random.randint(len(bright))]
+                    else:
+                        top = self._pick(I, k)
+                    k = len(top)
+                    m0 = max(float(np.max(np.concatenate(ii))), 1e-12)
+                    ii = [i/m0 for i in ii]
+                    xs.append(q[top]/qmax*WIDTH); ys.append(chi[top]/90.0*HEIGHT if kind == 0 else np.full(k, HEIGHT/2.0))
+                    ii.append(I[top]/max(float(I[top].max()), 1e-12)*random.uniform(0.15, 1.0)); rg.append(np.full(k, kind == 1))
+                    if self.v2_widths:
+                        qp, sq_p, sc_p = self._wpool[kind]
+                        j = np.clip(np.searchsorted(qp, q[top]) + np.random.randint(-200, 201, k), 0, len(qp) - 1)
+                        wq.append(sq_p[j]); wc.append(sc_p[j]); we.append(np.full(k, we[0][0]))
         if not xs:
             return None
         x, y = np.concatenate(xs), np.concatenate(ys)
@@ -522,7 +649,27 @@ class RealBkgSimulation:
                 seg = np.random.choice(seg, budget, replace=False)
             k = np.concatenate([seg, ring])
             x, y, I, r = x[k], y[k], I[k], r[k]
+            if self.v2_widths:
+                wq, wc, we = [np.concatenate(w)[k] for w in (wq, wc, we)]
+                self._pw = (wq, wc, we)
+                return x, y, I/I.max(), r
+        if self.v2_widths:
+            self._pw = tuple(np.concatenate(w) for w in (wq, wc, we))
         return x, y, I/I.max(), r
+
+    def _borrow(self, kind, q, wq, wc, we):
+        """Peaks whose entry has no stored widths (NaN sigma_q: organic-bank entries mixed into a v2/v3 peak bank) borrow sigma_q, sigma_chi of the stored peak of the same q (as the extra structure does) and the median eta."""
+        bad = ~np.isfinite(wq)
+        if bad.any():
+            qp, sq_p, sc_p = self._wpool[kind]
+            j = np.clip(np.searchsorted(qp, q[bad]) + np.random.randint(-200, 201, int(bad.sum())), 0, len(qp) - 1)
+            wq, wc, we = wq.copy(), wc.copy(), we.copy()
+            wq[bad], wc[bad], we[bad] = sq_p[j], sc_p[j], self._eta_med
+        return wq, wc, we
+
+    def _ex(self, name, entry):
+        s, c = int(self.phys.entry_start[entry]), int(self.phys.entry_count[entry])
+        return np.asarray(self.phys.extra[name][s:s + c], np.float64)
 
     def _draw_widths(self, n, is_ring, x=None):
         R = self.R
@@ -847,7 +994,16 @@ class RealBkgSimulation:
             return None
         x, y, rel, rg, iy, ix = x[inside], y[inside], rel[inside], rg[inside], iy[inside], ix[inside]
 
-        s_q, s_c, el = self._draw_widths(len(x), rg, x)
+        if self.v2_widths:
+            wq, wc, we = (w[inside] for w in self._pw)
+            s_q = np.clip(wq/(Q_MAX_V2)*WIDTH*self.v2_width_scale[0], *self.sig_clip[0])
+            s_c = np.where(rg, 1e4, np.clip(np.nan_to_num(wc, nan=1.0)/(math.pi/2)*HEIGHT*self.v2_width_scale[1], *self.sig_clip[1]))
+            el = dict(on=False, k=1.0, f=None)
+            self._eta_v2 = float(we[0])
+        else:
+            s_q, s_c, el = self._draw_widths(len(x), rg, x)
+            if self.v1_width_scale != (1.0, 1.0):
+                s_q, s_c = s_q*self.v1_width_scale[0], np.where(rg, s_c, s_c*self.v1_width_scale[1])
 
         if self.seg_on_ring_keep < 1.0 and rg.any() and (~rg).any():
             # Segments whose box would overlap a ring's box radially are kept with probability
@@ -895,12 +1051,16 @@ class RealBkgSimulation:
                 if len(sel) > 1:
                     rel[sel] = rel[np.random.permutation(sel)]
             amp = self._assign_amplitudes(rel, noise[iy, ix], n_label)*np.where(rg, self.ring_gain, self.seg_gain)
+            if self.ring_x_gain is not None:
+                amp = amp*np.where(rg, self.ring_x_gain[0] + (self.ring_x_gain[1] - self.ring_x_gain[0])*np.clip(np.asarray(ix, np.float64)/1024.0, 0.0, 1.0), 1.0)
             if self.ring_cap is not None:
                 amp = np.where(rg, np.minimum(amp, self.ring_cap*noise[iy, ix]), amp)
             if el['on'] and self.elongate['conserve_flux'] and el['f'] is not None:
                 amp = amp/el['f']          # an arc is the same reflection over a longer footprint
 
         eta = random.uniform(*self.voigt_eta)
+        if self.v2_widths:
+            eta = self._eta_v2
         if self.unified_labels:
             # ONE DECISION for drawing and labelling. The gate runs BEFORE the render, so the
             # peaks that fail it are never painted into the image at all -- there is no tier of

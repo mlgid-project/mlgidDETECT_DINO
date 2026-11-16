@@ -34,16 +34,21 @@ def group_of(name):
 
 
 def run_dirs(runs_dir=RUNS):
-    out = []
-    for e in sorted(os.listdir(runs_dir)):
-        p = os.path.join(runs_dir, e)
-        if not os.path.isdir(p):
+    out, seen = [], set()
+    for base in (os.path.join(runs_dir, 'old_convention'), runs_dir):       # old-convention runs live in old_convention/<group> since 2026-10-22 (top-level group symlinks removed)
+        if not os.path.isdir(base):
             continue
-        if e.startswith('hm_'):
-            out.append((e, p))
-        elif e in GROUPS:
-            out += [(r, os.path.join(p, r)) for r in sorted(os.listdir(p)) if r.startswith('hm_') and os.path.isdir(os.path.join(p, r))]
-    return out
+        for e in sorted(os.listdir(base)):
+            p = os.path.join(base, e)
+            if not os.path.isdir(p):
+                continue
+            if e.startswith('hm_') and e not in seen:
+                seen.add(e); out.append((e, p))
+            elif e in GROUPS:
+                for r in sorted(os.listdir(p)):
+                    if r.startswith('hm_') and os.path.isdir(os.path.join(p, r)) and r not in seen:
+                        seen.add(r); out.append((r, os.path.join(p, r)))
+    return sorted(out)
 
 
 def running_outs():

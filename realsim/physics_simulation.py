@@ -124,13 +124,15 @@ class PhysicsSimulation(object):
         return np.load(io.BytesIO(buf), allow_pickle=False)
 
     def __init__(self, bank_path, sim_config=None, device='cuda', unify_contrast=False,
-                 n_powder=None, real_tail_only=False, frame_types=None):
+                 n_powder=None, real_tail_only=False, frame_types=None, keep_cif=False):
         d = self._load_bank(bank_path)
         self.q = torch.from_numpy(d['q']).float()
         self.chi = torch.from_numpy(d['chi']).float()
         self.intensity = torch.from_numpy(d['intensity']).float()
         self.entry_start = d['entry_start']
         self.entry_count = d['entry_count']
+        self.entry_cif = np.asarray(d['entry_cif']) if keep_cif else None
+        self.extra = {k: d[k] for k in ('sigma_q', 'sigma_chi', 'eta') if keep_cif and k in d.files}      # per-peak widths of a bank built from the realsim_v2 shards (v2_widths)     # COLORBOX1 ADDITION: structure id per entry (structure_frames of RealBkgSimulation)
         kinds = d['entry_kind']
         self.powder_ids = np.nonzero(kinds == 'powder')[0]
         self.oriented_ids = np.nonzero(kinds == 'oriented')[0]

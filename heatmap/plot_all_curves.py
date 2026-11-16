@@ -197,7 +197,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--runs_dir', default='/mnt/DATA/mlgidDETECT_DINO_HEATMAP/hm_runs'); p.add_argument('--out', default=None)
     a = p.parse_args()
-    out = a.out or os.path.join(a.runs_dir, 'curves')
+    out = a.out or os.path.join(a.runs_dir, 'old_convention', 'curves')
     os.makedirs(os.path.join(out, 'per_run'), exist_ok=True)
     runs = load(a.runs_dir)
     print(f'{len(runs)} runs with evaluation logs')

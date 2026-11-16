@@ -22,11 +22,19 @@ SSL1 = '/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detect
 def get_args():
     p = argparse.ArgumentParser()
     p.add_argument('--out', required=True)
-    p.add_argument('--bb', default='simmim1', choices=['simmim1', 'ssl1', 'random'])
+    p.add_argument('--bb', default='simmim1', choices=['simmim1', 'ssl1', 'random', 'dinov3_convnext_large', 'dinov3_vitl16', 'dinov3_vith16plus'])
     p.add_argument('--bb_path', default=None, help='override the backbone weights file (SimMIM export, or ssl1 checkpoint)')
     p.add_argument('--box_coef', default='2.80,1.30', help="label convention a_coef,w_coef; 'legacy' = ssl1's 3.5/1.0")
-    p.add_argument('--sim', default='legacy', choices=['legacy', 'realbkg'],
-                   help="image source: 'legacy' = the simulator of every run so far (default, unchanged); 'realbkg' = real-background simulator in realsim/ (needs the data described in realsim/README.md, env GIWAXS_WORK)")
+    p.add_argument('--sim', default='legacy', choices=['legacy', 'realbkg', 'realsim_v2'],
+                   help="image source: 'legacy' = the simulator of every run so far (default, unchanged); 'realbkg' = real-background simulator in realsim/ (needs the data described in realsim/README.md, env GIWAXS_WORK); 'realsim_v2' = pre-generated shards of realsim_v2/ (needs --v2_data)")
+    p.add_argument('--sim_flip', type=int, default=0, choices=[0, 1], help="with --sim realbkg: 1 = the legacy simulator's augmentation on every frame (simulation.flip_image: vertical and horizontal flip, each with probability 0.5, image + boxes + mask); 0 = off (all realbkg runs so far)")
+    p.add_argument('--sim_pos_bank', default=None, help="with --sim legacy: peak POSITIONS from a pygidSIM peak bank (realsim_v2/build_peak_bank.py output) instead of uniform random ones; count, widths, intensities, background unchanged (see SimulationConfig.pos_bank in simulation.py)")
+    p.add_argument('--sim_pos_mode', default='structure', choices=['structure', 'pooled', 'pooled_flat'], help="with --sim_pos_bank: 'structure' = one random structure + fill (default); 'pooled' = every position an i.i.d. draw from the pool of all bank peaks; 'pooled_flat' = pooled, reweighted to a uniform density over the image (see SimulationConfig.pos_mode)")
+    p.add_argument('--sim_pos_widths', type=int, default=0, choices=[0, 1], help="with --sim_pos_bank: 1 = the radial / angular peak widths too come from the bank peaks that supply the positions (see SimulationConfig.pos_widths); 0 = legacy widths (default)")
+    p.add_argument('--v2_data', default=None, help="with --sim realsim_v2: folder written by realsim_v2/generate_dataset.py (config.json + shards/), by convention under /mnt/DATA/mlgidDETECT_DINO_HEATMAP/realsim_v2_data/")
+    p.add_argument('--v2_flip', default='random', choices=['random', 'none'], help="with --sim realsim_v2: 'random' = the legacy simulator's augmentation (vertical and horizontal flip, each with p 0.5, of image + boxes + mask); 'none' = stored layout")
+    p.add_argument('--v2_prefetch', type=int, default=8, help="with --sim realsim_v2: frames prepared ahead by a background thread (0 = in the training thread)")
+    p.add_argument('--mix_plain', type=float, default=0.0, help="with --sim realbkg: share of the training frames drawn from the legacy simulator (FastSimulation, same box convention) instead of the real-background simulator; 0 = off")
     p.add_argument('--sim_workers', type=int, default=0, choices=[0, 1, 2, 3, 4],
                    help="with --sim realbkg: N = produce the frames in N separate processes (the simulator costs 0.19 s/frame and 13 GB peak RAM per process); frozen swin only, ~0.5 GB more GPU memory per worker")
     p.add_argument('--realsim_preset', default='r6', choices=['r6', 'r7', 'r8'], help="with --sim realbkg: base settings of realsim/factory.py (r6 = default; r7/r8 add the ring-appearance fixes of DINO run 7/8)")
@@ -125,7 +133,7 @@ def main():
         torch.backends.cuda.matmul.allow_tf32 = True; torch.backends.cudnn.allow_tf32 = True
     torch.manual_seed(a.seed); np.random.seed(a.seed)
     import random; random.seed(a.seed)
-    bb_path, bb_prefix = (SIMMIM, '') if a.bb == 'simmim1' else (SSL1, 'backbone.0.')
+    bb_path, bb_prefix = (SIMMIM, '') if a.bb == 'simmim1' else (None, '') if a.bb.startswith('dinov3') else (SSL1, 'backbone.0.')
     bb_path = a.bb_path or bb_path
     if a.bb == 'random':                      # control arm: frozen RANDOM-init swin, no weights loaded
         bb_path, bb_prefix = None, ''
@@ -134,9 +142,9 @@ def main():
     model = HeatmapNet(backbone_ckpt=bb_path, backbone_prefix=bb_prefix, freeze_backbone=not a.unfreeze,
                        out_stride=a.out_stride, amp_backbone=a.amp_backbone, chan_mode=a.chan, zero_invalid=a.zero_invalid,
                        dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch,
-                       ring_head_stride=ring_stride, drop_path_rate=a.bb_drop_path, grad_ckpt=a.grad_ckpt).cuda()
+                       ring_head_stride=ring_stride, drop_path_rate=a.bb_drop_path, grad_ckpt=a.grad_ckpt, bb_kind=a.bb if a.bb.startswith('dinov3') else 'swin').cuda()
     hm_args = dict(freeze_backbone=not a.unfreeze, out_stride=a.out_stride, bb_path=bb_path,
-                   bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan, zero_invalid=a.zero_invalid,
+                   bb_prefix=bb_prefix, bb=a.bb, bb_kind=a.bb if a.bb.startswith('dinov3') else 'swin', amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan, zero_invalid=a.zero_invalid,
                    dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch, ring_head_stride=ring_stride)
     head_params = [p for n, p in model.named_parameters() if p.requires_grad and not n.startswith('backbone.')]
     groups = [dict(params=head_params, lr=a.lr)]
@@ -162,14 +170,18 @@ def main():
             print(f'[train] GT box scale not set: {type(e).__name__}: {e}', flush=True)
     print('[train] trainable params:', sum(p.numel() for p in model.parameters() if p.requires_grad), flush=True)
 
-    from simulation import FastSimulation
+    from simulation import FastSimulation, flip_image
     cfg_sim = None
-    if a.box_coef != 'legacy' or a.chan == 'contrast':
+    if a.box_coef != 'legacy' or a.chan == 'contrast' or a.sim_pos_bank:
         from simulation import SimulationConfig
         cfg_sim = SimulationConfig()
         if a.box_coef != 'legacy':           # current main convention; 'legacy' = ssl1's default 3.5/1.0
             cfg_sim.a_coef, cfg_sim.w_coef = (float(v) for v in a.box_coef.split(','))
         cfg_sim.contrast_channels = (a.chan == 'contrast')
+        if a.sim_pos_bank:
+            cfg_sim.pos_bank = a.sim_pos_bank
+            cfg_sim.pos_mode = a.sim_pos_mode
+            cfg_sim.pos_widths = bool(a.sim_pos_widths)
     print(f'[train] sim box convention: a_coef,w_coef = {a.box_coef}', flush=True)
     if a.sim == 'realbkg':
         import ast
@@ -181,17 +193,42 @@ def main():
             worker = SimWorker(coef, ov, a.seed, n=a.sim_workers, preset=a.realsim_preset)
         else:
             sim = make_realbkg_sim(device='cuda', box_coef=coef, overrides=ov, preset=a.realsim_preset)
+    elif a.sim == 'realsim_v2':
+        if not a.v2_data:
+            raise SystemExit('--sim realsim_v2 needs --v2_data')
+        if a.box_coef == 'legacy':
+            raise SystemExit('--sim realsim_v2 needs an explicit --box_coef a,w (the shards store sigmas, the boxes are built here)')
+        from realsim_v2.dataset import RealSimV2
+        sim = RealSimV2(a.v2_data, box_coef=tuple(float(v) for v in a.box_coef.split(',')), flip=a.v2_flip, seed=a.seed, prefetch=a.v2_prefetch, device='cuda')
     else:
         sim = FastSimulation(sim_config=cfg_sim, device='cuda')
 
+    sim_plain = None
+    if a.sim == 'realbkg' and a.mix_plain > 0:
+        sim_plain = FastSimulation(sim_config=cfg_sim, device='cuda')
+        print(f'[train] mixed training: {a.mix_plain:.2f} of the frames from the legacy simulator, the rest from the real-background simulator', flush=True)
+
     def sim_sample():
+        if sim_plain is not None and random.random() < a.mix_plain:
+            while True:                       # legacy-simulator frame (same retry-on-failure as below)
+                try:
+                    img, boxes, mask, is_ring = sim_plain.simulate_img()
+                    return (img if img.dim() == 3 else img[None]), boxes.float(), is_ring.long(), mask
+                except Exception:
+                    pass
         if a.sim == 'realbkg' and a.sim_workers:
             img, boxes, lab, msk = worker.sample()
-            return img.cuda(), boxes.cuda(), lab.cuda(), msk.cuda()
+            img, boxes, lab, msk = img.cuda(), boxes.cuda(), lab.cuda(), msk.cuda()
+            if a.sim_flip:
+                img, boxes, msk = flip_image(img, boxes, msk)
+            return img, boxes, lab, msk
         while True:                           # same retry-on-failure as main.SimulationDataset
             try:
                 img, boxes, mask, is_ring = sim.simulate_img()
-                return (img if img.dim() == 3 else img[None]), boxes.float(), is_ring.long(), mask
+                img, boxes = (img if img.dim() == 3 else img[None]), boxes.float()
+                if a.sim == 'realbkg' and a.sim_flip:
+                    img, boxes, mask = flip_image(img, boxes, mask)
+                return img, boxes, is_ring.long(), mask
             except Exception:
                 pass
     stride = model.out_stride
