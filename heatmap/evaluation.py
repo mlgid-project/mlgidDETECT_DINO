@@ -1,0 +1,219 @@
+"""Shared eval for ssl1 (DINO) and the heatmap detector -- one code path for both.
+
+Per frame we keep the top-225 detections after class-aware NMS and drop scores <= the floor (default 0.1, HM_SCORE_FLOOR to
+override), then score them identically:
+  ap_total (Evaluator, same as --eval), recall / precision / FP count at a score threshold,
+  and recall bucketed by each GT segment's nearest-neighbour distance.
+Matching = the repo's q-matcher (min_iou 0.1), as in gap41_split.py.
+"""
+import numpy as np
+import torch
+
+from util.configuration import Config
+from util.exp_preprocess import standard_preprocessing
+from util.labeleddataset import H5GIWAXSDataset
+from util.pygidloader import PyGIDDataset, detect_dataset_type
+from util.postprocessing import onnx_to_xyxy, filter_boxes
+from util.evaluation import Evaluator, get_full_conf_results
+from util.matchers import get_matcher
+
+import os
+CUR = os.environ.get('HM_DATA_DIR', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data'))   # dir holding organic_labeled.h5 + 41.h5 (env HM_DATA_DIR, default <repo>/data)
+DATASETS = {'organic': f'{CUR}/organic_labeled.h5', '41': f'{CUR}/41.h5'}
+POLAR = (512, 1024)
+matcher = get_matcher('q', min_iou=0.1)
+
+
+class _P:
+    pass
+
+
+def make_config(path):
+    c = Config()
+    c.EVAL_EPOCH = '0'; c.EVAL_OUTPUT_FOLDER = '/tmp'
+    c.INPUT_DATASET = path; c.PREPROCESSING_POLAR_SHAPE = list(POLAR)
+    # Headline convention (user decision 2026-10-08): score floor 0.1 + top-225, as in the DINO --eval path. A no-floor test
+    # (HM_SCORE_FLOOR=0) did not raise AP: this evaluator's IoU matching ignores scores, so extra low-score boxes can steal
+    # matches (see the score sweeps). HM_SCORE_FLOOR overrides the floor for such experiments.
+    c.POSTPROCESSING_SCORE = float(os.environ.get('HM_SCORE_FLOOR', 0.1)); c.POSTPROCESSING_CLASSAWARE_NMS = True
+    return c
+
+
+def iter_frames(path):
+    cfg = make_config(path)
+    ds = (PyGIDDataset(cfg, path=path, preprocess_func=standard_preprocessing, buffer_size=5, load_labels=True)
+          if detect_dataset_type(path) == 'pygid' else
+          H5GIWAXSDataset(cfg, path=path, preprocess_func=standard_preprocessing, buffer_size=5))
+    try:
+        for ic in ds.iter_images():
+            yield cfg, ic
+    finally:
+        if callable(getattr(ds, 'close', None)):
+            ds.close()
+
+
+# three contrasts of the SAME raw polar image (same specs as the multi-channel branch's CONTRAST_CHANNELS);
+# ch0 is the deployed contrast, so it must equal converted_polar_image (check: heatmap/check_contrast.py)
+CONTRAST_CHANNELS = [
+    {'name': 'log_he',           'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': True,  'clahe': None},
+    {'name': 'log_only',         'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': False, 'clahe': None},
+    {'name': 'log_clahe4_16x16', 'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': False, 'clahe': (4.0, 16, 16)},
+]
+
+
+def frame_inputs(ic, device, num_channels=1, chan_mode='he'):
+    if chan_mode == 'contrast':               # [1,3,H,W]: starts from the PRE-contrast raw polar image
+        from util.exp_preprocess import apply_contrast
+        raw = np.asarray(ic.raw_polar_image, np.float32).reshape(*POLAR)
+        m = np.asarray(ic.converted_mask).reshape(*POLAR).astype(bool)
+        return torch.tensor(np.stack([apply_contrast(raw, m, c) for c in CONTRAST_CHANNELS]))[None].to(device)
+    img = torch.tensor(ic.converted_polar_image[:, 0]).unsqueeze(0).to(device)
+    return img.repeat(1, num_channels, 1, 1)
+
+
+def frame_mask(ic, device):
+    """Valid-pixel mask [1,H,W] bool (True = valid), for the multi-channel stem."""
+    return torch.tensor(np.asarray(ic.converted_mask).reshape(*POLAR).astype(bool))[None].to(device)
+
+
+# GT box scale (new-box datasets, 2026-10-22): the stored GT boxes are +-1 sigma (= label convention a_coef = w_coef = 2). A model trained on another convention
+# (box_coef a_coef,w_coef; half extent coef*sigma/2: x = radial = w_coef, y = angular = a_coef) predicts boxes of that size, so for a fair comparison of box sizes the GT
+# is scaled about its centre by (w_coef/2, a_coef/2) before matching. Off by default (scale 1,1 = old behaviour). Ring boxes (full chi) are scaled in x only.
+# Neighbour-distance buckets always use the unscaled GT ('gt_raw'). Switch: set_gt_box_coef(a_coef, w_coef) or env HM_GT_BOX_COEF="a_coef,w_coef" ('auto' = per run, set by train.py / evaluate.py).
+GT_SCALE = (1.0, 1.0)
+
+
+def set_gt_box_coef(a_coef=None, w_coef=None):
+    global GT_SCALE
+    GT_SCALE = (1.0, 1.0) if a_coef is None else (float(w_coef) / 2.0, float(a_coef) / 2.0)
+    return GT_SCALE
+
+
+_env = os.environ.get('HM_GT_BOX_COEF', '')
+if _env and _env != 'auto':
+    set_gt_box_coef(*(float(v) for v in _env.split(',')))
+
+
+def _scale_gt(gt, mask):
+    sx, sy = GT_SCALE
+    if (sx, sy) == (1.0, 1.0) or len(gt) == 0:
+        return gt
+    g = gt.copy()
+    ring = is_ring_geom(gt, mask)
+    cx = (gt[:, 0] + gt[:, 2]) / 2; cy = (gt[:, 1] + gt[:, 3]) / 2
+    hw = (gt[:, 2] - gt[:, 0]) / 2 * sx
+    hh = (gt[:, 3] - gt[:, 1]) / 2 * np.where(ring, 1.0, sy)
+    g[:, 0], g[:, 2], g[:, 1], g[:, 3] = cx - hw, cx + hw, cy - hh, cy + hh
+    return g
+
+
+def gt_of(ic):
+    raw = np.asarray(ic.polar_labels.boxes, np.float32)
+    mask = np.asarray(ic.converted_mask).reshape(*POLAR).astype(bool)
+    return dict(gt=_scale_gt(raw, mask), gt_raw=raw,
+                gtconf=np.asarray(ic.polar_labels.confidences, np.float32), mask=mask)
+
+
+def dino_dets(cfg, outputs):
+    """DINO path: top-225 + class-aware NMS + score floor (default 0.1), exactly as --eval."""
+    c = filter_boxes(cfg, onnx_to_xyxy(cfg, _P(), [outputs['pred_logits'].detach().cpu().numpy(),
+                                                   outputs['pred_boxes'].detach().cpu().numpy()]))
+    return np.asarray(c.boxes, np.float32).reshape(-1, 4), np.asarray(c.scores, np.float32)
+
+
+def heatmap_dets(cfg, per_image, use_nms):
+    boxes, scores, cls = per_image
+    boxes, scores, cls = boxes.cpu(), scores.cpu(), cls.cpu()
+    if use_nms:                                  # shared filter_boxes (class-aware NMS) for an A/B
+        c = _P(); c.boxes, c.scores, c.pred_labels = boxes, scores, cls
+        c = filter_boxes(cfg, c)
+        return np.asarray(c.boxes, np.float32).reshape(-1, 4), np.asarray(c.scores, np.float32)
+    k = scores > cfg.POSTPROCESSING_SCORE        # native: peak picking IS the NMS
+    return boxes[k].numpy().astype(np.float32), scores[k].numpy().astype(np.float32)
+
+
+def is_ring_geom(boxes, mask, frac=0.70):
+    H, W = mask.shape
+    out = []
+    for x0, y0, x1, y1 in np.asarray(boxes):
+        xc = int(np.clip((x0 + x1) / 2, 0, W - 1))
+        out.append((y1 - y0) >= frac * max(int(mask[:, xc].sum()), 1))
+    return np.array(out, bool)
+
+
+def nn_distances(gt, mask):
+    """For each GT: Euclid centre distance to the nearest other non-ring GT, and chi-gap (|dy|) to the
+    nearest same-radius one (|dx| <= max half-width). Rings get NaN (not in the buckets)."""
+    n = len(gt)
+    eu = np.full(n, np.nan); chi = np.full(n, np.nan)
+    if n == 0:
+        return eu, chi, np.zeros(0, bool)
+    ring = is_ring_geom(gt, mask)
+    cx = (gt[:, 0] + gt[:, 2]) / 2; cy = (gt[:, 1] + gt[:, 3]) / 2; w = gt[:, 2] - gt[:, 0]
+    seg = np.where(~ring)[0]
+    for i in seg:
+        o = seg[seg != i]
+        if len(o) == 0:
+            eu[i] = chi[i] = np.inf; continue
+        dx = np.abs(cx[o] - cx[i]); dy = np.abs(cy[o] - cy[i])
+        eu[i] = np.sqrt(dx ** 2 + dy ** 2).min()
+        same = dx <= np.maximum(w[o], w[i]) / 2
+        chi[i] = dy[same].min() if same.any() else np.inf
+    return eu, chi, ring
+
+
+BUCKETS = [('<5', 0, 5), ('5-10', 5, 10), ('>10', 10, np.inf)]
+
+
+def evaluate_dets(dets, gts, cfg, thr_list=(0.1, 0.3)):
+    """dets: list of (boxes, scores); gts: list of gt dicts. Returns a result dict."""
+    ev = Evaluator()
+    for (b, s), g in zip(dets, gts):
+        ev.get_exp_metrics(torch.tensor(b), torch.tensor(s), torch.tensor(g['gt']), g['gtconf'])
+    df1, df2 = get_full_conf_results(ev.metrics)
+    res = dict(ap=float(df2['ap_total'].values[0]), thr={},
+               ap_strata={k: float(df2[f'ap_{k}'].values[0]) for k in ('high', 'med', 'low')})   # GT confidence 1.0 / 0.5 / 0.1
+    # the evaluator's own operating points on the full PR curve: max accuracy, <=0.1 FP per GT, >=95% recall (high-confidence GT)
+    res['ops'] = {nm: dict(min_score=float(r['min_score']), recall=float(r['recall_total']), fp_per_gt=float(r['fp']))
+                  for nm, (_, r) in zip(('best_accuracy', 'fp<=0.1/GT', 'high_recall>=95'), df1.iterrows())}
+    for thr in thr_list:
+        n_gt = n_tp = n_pred = 0
+        bk = {k: [0, 0] for k, _, _ in BUCKETS}; bkc = {k: [0, 0] for k, _, _ in BUCKETS}
+        seg_gt = seg_tp = ring_gt = ring_tp = 0
+        for (b, s), g in zip(dets, gts):
+            k = s > thr if len(s) else np.zeros(0, bool)
+            b, s = b[k], s[k]
+            gt = g['gt']
+            eu, chi, ring = nn_distances(g.get('gt_raw', gt), g['mask'])
+            hit = np.zeros(len(gt), bool)
+            if len(b) and len(gt):
+                _, ri, _ = matcher(torch.tensor(gt).float(), torch.tensor(b).float())
+                hit[np.asarray(ri, int)] = True
+            n_gt += len(gt); n_tp += int(hit.sum()); n_pred += len(b)
+            if len(gt):
+                seg_gt += int((~ring).sum()); seg_tp += int(hit[~ring].sum())
+                ring_gt += int(ring.sum()); ring_tp += int(hit[ring].sum())
+            for name, lo, hi in BUCKETS:
+                m = (eu >= lo) & (eu < hi); bk[name][0] += int(m.sum()); bk[name][1] += int(hit[m].sum())
+                m = (chi >= lo) & (chi < hi); bkc[name][0] += int(m.sum()); bkc[name][1] += int(hit[m].sum())
+        res['thr'][thr] = dict(n_gt=n_gt, recall=n_tp / max(n_gt, 1), precision=n_tp / max(n_pred, 1),
+                               n_pred=n_pred, fp=n_pred - n_tp,
+                               seg_recall=seg_tp / max(seg_gt, 1), ring_recall=ring_tp / max(ring_gt, 1),
+                               euclid={k: (v[0], v[1] / max(v[0], 1)) for k, v in bk.items()},
+                               chigap={k: (v[0], v[1] / max(v[0], 1)) for k, v in bkc.items()})
+    return res
+
+
+def format_result(name, ds, r):
+    s = r['ap_strata']
+    lines = [f'  [{name}] {ds}: ap_total {r["ap"]:.4f} (AP by GT confidence: high {s["high"]:.3f} / med {s["med"]:.3f} / low {s["low"]:.3f})']
+    lines.append('    evaluator operating points (full PR curve): ' + '; '.join(
+        f'{k}: score>={v["min_score"]:.3f} recall {v["recall"]:.3f} FP/GT {v["fp_per_gt"]:.2f}' for k, v in r['ops'].items()))
+    for thr, t in r['thr'].items():
+        eu = ' '.join(f'{k}:{v[1]:.3f}(n={v[0]})' for k, v in t['euclid'].items())
+        ch = ' '.join(f'{k}:{v[1]:.3f}(n={v[0]})' for k, v in t['chigap'].items())
+        lines.append(f'    score>{thr}: recall {t["recall"]:.3f} (seg {t["seg_recall"]:.3f}, ring {t["ring_recall"]:.3f}) '
+                     f'precision {t["precision"]:.3f} preds {t["n_pred"]} FP {t["fp"]}')
+        lines.append(f'      recall by NN Euclid dist  {eu}')
+        lines.append(f'      recall by same-radius chi-gap  {ch}')
+    return '\n'.join(lines)

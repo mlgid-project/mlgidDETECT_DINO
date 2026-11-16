@@ -25,3 +25,7 @@ model_zoo/
 model_zoo_old/
 scripts/
 diagnostics/*.png
+data/
+weights/
+dinov3/
+runs/
