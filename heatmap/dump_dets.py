@@ -1,5 +1,5 @@
 """Cache a heatmap checkpoint's detections (+nms decode, floor 0.1, top-225) together with the images and ground truth, so that
-post-processing ideas (heatmap/blob_diag.py, heatmap/split_blobs.py) can be developed on the CPU without re-running the network.
+post-processing ideas and analyses (box_sweep.py, type_confusion.py, compare_figs.py) can be developed on the CPU without re-running the network.
 
   python heatmap/dump_dets.py --ckpt <run_dir>/final_checkpoint.pth --out <file>.pkl [--sets organic 41] [--sim 300] [--sim_seed 0]
          [--box_coef 2.80,1.30] [--device cuda]
