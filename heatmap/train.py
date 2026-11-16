@@ -10,7 +10,7 @@ for _n, _s in (('models', 'models'), ('models.dino', 'models/dino')):   # skip D
 import numpy as np
 import torch
 
-from models.heatmap_head import HeatmapNet, decode
+from models.heatmap_head import HeatmapNet, decode, RING_DECODE_MODES
 from heatmap.targets_loss import build_targets, heatmap_loss
 if os.environ.get('HM_REF_TARGETS') == '1':      # fallback: the original per-ring-loop target builder (slower)
     from heatmap.targets_loss_ref import build_targets
@@ -22,17 +22,43 @@ SSL1 = '/mnt/lustre/work/schreiber/szb389/datasets/DINO_BACKBONE_curation/detect
 def get_args():
     p = argparse.ArgumentParser()
     p.add_argument('--out', required=True)
-    p.add_argument('--bb', default='simmim1', choices=['simmim1', 'ssl1', 'random'])
+    p.add_argument('--bb', default='simmim1', choices=['simmim1', 'ssl1', 'random', 'dinov3_convnext_large', 'dinov3_vitl16', 'dinov3_vith16plus'])
     p.add_argument('--bb_path', default=None, help='override the backbone weights file (SimMIM export, or ssl1 checkpoint)')
     p.add_argument('--box_coef', default='2.80,1.30', help="label convention a_coef,w_coef; 'legacy' = ssl1's 3.5/1.0")
+    p.add_argument('--sim', default='legacy', choices=['legacy', 'realbkg', 'realsim_v2'],
+                   help="image source: 'legacy' = the simulator of every run so far (default, unchanged); 'realbkg' = real-background simulator in realsim/ (needs the data described in realsim/README.md, env GIWAXS_WORK); 'realsim_v2' = pre-generated shards of realsim_v2/ (needs --v2_data)")
+    p.add_argument('--sim_flip', type=int, default=0, choices=[0, 1], help="with --sim realbkg: 1 = the legacy simulator's augmentation on every frame (simulation.flip_image: vertical and horizontal flip, each with probability 0.5, image + boxes + mask); 0 = off (all realbkg runs so far)")
+    p.add_argument('--sim_pos_bank', default=None, help="with --sim legacy: peak POSITIONS from a pygidSIM peak bank (realsim_v2/build_peak_bank.py output) instead of uniform random ones; count, widths, intensities, background unchanged (see SimulationConfig.pos_bank in simulation.py)")
+    p.add_argument('--sim_pos_mode', default='structure', choices=['structure', 'pooled', 'pooled_flat'], help="with --sim_pos_bank: 'structure' = one random structure + fill (default); 'pooled' = every position an i.i.d. draw from the pool of all bank peaks; 'pooled_flat' = pooled, reweighted to a uniform density over the image (see SimulationConfig.pos_mode)")
+    p.add_argument('--sim_pos_widths', type=int, default=0, choices=[0, 1], help="with --sim_pos_bank: 1 = the radial / angular peak widths too come from the bank peaks that supply the positions (see SimulationConfig.pos_widths); 0 = legacy widths (default)")
+    p.add_argument('--v2_data', default=None, help="with --sim realsim_v2: folder written by realsim_v2/generate_dataset.py (config.json + shards/), by convention under /mnt/DATA/mlgidDETECT_DINO_HEATMAP/realsim_v2_data/")
+    p.add_argument('--v2_flip', default='random', choices=['random', 'none'], help="with --sim realsim_v2: 'random' = the legacy simulator's augmentation (vertical and horizontal flip, each with p 0.5, of image + boxes + mask); 'none' = stored layout")
+    p.add_argument('--v2_prefetch', type=int, default=8, help="with --sim realsim_v2: frames prepared ahead by a background thread (0 = in the training thread)")
+    p.add_argument('--mix_plain', type=float, default=0.0, help="with --sim realbkg: share of the training frames drawn from the legacy simulator (FastSimulation, same box convention) instead of the real-background simulator; 0 = off")
+    p.add_argument('--sim_workers', type=int, default=0, choices=[0, 1, 2, 3, 4],
+                   help="with --sim realbkg: N = produce the frames in N separate processes (the simulator costs 0.19 s/frame and 13 GB peak RAM per process); frozen swin only, ~0.5 GB more GPU memory per worker")
+    p.add_argument('--realsim_preset', default='r6', choices=['r6', 'r7', 'r8'], help="with --sim realbkg: base settings of realsim/factory.py (r6 = default; r7/r8 add the ring-appearance fixes of DINO run 7/8)")
+    p.add_argument('--realsim_opt', nargs='*', default=[], metavar='KEY=VALUE',
+                   help="with --sim realbkg: override settings of realsim/factory.py R6, e.g. p_ring=0.4 contrast_min=2.5 (values are python literals)")
     p.add_argument('--amp_backbone', action='store_true', help='bf16 autocast for the frozen swin only (opt-in)')
     p.add_argument('--tf32', action='store_true', help='allow TF32 matmuls/convs (opt-in)')
     p.add_argument('--ring_target', default='legacy', choices=['legacy', 'ridge'],
                    help="'ridge': tall ridge target for rings, all ridge cells regress the same box")
-    p.add_argument('--chan', default='he', choices=['he', 'he_mask', 'full'],
-                   help='stem input channels (swin always sees the HE image only): he | he_mask | full = HE, B1 ring-subtracted, B2 column median, mask')
-    p.add_argument('--unfreeze', action='store_true')
+    p.add_argument('--chan', default='he', choices=['he', 'he_mask', 'full', 'contrast', 'coord'],
+                   help='stem input channels (swin always sees the HE image only): he | he_mask | full = HE, B1 ring-subtracted, B2 column median, mask | contrast = log+HE, plain log, log+CLAHE of the same image, mask | coord = HE, x/W, y/H (pixel position in the polar image; not physical q, each file has its own q range)')
+    p.add_argument('--zero_invalid', action='store_true',
+                   help='set invalid (masked) pixels to 0 in every model input incl. the frozen swin, in training AND eval (sim images are gray there, the eval files are exactly 0)')
+    p.add_argument('--unfreeze', action='store_true', help='train the swin too (lr --lr_backbone); the frozen runs never used stochastic depth')
+    p.add_argument('--bb_drop_path', type=float, default=0.0, help='swin stochastic-depth rate when --unfreeze (0 = off, like the frozen runs)')
+    p.add_argument('--grad_ckpt', action='store_true', help='gradient checkpointing in the swin (less memory, ~30%% slower; --unfreeze only)')
     p.add_argument('--out_stride', type=int, default=2)
+    p.add_argument('--dim', type=int, default=128, help='FPN width')
+    p.add_argument('--tower_ch', type=int, default=64, help='channels of the two head towers')
+    p.add_argument('--tower_depth', type=int, default=2, help='3x3 conv layers per head tower')
+    p.add_argument('--stem_ch', type=int, default=32, help='channels of the image stem')
+    p.add_argument('--ring_head', action='store_true', help='extra ring-only head on a coarse merged FPN map (needs --ring_target ridge)')
+    p.add_argument('--ring_head_stride', type=int, default=8, choices=[8, 16])
+    p.add_argument('--ring_coef', type=float, default=1.0, help='weight of the ring-head loss')
     p.add_argument('--epochs', type=int, default=60)
     p.add_argument('--lr_drop', type=int, default=45)
     p.add_argument('--lr_drops', type=int, nargs='+', default=None, help='several x0.1 drops (MultiStepLR); overrides --lr_drop')
@@ -46,6 +72,17 @@ def get_args():
     return p.parse_args()
 
 
+def eval_interval(a):
+    """Epochs between in-training evals. An integer in <out>/eval_interval.txt (this run) or <out>/../_tools/eval_interval.txt
+    (all runs) overrides --eval_interval, read at every epoch end, so it can be changed while a run trains."""
+    for f in (os.path.join(a.out, 'eval_interval.txt'), os.path.join(os.path.dirname(os.path.abspath(a.out)), '_tools', 'eval_interval.txt')):
+        try:
+            return max(1, int(open(f).read().strip()))
+        except (OSError, ValueError):
+            pass
+    return a.eval_interval
+
+
 @torch.no_grad()
 def quick_eval(model, epoch, out):
     try:
@@ -56,16 +93,19 @@ def quick_eval(model, epoch, out):
     model.eval()
     t_eval = time.time()
     for ds, path in E.DATASETS.items():
-        gts, dets, dets_nms = [], [], []
+        gts, dets, dets_nms, extra = [], [], [], {}
         if not os.path.exists(path):
             print(f'[epoch {epoch}] eval skipped, missing {path}', flush=True)
             continue
         for cfg, ic in E.iter_frames(path):
-            o = model(E.frame_inputs(ic, 'cuda'), E.frame_mask(ic, 'cuda'))
+            o = model(E.frame_inputs(ic, 'cuda', chan_mode=model.chan_mode), E.frame_mask(ic, 'cuda'))
             gts.append(E.gt_of(ic))
             pi = decode(o, model.out_stride, 225)[0]
             dets.append(E.heatmap_dets(cfg, pi, use_nms=False))
             dets_nms.append(E.heatmap_dets(cfg, pi, use_nms=True))      # the deployed pipeline (class-aware NMS)
+            if 'ring_heat' in o:                                        # ring head: also the other decode modes (AP only)
+                for m_ in RING_DECODE_MODES:
+                    extra.setdefault(m_, []).append(E.heatmap_dets(cfg, decode(o, model.out_stride, 225, mode=m_)[0], use_nms=True))
         r = E.evaluate_dets(dets, gts, cfg)
         rn = E.evaluate_dets(dets_nms, gts, cfg, thr_list=(0.3,)); ap_nms = rn['ap']; tn = rn['thr'][0.3]
         t = r['thr'][0.3]
@@ -76,6 +116,10 @@ def quick_eval(model, epoch, out):
         print(f'[epoch {epoch}] {ds}: {line}', flush=True)
         print(f'[epoch {epoch}] {ds} +nms (deployed): AP {ap_nms:.4f} | score>0.3 recall {tn["recall"]:.3f} prec {tn["precision"]:.3f} '
               f'ring recall {tn["ring_recall"]:.3f} FP {tn["fp"]}', flush=True)
+        for m_, d_ in extra.items():
+            rm = E.evaluate_dets(d_, gts, cfg, thr_list=(0.3,)); tm = rm['thr'][0.3]
+            print(f'[epoch {epoch}] {ds} +nms ring-head decode={m_}: AP {rm["ap"]:.4f} | score>0.3 recall {tm["recall"]:.3f} prec {tm["precision"]:.3f} '
+                  f'ring recall {tm["ring_recall"]:.3f} FP {tm["fp"]}', flush=True)
         with open(os.path.join(out, f'exp_ap_{ds}.txt'), 'a') as f:
             f.write(line + '\n')
     print(f'[epoch {epoch}] eval took {time.time()-t_eval:.0f}s (both sets)', flush=True)
@@ -89,14 +133,19 @@ def main():
         torch.backends.cuda.matmul.allow_tf32 = True; torch.backends.cudnn.allow_tf32 = True
     torch.manual_seed(a.seed); np.random.seed(a.seed)
     import random; random.seed(a.seed)
-    bb_path, bb_prefix = (SIMMIM, '') if a.bb == 'simmim1' else (SSL1, 'backbone.0.')
+    bb_path, bb_prefix = (SIMMIM, '') if a.bb == 'simmim1' else (None, '') if a.bb.startswith('dinov3') else (SSL1, 'backbone.0.')
     bb_path = a.bb_path or bb_path
     if a.bb == 'random':                      # control arm: frozen RANDOM-init swin, no weights loaded
         bb_path, bb_prefix = None, ''
+    ring_stride = a.ring_head_stride if a.ring_head else 0
+    assert not ring_stride or a.ring_target == 'ridge', '--ring_head needs --ring_target ridge'
     model = HeatmapNet(backbone_ckpt=bb_path, backbone_prefix=bb_prefix, freeze_backbone=not a.unfreeze,
-                       out_stride=a.out_stride, amp_backbone=a.amp_backbone, chan_mode=a.chan).cuda()
+                       out_stride=a.out_stride, amp_backbone=a.amp_backbone, chan_mode=a.chan, zero_invalid=a.zero_invalid,
+                       dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch,
+                       ring_head_stride=ring_stride, drop_path_rate=a.bb_drop_path, grad_ckpt=a.grad_ckpt, bb_kind=a.bb if a.bb.startswith('dinov3') else 'swin').cuda()
     hm_args = dict(freeze_backbone=not a.unfreeze, out_stride=a.out_stride, bb_path=bb_path,
-                   bb_prefix=bb_prefix, bb=a.bb, amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan)
+                   bb_prefix=bb_prefix, bb=a.bb, bb_kind=a.bb if a.bb.startswith('dinov3') else 'swin', amp_backbone=a.amp_backbone, tf32=a.tf32, ring_target=a.ring_target, chan_mode=a.chan, zero_invalid=a.zero_invalid,
+                   dim=a.dim, tower_ch=a.tower_ch, tower_depth=a.tower_depth, stem_ch=a.stem_ch, ring_head_stride=ring_stride)
     head_params = [p for n, p in model.named_parameters() if p.requires_grad and not n.startswith('backbone.')]
     groups = [dict(params=head_params, lr=a.lr)]
     if a.unfreeze:
@@ -113,22 +162,73 @@ def main():
         start = ck['epoch'] + 1
         print(f'[train] resumed at epoch {start}', flush=True)
     json.dump(vars(a), open(os.path.join(a.out, 'args.json'), 'w'), indent=2)
+    if os.environ.get('HM_GT_BOX_COEF') == 'auto' and a.box_coef != 'legacy':      # in-training evals score against GT scaled to this run's box convention
+        try:
+            from heatmap import evaluation as _E
+            print('[train] eval GT box scale (x,y):', _E.set_gt_box_coef(*a.box_coef.split(',')), flush=True)
+        except Exception as e:
+            print(f'[train] GT box scale not set: {type(e).__name__}: {e}', flush=True)
     print('[train] trainable params:', sum(p.numel() for p in model.parameters() if p.requires_grad), flush=True)
 
-    from simulation import FastSimulation
+    from simulation import FastSimulation, flip_image
     cfg_sim = None
-    if a.box_coef != 'legacy':               # current main convention; 'legacy' = ssl1's default 3.5/1.0
+    if a.box_coef != 'legacy' or a.chan == 'contrast' or a.sim_pos_bank:
         from simulation import SimulationConfig
         cfg_sim = SimulationConfig()
-        cfg_sim.a_coef, cfg_sim.w_coef = (float(v) for v in a.box_coef.split(','))
+        if a.box_coef != 'legacy':           # current main convention; 'legacy' = ssl1's default 3.5/1.0
+            cfg_sim.a_coef, cfg_sim.w_coef = (float(v) for v in a.box_coef.split(','))
+        cfg_sim.contrast_channels = (a.chan == 'contrast')
+        if a.sim_pos_bank:
+            cfg_sim.pos_bank = a.sim_pos_bank
+            cfg_sim.pos_mode = a.sim_pos_mode
+            cfg_sim.pos_widths = bool(a.sim_pos_widths)
     print(f'[train] sim box convention: a_coef,w_coef = {a.box_coef}', flush=True)
-    sim = FastSimulation(sim_config=cfg_sim, device='cuda')
+    if a.sim == 'realbkg':
+        import ast
+        from realsim.factory import make_realbkg_sim
+        coef = (3.5, 1.0) if a.box_coef == 'legacy' else tuple(float(v) for v in a.box_coef.split(','))
+        ov = {k: ast.literal_eval(v) for k, v in (o.split('=', 1) for o in a.realsim_opt)}
+        if a.sim_workers:
+            from heatmap.sim_worker import SimWorker
+            worker = SimWorker(coef, ov, a.seed, n=a.sim_workers, preset=a.realsim_preset)
+        else:
+            sim = make_realbkg_sim(device='cuda', box_coef=coef, overrides=ov, preset=a.realsim_preset)
+    elif a.sim == 'realsim_v2':
+        if not a.v2_data:
+            raise SystemExit('--sim realsim_v2 needs --v2_data')
+        if a.box_coef == 'legacy':
+            raise SystemExit('--sim realsim_v2 needs an explicit --box_coef a,w (the shards store sigmas, the boxes are built here)')
+        from realsim_v2.dataset import RealSimV2
+        sim = RealSimV2(a.v2_data, box_coef=tuple(float(v) for v in a.box_coef.split(',')), flip=a.v2_flip, seed=a.seed, prefetch=a.v2_prefetch, device='cuda')
+    else:
+        sim = FastSimulation(sim_config=cfg_sim, device='cuda')
+
+    sim_plain = None
+    if a.sim == 'realbkg' and a.mix_plain > 0:
+        sim_plain = FastSimulation(sim_config=cfg_sim, device='cuda')
+        print(f'[train] mixed training: {a.mix_plain:.2f} of the frames from the legacy simulator, the rest from the real-background simulator', flush=True)
 
     def sim_sample():
+        if sim_plain is not None and random.random() < a.mix_plain:
+            while True:                       # legacy-simulator frame (same retry-on-failure as below)
+                try:
+                    img, boxes, mask, is_ring = sim_plain.simulate_img()
+                    return (img if img.dim() == 3 else img[None]), boxes.float(), is_ring.long(), mask
+                except Exception:
+                    pass
+        if a.sim == 'realbkg' and a.sim_workers:
+            img, boxes, lab, msk = worker.sample()
+            img, boxes, lab, msk = img.cuda(), boxes.cuda(), lab.cuda(), msk.cuda()
+            if a.sim_flip:
+                img, boxes, msk = flip_image(img, boxes, msk)
+            return img, boxes, lab, msk
         while True:                           # same retry-on-failure as main.SimulationDataset
             try:
                 img, boxes, mask, is_ring = sim.simulate_img()
-                return img[None], boxes.float(), is_ring.long(), mask
+                img, boxes = (img if img.dim() == 3 else img[None]), boxes.float()
+                if a.sim == 'realbkg' and a.sim_flip:
+                    img, boxes, mask = flip_image(img, boxes, mask)
+                return img, boxes, is_ring.long(), mask
             except Exception:
                 pass
     stride = model.out_stride
@@ -137,14 +237,23 @@ def main():
     for epoch in range(start, a.epochs):
         t0 = time.time(); agg = dict(loss=0, loss_heat=0, loss_reg=0)
         for it in range(a.steps_per_epoch):
-            imgs, hs, rs, ws, ms = [], [], [], [], []
+            imgs, hs, rs, ws, ms, rh, rr, rw = [], [], [], [], [], [], [], []
             for _ in range(a.bs):
                 img, xyxy, lab, msk = sim_sample()
                 H, W = img.shape[-2:]
                 h, r, w = build_targets(xyxy, lab, H, W, stride, a.ring_target)
                 imgs.append(img); hs.append(h); rs.append(r); ws.append(w); ms.append(msk)
+                if ring_stride:                                   # ring-only targets on the coarse grid
+                    k = lab == 1
+                    h2, r2, w2 = build_targets(xyxy[k], lab[k], H, W, ring_stride, 'ridge')
+                    rh.append(h2[1:2]); rr.append(r2); rw.append(w2)
             out = model(torch.stack(imgs), torch.stack(ms))
             loss, parts = heatmap_loss(out, torch.stack(hs), torch.stack(rs), torch.stack(ws))
+            if ring_stride:
+                l2, p2 = heatmap_loss(dict(heat=out['ring_heat'], reg=out['ring_reg']), torch.stack(rh), torch.stack(rr), torch.stack(rw))
+                loss = loss + a.ring_coef * l2
+                parts['loss_ring'] = p2['loss_heat'] + p2['loss_reg']
+                agg['loss_ring'] = agg.get('loss_ring', 0) + parts['loss_ring']
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(head_params, 1.0)
@@ -157,13 +266,13 @@ def main():
         sched.step()
         n = a.steps_per_epoch
         print(f'[epoch {epoch}] loss {agg["loss"]/n:.4f} heat {agg["loss_heat"]/n:.4f} reg {agg["loss_reg"]/n:.4f} '
-              f'({time.time()-t0:.0f}s)', flush=True)
+              + (f'ring {agg["loss_ring"]/n:.4f} ' if ring_stride else '') + f'({time.time()-t0:.0f}s)', flush=True)
         # (a random-init backbone can't be re-read from a file, so that arm saves it)
         torch.save(dict(model={k: v for k, v in model.state_dict().items()
                                if not (k.startswith('backbone.') and not a.unfreeze and a.bb != 'random')},
                         optimizer=opt.state_dict(), lr_scheduler=sched.state_dict(), epoch=epoch, hm_args=hm_args),
                    ck_path)
-        if epoch % a.eval_interval == 0 or epoch == a.epochs - 1:
+        if epoch % eval_interval(a) == 0 or epoch == a.epochs - 1:
             quick_eval(model, epoch, a.out)
 
 

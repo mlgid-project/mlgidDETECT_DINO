@@ -17,6 +17,7 @@ import torchvision.transforms.functional as TF
 from torchvision.utils import draw_bounding_boxes
 from torchvision.ops import nms, masks_to_boxes
 import torchvision
+import cv2
 from math import pi, sin, cos
 from dataclasses import dataclass
 
@@ -61,6 +62,17 @@ def torch_he(img: Tensor, bins: int = 1000):
     cdf = cdf / cdf[-1]
     res = interp1d(bin_centers, cdf, img_flat)
     return res.view(img.shape)
+
+def clahe_torch(img: Tensor, clip_limit: float, tile: tuple):
+    """Contrast-limited adaptive HE, matching util.exp_preprocess.apply_contrast's CLAHE branch.
+
+    CLAHE is tile-based and has no torch equivalent, so this is the one place the simulator
+    leaves the GPU: ~2 ms per 512x1024 frame, about 3 s on a 9-minute epoch.
+    """
+    a = (img.clamp(0, 1) * 255).to(torch.uint8).cpu().numpy()
+    a = cv2.createCLAHE(clipLimit=float(clip_limit), tileGridSize=tuple(tile)).apply(a)
+    return torch.from_numpy(a).to(device=img.device, dtype=torch.float32) / 255
+
 
 def with_probability(probability: float = 1.):
     def wrapper(func):
@@ -179,6 +191,114 @@ class SimulationConfig():
     hot_pixels_p: float = 0.001
     hot_pixels_prob: float = 0.2
     prob_single_obj: float = 0.1
+    #multi-CONTRAST channels: when True, simulate_img returns a (3, H, W) stack of three
+    #contrasts of the same image instead of one contrasted image (see FastSimulation.contrast_stack).
+    contrast_channels: bool = False
+    #COLORBOX1 ADDITION (default off = byte-identical): peak POSITIONS from a pygidSIM peak bank (realsim_v2/build_peak_bank.py output, v3 shards) instead of uniform random ones.
+    #Per frame and kind (segments / rings) the legacy count n is kept; the n positions are a random subset of ONE random structure's peaks (spots: radial + chi, rings: radial only; chi of rings stays
+    #the legacy draw), and when that structure has fewer valid peaks than n the rest is taken from further random structures. Widths, intensities, NMS, gap / dark-area filters, background, noise: legacy.
+    #Mapping: x = q / q_max * WIDTH with q_max ~ U(pos_qmax) per frame, y = chi / 90 * HEIGHT (chi in degrees from the q_xy axis, as in the bank); only peaks inside the legacy range `pos` are used.
+    pos_bank: str = None
+    pos_qmax: tuple = (3.6, 4.0)
+    #pos_mode (needs pos_bank): 'structure' = one random structure + fill (above); 'pooled' = every position an i.i.d. draw from the pool of ALL peaks of the bank (spots: the (q, chi) pair of one oriented peak,
+    #rings: the q of one powder peak), inside the legacy range; 'pooled_flat' = as 'pooled' but the pool is reweighted by rejection sampling (1 / local peak density in q x chi) so that the positions are uniform
+    #over the image (the raw pool is dense at high q and low chi).
+    pos_mode: str = 'structure'
+    #pos_widths (needs pos_bank): the peak WIDTHS too come from the bank peaks that supply the positions: radial sigma_q [1/A] -> sigma_q / q_max * WIDTH px, angular sigma_chi [rad] -> sigma_chi / (pi/2) * HEIGHT px
+    #(spots only; rings keep the legacy huge chi width), clamped from below like the legacy draws. Intensities, count, NMS, filters, background, noise: legacy (the legacy rule a_width >= width * U(1, 2) of segments stays).
+    pos_widths: bool = False
+
+
+_POS_BANKS = {}
+
+
+def _load_pos_bank(path):
+    """Peak bank of realsim_v2/build_peak_bank.py as flat arrays + entry ids per kind (cached per process, the simulator re-inits itself in half of its calls)."""
+    if path not in _POS_BANKS:
+        d = np.load(path)
+        kind = np.asarray(d['entry_kind'])
+        _POS_BANKS[path] = dict(q=np.asarray(d['q'], np.float32), chi=np.asarray(d['chi'], np.float32), start=np.asarray(d['entry_start'], np.int64),
+                                count=np.asarray(d['entry_count'], np.int64), ids=(np.nonzero(kind == 'oriented')[0], np.nonzero(kind == 'powder')[0]),
+                                sq=np.asarray(d['sigma_q'], np.float32), sc=np.asarray(d['sigma_chi'], np.float32))
+    return _POS_BANKS[path]
+
+
+_Q_BIN, _CHI_BIN, _Q_MAX_BIN = 0.2, 5.0, 8.0                 # density bins: coarser than the peak spacing at low q, where the pool is sparse (finer bins leave empty bins that cannot be up-weighted)
+_FLAT_FLOOR = 1                                      # acceptance weight = floor / peaks in the (q, chi) bin of the peak, capped at 1: every bin gets the same total weight
+
+
+def _load_pool(bank, ring):
+    """Pool of all peaks of one kind, sorted by q (cached in the bank dict): q, chi, and the inverse-density acceptance weight of every peak (spots: bins in q x chi, rings: bins in q)."""
+    key = 'pool_ring' if ring else 'pool_spot'
+    if key not in bank:
+        ids = bank['ids'][1 if ring else 0]
+        idx = np.concatenate([np.arange(bank['start'][e], bank['start'][e] + bank['count'][e]) for e in ids])
+        q, chi, sq, sc = bank['q'][idx], bank['chi'][idx], bank['sq'][idx], bank['sc'][idx]
+        o = np.argsort(q, kind='stable'); q, chi, sq, sc = q[o], chi[o], sq[o], sc[o]
+        if ring:
+            qb = np.minimum((q / _Q_BIN).astype(np.int64), int(_Q_MAX_BIN / _Q_BIN) - 1)
+            cnt = np.bincount(qb, minlength=int(_Q_MAX_BIN / _Q_BIN))
+            w = np.minimum(1.0, _FLAT_FLOOR / np.maximum(cnt[qb], 1)).astype(np.float32)
+        else:
+            nq, nc = int(_Q_MAX_BIN / _Q_BIN), int(90 / _CHI_BIN)
+            qb = np.minimum((q / _Q_BIN).astype(np.int64), nq - 1); cb = np.clip((chi / _CHI_BIN).astype(np.int64), 0, nc - 1)
+            cnt = np.bincount(qb * nc + cb, minlength=nq * nc)
+            w = np.minimum(1.0, _FLAT_FLOOR / np.maximum(cnt[qb * nc + cb], 1)).astype(np.float32)
+        bank[key] = (q, chi, w, sq, sc)
+    return bank[key]
+
+
+def pooled_positions(bank, n, ring, q_lo, q_hi, qmax, flat):
+    """n i.i.d. positions (x px, y px) from the pool of all peaks of the kind inside the q window [q_lo, q_hi] 1/A; flat = reweighted to a uniform density in the (q, chi) plane (= over the image).
+    Returns (x, y, n_structures_used = 0, (sigma_q px, sigma_chi px)); y is None for rings."""
+    q, chi, w, sq, sc = _load_pool(bank, ring)
+    lo, hi = np.searchsorted(q, [q_lo, q_hi])
+    if hi <= lo:
+        nan = np.full(n, np.nan, np.float32)
+        return np.random.uniform(q_lo, q_hi, n).astype(np.float32) / qmax * WIDTH, (None if ring else np.random.uniform(0, 90, n).astype(np.float32) / 90.0 * HEIGHT), 0, (nan, nan)
+    sel, need, rate = [], int(n), 1.0
+    for _ in range(100):
+        m = max(int(need / rate * 1.3) + 8, 16) if flat else need
+        c = np.random.randint(lo, hi, m)
+        if flat:
+            keep = c[np.random.random(m) < w[c]]
+            rate = max(len(keep) / m, 1e-4)
+        else:
+            keep = c
+        sel.append(keep[:need]); need -= len(sel[-1])
+        if need <= 0:
+            break
+    c = np.concatenate(sel)
+    if len(c) < n:                                  # never reached in practice
+        c = np.concatenate([c, np.random.randint(lo, hi, n - len(c))])
+    return q[c] / qmax * WIDTH, (None if ring else chi[c] / 90.0 * HEIGHT), 0, _sigma_px(sq[c], sc[c], qmax)
+
+
+def _sigma_px(sq, sc, qmax):
+    """stored peak widths -> px of the legacy images: radial sigma_q [1/A] / q_max * WIDTH, angular sigma_chi [rad] / (pi/2) * HEIGHT (NaN where the bank has none)."""
+    return sq / qmax * WIDTH, sc / (pi / 2) * HEIGHT
+
+
+def pygid_positions(bank, n, ring, q_lo, q_hi, qmax, max_structures=200):
+    """n positions (x px, y px) from a random structure of the bank (kind ring / spots), filled up from further random structures; q window [q_lo, q_hi] 1/A.
+    Returns (x, y, n_structures_used, (sigma_q px, sigma_chi px of the peaks)); y is None for rings."""
+    xs, ys, sqs, scs, need, used = [], [], [], [], int(n), 0
+    ids = bank['ids'][1 if ring else 0]
+    while need > 0 and used < max_structures:
+        e = int(ids[np.random.randint(len(ids))]); used += 1
+        s0, c0 = int(bank['start'][e]), int(bank['count'][e])
+        q = bank['q'][s0:s0 + c0]
+        ok = np.nonzero((q >= q_lo) & (q <= q_hi))[0]
+        if len(ok) == 0:
+            continue
+        sel = ok[np.random.permutation(len(ok))[:need]]
+        xs.append(q[sel]); ys.append(bank['chi'][s0:s0 + c0][sel]); need -= len(sel)
+        sqs.append(bank['sq'][s0:s0 + c0][sel]); scs.append(bank['sc'][s0:s0 + c0][sel])
+    if need > 0:                                    # never reached in practice (bank of 10^4 structures); keeps the count with legacy-uniform draws
+        xs.append(np.random.uniform(q_lo, q_hi, need).astype(np.float32)); ys.append(np.random.uniform(0, 90, need).astype(np.float32))
+        sqs.append(np.full(need, np.nan, np.float32)); scs.append(np.full(need, np.nan, np.float32))
+    q, chi = np.concatenate(xs), np.concatenate(ys)
+    return q / qmax * WIDTH, (None if ring else chi / 90.0 * HEIGHT), used, _sigma_px(np.concatenate(sqs), np.concatenate(scs), qmax)
 
 
 class FastSimulation(object):
@@ -293,14 +413,18 @@ class FastSimulation(object):
         
         
         clahe_img = img
-        # apply kernels & contrast correction
-        clahe_img = apply_log(clahe_img)
-        clahe_img = apply_he(clahe_img)
-        clahe_img = apply_clip_img(clahe_img)
-        clahe_img = apply_kernel(clahe_img, self.kernel1)
-        clahe_img = digitalize_img(clahe_img)
+        if self.sim_config.contrast_channels:
+            #multi-CONTRAST stack: three contrasts of this image instead of one (3, H, W)
+            clahe_img = self.contrast_stack(clahe_img, mask)
+        else:
+            # apply kernels & contrast correction
+            clahe_img = apply_log(clahe_img)
+            clahe_img = apply_he(clahe_img)
+            clahe_img = apply_clip_img(clahe_img)
+            clahe_img = apply_kernel(clahe_img, self.kernel1)
+            clahe_img = digitalize_img(clahe_img)
 
-        clahe_img = normalize(clahe_img)
+            clahe_img = normalize(clahe_img)
 
         if self.background_img is not None:
             clahe_img = clahe_img + self.background_img
@@ -314,6 +438,64 @@ class FastSimulation(object):
         return clahe_img, boxes, mask, is_ring
 
     @torch.no_grad()
+    def contrast_stack(self, img, mask):
+        """Three contrasts of the same simulated image, matching util.channels.CONTRAST_CHANNELS.
+
+            ch0  clip 5/99.5 + log + HE             (deployed default; the SSL-init channel)
+            ch1  clip 5/99.5 + log, NO equalisation (plain log contrast)
+            ch2  clip 5/99.5 + log + CLAHE 4@16x16  (best organic of the 74-setting sweep)
+
+        All three share the 5/99.5 clip AND the log, so both are applied once and only the
+        last stage differs per channel: HE, nothing (plain log), or CLAHE.
+
+        Two deliberate differences from the real-data side (util.exp_preprocess.apply_contrast):
+
+        * The LOG. Simulated images are in arbitrary units, not detector counts, so
+          log10(|x| + 1e-7) -- what the real path uses -- would land on a completely
+          different part of the curve. apply_log maps the image onto a synthetic decade
+          range (normalize * U(50, 5000) + 1) first; that is the form every working run on
+          this branch was trained with. The clip, the gamma and HE/CLAHE are rank- or
+          ratio-based and so transfer from sim units to real counts unchanged.
+        * ONE draw of the trailing augmentations (mean/std clamp, smoothing kernel,
+          digitalisation) is shared by all three channels, so the stack stays coherent
+          rather than each channel being augmented independently.
+        """
+        v = img[mask]
+        lo, hi = torch.quantile(v, 0.05), torch.quantile(v, 0.995)
+        clipped = img.clamp(lo, hi)
+
+        logged = apply_log(clipped)                     #shared log trunk (p=0.9, single draw)
+        chans = [apply_he(logged),
+                 normalize(logged),
+                 clahe_torch(normalize(logged), 4.0, (16, 16))]
+
+        def safe_norm(t):
+            #normalize() is (t - min) / (max - min): a channel that goes FLAT (digitalize with
+            #few levels, a fully clipped gamma channel, a constant CLAHE tile) makes that 0/0
+            #and puts NaN into the input. The NaN survives the forward and only surfaces much
+            #later as `assert boxes1[:, 2:] >= boxes1[:, :2]` in the matcher, because NaN
+            #comparisons are False -- which is exactly how job 2853568 died at epoch 4.
+            lo, hi = t.min(), t.max()
+            return (t - lo) / (hi - lo) if (hi - lo) > 1e-12 else torch.zeros_like(t)
+
+        do_clip, clip_scale = random.random() < 0.05, random.uniform(2, 4)
+        do_kernel = random.random() < 0.5
+        do_digit, levels = random.random() < 0.4, random.randint(16, 64)
+        out = []
+        for c in chans:
+            c = safe_norm(c)
+            if do_clip:
+                m, sd = c.mean().item(), c.std().item() * clip_scale
+                c = torch.clamp(c, m - sd, m + sd)
+            if do_kernel:
+                c = F.conv2d(c[None, None], self.kernel1, padding=1).squeeze()
+            if do_digit:
+                c = (safe_norm(c) * levels).round()
+            out.append(safe_norm(c).masked_fill(~mask, 0.))
+        #belt and braces: never hand a non-finite pixel to the model
+        return torch.nan_to_num(torch.stack(out), nan=0., posinf=1., neginf=0.)
+
+    @torch.no_grad()
     def simulate_boxes(self):
         boxes, intensities = self.simulate_labels()
         return boxes
@@ -323,15 +505,21 @@ class FastSimulation(object):
         self.angle_limits.update_params()
 
         sc = self.sim_config
+        if sc.pos_bank:                                     # pygidSIM positions (see SimulationConfig.pos_bank); q_max shared by the rings and the segments of the frame
+            self._pos_bank, self._pos_qmax = _load_pos_bank(sc.pos_bank), random.uniform(*sc.pos_qmax)
 
         rings_or_seg_or_both = random.random()
 
 
 
         def simulate_and_process(obj_num, pos_c, width_c, width_std, a_pos_c, a_width_c, a_width_std, intensity_range, is_segment=False):
+            pos_fn = None
+            if sc.pos_bank:
+                pos_fn = lambda n, ring=not is_segment: (pygid_positions if sc.pos_mode == 'structure' else lambda *a: pooled_positions(*a, flat=sc.pos_mode == 'pooled_flat'))(
+                    self._pos_bank, n, ring, sc.pos[0] / WIDTH * self._pos_qmax, sc.pos[1] / WIDTH * self._pos_qmax, self._pos_qmax)
             pos, widths, a_pos, a_widths = simulate_labels(
                 obj_num, sc.pos, width_c, width_std,
-                sc.a_pos, a_width_c, a_width_std, self.device
+                sc.a_pos, a_width_c, a_width_std, self.device, pos_fn=pos_fn, pos_widths=sc.pos_widths
             )
             if is_segment:
                 a_widths = torch.maximum(a_widths, widths * (torch.rand_like(widths) + 1.0))
@@ -791,7 +979,7 @@ def apply_kernel(img, kernel):
 def simulate_labels(
         obj_num,
         pos, width_central_range, widths_std,
-        a_pos, a_widths_central_range, a_widths_std, device = 'cuda'
+        a_pos, a_widths_central_range, a_widths_std, device = 'cuda', pos_fn=None, pos_widths=False
 ):
     lower_b, upper_b = obj_num
     n = int(max(lower_b, min(random.gauss(lower_b + 0.75 * (upper_b - lower_b), (upper_b - lower_b) / 1), upper_b)))
@@ -819,6 +1007,18 @@ def simulate_labels(
     ) / a_widths_std
 
     a_widths = torch.clamp_(a_widths, a_widths_central_range[0] / 2)
+
+    if pos_fn is not None:                          # positions from pygidSIM (all random draws above are consumed as in the legacy path)
+        x, y, _, (sig_q, sig_c) = pos_fn(n)
+        pos = torch.tensor(x, dtype=pos.dtype, device=device)
+        if y is not None:
+            a_pos = torch.tensor(y, dtype=a_pos.dtype, device=device)
+        if pos_widths:                              # the widths of the same bank peaks (NaN -> legacy draw), clamped from below like the legacy draws
+            sq = torch.tensor(sig_q, dtype=widths.dtype, device=device)
+            widths = torch.where(torch.isnan(sq), widths, torch.clamp(sq, min=width_central_range[0] / 2))
+            if y is not None:
+                sc_ = torch.tensor(sig_c, dtype=a_widths.dtype, device=device)
+                a_widths = torch.where(torch.isnan(sc_), a_widths, torch.clamp(sc_, min=a_widths_central_range[0] / 2))
 
     return pos, widths, a_pos, a_widths
     
@@ -1025,13 +1225,16 @@ def gen_intensities(pos, widths, a_pos, a_widths, intensity_range: tuple):
 
 
 def flip_image(img, boxes, mask):
+    #spatial dims addressed from the back, so a (C, H, W) contrast stack flips its image
+    #axes and not its channels; identical to the old dims=(0,)/(1,) for a plain (H, W) img
+    shape = img.shape[-2:]
     if np.random.rand() > 0.5:
-        img = torch.flip(img, dims=(0,))
-        boxes = flip_boxes(boxes, 0, img.shape)
+        img = torch.flip(img, dims=(-2,))
+        boxes = flip_boxes(boxes, 0, shape)
         mask = torch.flip(mask, dims=(0,))
     if np.random.rand() > 0.5:
-        img = torch.flip(img, dims=(1,))
-        boxes = flip_boxes(boxes, 1, img.shape)
+        img = torch.flip(img, dims=(-1,))
+        boxes = flip_boxes(boxes, 1, shape)
         mask = torch.flip(mask, dims=(1,))
 
     return img, boxes, mask

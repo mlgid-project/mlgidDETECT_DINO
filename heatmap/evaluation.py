@@ -52,7 +52,21 @@ def iter_frames(path):
             ds.close()
 
 
-def frame_inputs(ic, device, num_channels=1):
+# three contrasts of the SAME raw polar image (same specs as the multi-channel branch's CONTRAST_CHANNELS);
+# ch0 is the deployed contrast, so it must equal converted_polar_image (check: heatmap/check_contrast.py)
+CONTRAST_CHANNELS = [
+    {'name': 'log_he',           'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': True,  'clahe': None},
+    {'name': 'log_only',         'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': False, 'clahe': None},
+    {'name': 'log_clahe4_16x16', 'clip': (5.0, 99.5), 'log': True, 'gamma': None, 'he': False, 'clahe': (4.0, 16, 16)},
+]
+
+
+def frame_inputs(ic, device, num_channels=1, chan_mode='he'):
+    if chan_mode == 'contrast':               # [1,3,H,W]: starts from the PRE-contrast raw polar image
+        from util.exp_preprocess import apply_contrast
+        raw = np.asarray(ic.raw_polar_image, np.float32).reshape(*POLAR)
+        m = np.asarray(ic.converted_mask).reshape(*POLAR).astype(bool)
+        return torch.tensor(np.stack([apply_contrast(raw, m, c) for c in CONTRAST_CHANNELS]))[None].to(device)
     img = torch.tensor(ic.converted_polar_image[:, 0]).unsqueeze(0).to(device)
     return img.repeat(1, num_channels, 1, 1)
 
@@ -62,10 +76,42 @@ def frame_mask(ic, device):
     return torch.tensor(np.asarray(ic.converted_mask).reshape(*POLAR).astype(bool))[None].to(device)
 
 
+# GT box scale (new-box datasets, 2026-10-22): the stored GT boxes are +-1 sigma (= label convention a_coef = w_coef = 2). A model trained on another convention
+# (box_coef a_coef,w_coef; half extent coef*sigma/2: x = radial = w_coef, y = angular = a_coef) predicts boxes of that size, so for a fair comparison of box sizes the GT
+# is scaled about its centre by (w_coef/2, a_coef/2) before matching. Off by default (scale 1,1 = old behaviour). Ring boxes (full chi) are scaled in x only.
+# Neighbour-distance buckets always use the unscaled GT ('gt_raw'). Switch: set_gt_box_coef(a_coef, w_coef) or env HM_GT_BOX_COEF="a_coef,w_coef" ('auto' = per run, set by train.py / evaluate.py).
+GT_SCALE = (1.0, 1.0)
+
+
+def set_gt_box_coef(a_coef=None, w_coef=None):
+    global GT_SCALE
+    GT_SCALE = (1.0, 1.0) if a_coef is None else (float(w_coef) / 2.0, float(a_coef) / 2.0)
+    return GT_SCALE
+
+
+_env = os.environ.get('HM_GT_BOX_COEF', '')
+if _env and _env != 'auto':
+    set_gt_box_coef(*(float(v) for v in _env.split(',')))
+
+
+def _scale_gt(gt, mask):
+    sx, sy = GT_SCALE
+    if (sx, sy) == (1.0, 1.0) or len(gt) == 0:
+        return gt
+    g = gt.copy()
+    ring = is_ring_geom(gt, mask)
+    cx = (gt[:, 0] + gt[:, 2]) / 2; cy = (gt[:, 1] + gt[:, 3]) / 2
+    hw = (gt[:, 2] - gt[:, 0]) / 2 * sx
+    hh = (gt[:, 3] - gt[:, 1]) / 2 * np.where(ring, 1.0, sy)
+    g[:, 0], g[:, 2], g[:, 1], g[:, 3] = cx - hw, cx + hw, cy - hh, cy + hh
+    return g
+
+
 def gt_of(ic):
-    return dict(gt=np.asarray(ic.polar_labels.boxes, np.float32),
-                gtconf=np.asarray(ic.polar_labels.confidences, np.float32),
-                mask=np.asarray(ic.converted_mask).reshape(*POLAR).astype(bool))
+    raw = np.asarray(ic.polar_labels.boxes, np.float32)
+    mask = np.asarray(ic.converted_mask).reshape(*POLAR).astype(bool)
+    return dict(gt=_scale_gt(raw, mask), gt_raw=raw,
+                gtconf=np.asarray(ic.polar_labels.confidences, np.float32), mask=mask)
 
 
 def dino_dets(cfg, outputs):
@@ -138,7 +184,7 @@ def evaluate_dets(dets, gts, cfg, thr_list=(0.1, 0.3)):
             k = s > thr if len(s) else np.zeros(0, bool)
             b, s = b[k], s[k]
             gt = g['gt']
-            eu, chi, ring = nn_distances(gt, g['mask'])
+            eu, chi, ring = nn_distances(g.get('gt_raw', gt), g['mask'])
             hit = np.zeros(len(gt), bool)
             if len(b) and len(gt):
                 _, ri, _ = matcher(torch.tensor(gt).float(), torch.tensor(b).float())

@@ -28,6 +28,9 @@ def main():
     p.add_argument('--modes', nargs='+', default=['fp32'], choices=['fp32', 'tf32', 'bf16'],
                    help='fp32 = current default; tf32 = TF32 matmuls; bf16 = bf16 autocast on the swin only')
     p.add_argument('--box_coef', default='2.80,1.30')
+    p.add_argument('--out_stride', type=int, default=2)
+    p.add_argument('--dim', type=int, default=128); p.add_argument('--tower_ch', type=int, default=64)
+    p.add_argument('--tower_depth', type=int, default=2); p.add_argument('--stem_ch', type=int, default=32)
     a = p.parse_args()
     cfg = SimulationConfig(); cfg.a_coef, cfg.w_coef = (float(v) for v in a.box_coef.split(','))
     sim = FastSimulation(sim_config=cfg, device='cuda')
@@ -40,15 +43,18 @@ def main():
             except Exception:
                 pass
 
-    model = HeatmapNet(backbone_ckpt=a.bb_path, freeze_backbone=True, out_stride=2).cuda().train()
+    model = HeatmapNet(backbone_ckpt=a.bb_path, freeze_backbone=True, out_stride=a.out_stride, dim=a.dim, tower_ch=a.tower_ch,
+                       tower_depth=a.tower_depth, stem_ch=a.stem_ch).cuda().train()
     params = [q for q in model.parameters() if q.requires_grad]
+    print(f'config: out_stride {a.out_stride} dim {a.dim} tower_ch {a.tower_ch} tower_depth {a.tower_depth} stem_ch {a.stem_ch} | '
+          f'trainable params {sum(q.numel() for q in params):,} (frozen swin {sum(q.numel() for q in model.backbone.parameters()):,})', flush=True)
     opt = torch.optim.AdamW(params, lr=3e-4, weight_decay=1e-4)
     for _ in range(3):
         sample()                                                     # warm up
     sync(); t = time.time(); pool = [sample() for _ in range(a.n * 2)]; sync()
     t_sim = (time.time() - t) / len(pool)
     t = time.time()
-    tg = [build_targets(b, l, 512, 1024, 2) for _, b, l in pool]; sync()
+    tg = [build_targets(b, l, 512, 1024, a.out_stride) for _, b, l in pool]; sync()
     t_tg = (time.time() - t) / len(pool)
     print(f'simulator alone: {t_sim:.3f} s/img | target building: {t_tg:.4f} s/img', flush=True)
 
@@ -74,7 +80,7 @@ def main():
         sync(); t = time.time()
         for _ in range(a.n):
             batch = [sample() for _ in range(bs)]
-            step([b[0] for b in batch], [build_targets(b[1], b[2], 512, 1024, 2) for b in batch])
+            step([b[0] for b in batch], [build_targets(b[1], b[2], 512, 1024, a.out_stride) for b in batch])
         sync(); t_full = (time.time() - t) / a.n
         print(f'[{mode}] bs {bs}: network step alone {t_net:.3f} s ({t_net/bs:.3f} s/img) | full step {t_full:.3f} s '
               f'({t_full/bs:.3f} s/img) | simulator share of full step ~{bs*t_sim/t_full*100:.0f}% | '

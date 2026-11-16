@@ -27,7 +27,7 @@ sweep_done()  { ls "$1"/score_sweep/*_score_sweep.txt >/dev/null 2>&1; }
 # one_run <name> <last epoch index> <train.py args...>
 one_run() {
   local name=$1 last=$2; shift 2
-  local R=$RUNS/newbox/$name rc peak SAMP
+  local R=$RUNS/newbox/runs/$name rc peak SAMP
   mkdir -p "$R"
   if grep -q "^\[epoch $last\] loss" "$R/train.log" 2>/dev/null; then log "SKIP train $name"; else
     log "START train $name :: $*"
