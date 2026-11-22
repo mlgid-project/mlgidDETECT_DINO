@@ -280,6 +280,11 @@ class SimulationConfig():
     #pos_widths (needs pos_bank): the peak WIDTHS too come from the bank peaks that supply the positions: radial sigma_q [1/A] -> sigma_q / q_max * WIDTH px, angular sigma_chi [rad] -> sigma_chi / (pi/2) * HEIGHT px
     #(spots only; rings keep the legacy huge chi width), clamped from below like the legacy draws. Intensities, count, NMS, filters, background, noise: legacy (the legacy rule a_width >= width * U(1, 2) of segments stays).
     pos_widths: bool = False
+    #COLORBOX1 ADDITION (default None = byte-identical, consumes no RNG): latent-map variants (heatmap/embed_sim.py --cfg).
+    #mode_probs = (p_rings_only, p_segments_only, p_both) replaces the legacy 1/3 each.
+    mode_probs: tuple = None
+    #chi_gradient = (lo, hi): extra background ramp ALONG chi (y), amplitude U(lo, hi) x image max, ramp direction random (real R4/R5 frames have |chi slope| 0.2-0.3, legacy sim 0.05).
+    chi_gradient: tuple = None
 
 
 _POS_BANKS = {}
@@ -457,6 +462,9 @@ class FastSimulation(object):
         elif self.background_img is None: 
             img = add_glass(img, self.x, self.y)
             img = add_linear_background(img)
+            if self.sim_config.chi_gradient is not None:
+                ramp = torch.linspace(0, 1, HEIGHT, device=img.device)[:, None]
+                img = img + (ramp if random.random() < 0.5 else 1 - ramp) * random.uniform(*self.sim_config.chi_gradient) * img.max()
             img = apply_poisson_noise(img, self.sim_config.poisson_range)
 
         if self.polar_dark_area:
@@ -601,6 +609,9 @@ class FastSimulation(object):
         alpha = 10 ** random.uniform(*np.log10(sc.alpha_range)) if sc.raw_intensity else None
 
         rings_or_seg_or_both = random.random()
+        if sc.mode_probs is not None:                       # latent-map variant: remap the draw onto the three branches
+            p_r, p_s, _ = sc.mode_probs
+            rings_or_seg_or_both = 0.1 if rings_or_seg_or_both < p_r else (0.5 if rings_or_seg_or_both < p_r + p_s else 0.9)
 
 
 
