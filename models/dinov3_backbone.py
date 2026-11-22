@@ -55,3 +55,28 @@ class DinoV3Backbone(nn.Module):
             f = self.net.get_intermediate_layers(x, n=list(VIT_BLOCKS[self.kind]), reshape=True, norm=True)
             out = [F.interpolate(t, size=(H // s, W // s), mode='bilinear', align_corners=False) for t, s in zip(f, (4, 8, 16, 32))]
         return [SimpleNamespace(tensors=t) for t in out]
+
+
+class DinoV3DetBackbone(nn.Module):
+    """DINOv3 ViT as the backbone of the DINO detector (models/dino/backbone.py build_backbone, backbone = 'dinov3_vitl16' / 'dinov3_vith16plus'): forward(NestedTensor) -> {index: NestedTensor}
+    for the pyramid levels in return_interm_indices (0..3 = strides 4, 8, 16, 32; the 4-scale config uses [1, 2, 3]), the same resampled ViT feature maps as the heatmap model
+    (DinoV3Backbone). The padding mask is interpolated to each level like the swin does. Weights: args.backbone_weights (strict load), else the random init of the architecture."""
+    def __init__(self, kind, return_interm_indices, grad_ckpt=False, weights=None):
+        super().__init__()
+        from util.misc import NestedTensor
+        self._NT = NestedTensor
+        self.body = DinoV3Backbone(kind, grad_ckpt=grad_ckpt)
+        if weights:
+            self.body.load_state_dict(torch.load(weights, map_location='cpu'), strict=True)
+        self.idx = list(return_interm_indices)
+        self.num_features = [self.body.num_features[i] for i in self.idx]
+
+    def forward(self, tensor_list):
+        feats = self.body(tensor_list)
+        m = tensor_list.mask
+        assert m is not None
+        out = {}
+        for k, i in enumerate(self.idx):
+            t = feats[i].tensors
+            out[k] = self._NT(t, F.interpolate(m[None].float(), size=t.shape[-2:]).to(torch.bool)[0])
+        return out

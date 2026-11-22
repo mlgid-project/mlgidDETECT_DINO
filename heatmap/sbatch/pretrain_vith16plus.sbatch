@@ -22,7 +22,7 @@ CORP=$WORK/datasets/corpus_v2
 PREP=$WORK/pretrain_runs/vith16plus_prep
 W=$WORK/dinov3/dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth
 BS=${BS:-6}; ACCUM=${ACCUM:-11}; STEPS=${STEPS:-3000}
-OUT=$WORK/pretrain_runs/vith16plus_3k_sk2
+OUT=${OUT:-$WORK/pretrain_runs/vith16plus_3k_sk2}      # OUT=... for another run (the 30k-step flagship pretraining uses vith16plus_30k_sk2)
 [ "${SMOKE:-0}" = 1 ] && OUT=$WORK/pretrain_runs/_smoke_vith16plus_bs${BS}_${SLURM_JOB_ID:-x}
 export PYTHONPATH=$REPO HM_DINOV3_REPO=$WORK/dinov3/dinov3_repo
 cd $REPO; mkdir -p "$OUT"

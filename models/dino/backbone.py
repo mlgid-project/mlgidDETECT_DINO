@@ -214,6 +214,11 @@ def build_backbone(args):
             _tmp_st_output = backbone.load_state_dict(_tmp_st, strict=False)
             print(str(_tmp_st_output))
         bb_num_channels = backbone.num_features[4 - len(return_interm_indices):]
+    elif args.backbone in ['dinov3_vitl16', 'dinov3_vith16plus']:
+        # DINOv3 ViT (public or own-pretrained weights, args.backbone_weights); one stride-16 token grid resampled to the pyramid, see models/dinov3_backbone.py
+        from models.dinov3_backbone import DinoV3DetBackbone
+        backbone = DinoV3DetBackbone(args.backbone, return_interm_indices, grad_ckpt=bool(use_checkpoint and not args.export), weights=getattr(args, 'backbone_weights', None))
+        bb_num_channels = backbone.num_features
     elif args.backbone in ['convnext_xlarge_22k']:
         backbone = build_convnext(modelname=args.backbone, pretrained=True, out_indices=tuple(return_interm_indices),backbone_dir=args.backbone_dir)
         bb_num_channels = backbone.dims[4 - len(return_interm_indices):]
