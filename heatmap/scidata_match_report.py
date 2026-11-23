@@ -12,7 +12,7 @@ import h5py, numpy as np
 
 p = argparse.ArgumentParser(); p.add_argument('--h5', action='append', required=True); p.add_argument('--out', required=True); p.add_argument('--thr', type=float, default=0.5)
 a = p.parse_args(); os.makedirs(a.out, exist_ok=True)
-PH = {'perovskite': ('alphaFAPbI3', 'MAPbI3_cubic', 'MAPbI3_tetra'), 'PbI2': ('PbI2',), 'delta_FAPbI3': ('deltaFAPbI3',), 'SnO2': ('SnO2',)}
+PH = {'perovskite': ('alphaFAPbI3', 'MAPbI3_cubic', 'MAPbI3_tetra', 'tripleCation'), 'perovskite_old_cifs': ('alphaFAPbI3', 'MAPbI3_cubic', 'MAPbI3_tetra'), 'perovskite_tc_only': ('tripleCation',), 'PbI2': ('PbI2',), 'delta_FAPbI3': ('deltaFAPbI3',), 'SnO2': ('SnO2',)}
 fam = lambda c: 'PVK' if 'pvk' in c.lower() else ('SnO2 (no PVK)' if 'sno2' in c.lower() else 'OPV/other')
 rows = []
 for h5 in a.h5:
@@ -49,7 +49,7 @@ for ph, lab in (('perovskite', 'label_perovskite'), ('SnO2', 'label_SnO2')):
         pos = [r[f'p_{ph}'] for r in s if r[lab] == 1]; neg = [r[f'p_{ph}'] for r in s if r[lab] == 0]
         tp = sum(x >= a.thr for x in pos); fp = sum(x >= a.thr for x in neg)
         L.append(f'| {ph} | {lab[6:]} | {run} | {len(pos)} | {len(neg)} | {auc(pos, neg):.3f} | {tp / max(len(pos), 1):.2f} | {tp / max(tp + fp, 1):.2f} | {fp} |')
-L += ['', 'Call rate per class family (probability >= threshold):', '', '| family | frames | perovskite | PbI2 | delta-FAPbI3 | SnO2 |', '|---|---|---|---|---|---|']
+L += ['', 'Call rate per class family (probability >= threshold):', '', '| family | frames | ' + ' | '.join(PH) + ' |', '|---|---|' + '---|' * len(PH)]
 for fm in ('PVK', 'SnO2 (no PVK)', 'OPV/other'):
     s = [r for r in rows if r['family'] == fm]
     L.append(f'| {fm} | {len(s)} | ' + ' | '.join(f'{np.mean([r[f"p_{ph}"] >= a.thr for r in s]):.0%}' for ph in PH) + ' |')
