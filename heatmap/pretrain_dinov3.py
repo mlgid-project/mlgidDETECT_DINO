@@ -16,6 +16,7 @@ Against collapse (the 10k run of 2026-11-08 ended with 9 of 8192 image prototype
   --patch_stats F      standardise the stride-16 features per channel before the patch head (stats of the public backbone, make_patch_stats.py): they are nearly the same at every patch (cosine 0.92) and the first patch head saw targets at ln K for the whole run
   --patch_g1           fix the patch head's prototype norm at 1 (weight-norm gain was learnable and 0.54)
   --min_perp_frac F    stop (exit 3) when the raw teacher uses fewer than F * prototypes at a log step after --check_from
+  --min_div F          stop (exit 3) when the batch-mean teacher perplexity is below F x min(prototypes, rows x mean single-row perplexity): independent of how sharp the targets get
 <out>/backbone_teacher.pth has the keys of the public file, so it goes straight into train.py --bb_path."""
 import argparse, glob, json, math, os, sys, time, types
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -208,7 +209,9 @@ def main():
     p.add_argument('--flip_chi', action='store_true', help='each view flipped along chi with probability 0.5')
     p.add_argument('--sinkhorn', type=int, default=0); p.add_argument('--queue_img', type=int, default=4096); p.add_argument('--queue_patch', type=int, default=8192)
     p.add_argument('--t_warmup', type=float, nargs=3, default=None, metavar=('LO', 'HI', 'STEPS')); p.add_argument('--koleo', type=float, default=0.0); p.add_argument('--gram', type=float, default=0.0)
-    p.add_argument('--proto_patch', type=int, default=0); p.add_argument('--patch_stats', default='', help='pt file with mu, sd of the public backbone patch features: the patch head sees standardised features'); p.add_argument('--patch_g1', action='store_true', help='patch head prototype norm fixed to 1'); p.add_argument('--min_perp_frac', type=float, default=0.0); p.add_argument('--check_from', type=int, default=600)
+    p.add_argument('--proto_patch', type=int, default=0); p.add_argument('--patch_stats', default='', help='pt file with mu, sd of the public backbone patch features: the patch head sees standardised features'); p.add_argument('--patch_g1', action='store_true', help='patch head prototype norm fixed to 1'); p.add_argument('--min_div', type=float, default=0.0, help='stop (exit 3) when the batch-mean teacher perplexity falls below this fraction of its ceiling min(prototypes, rows x mean single-row perplexity): rows that sharpen use different prototypes (fraction near 1), a collapse makes them share (fraction near 1/rows). Replaces --min_perp_frac, whose absolute level falls with sharpening')
+    p.add_argument('--min_div', type=float, default=0.0, help='stop (exit 3) when the batch-mean teacher perplexity falls below this fraction of its ceiling min(prototypes, rows x mean single-row perplexity); rows that sharpen use different prototypes (fraction near 1), a collapse makes them share (near 1/rows); --min_perp_frac falls with sharpening alone (diagnosis 2026-11-24)')
+    p.add_argument('--min_perp_frac', type=float, default=0.0); p.add_argument('--check_from', type=int, default=600)
     p.add_argument('--grad_ckpt', action='store_true'); p.add_argument('--device', default='cuda'); p.add_argument('--save_every', type=int, default=1000); p.add_argument('--log_every', type=int, default=20)
     a = p.parse_args()
     os.makedirs(a.out, exist_ok=True)
@@ -243,7 +246,7 @@ def main():
         os.replace(ck + '.tmp', ck)
         torch.save(teacher.bb.net.state_dict(), os.path.join(a.out, 'backbone_teacher.pth'))
 
-    t0 = time.time(); seen = 0; acc = dict(img=0.0, pat=0.0, perp=0.0, pat_h=0.0, pat_perp=0.0, raw_i=0.0, raw_p=0.0, ko=0.0, gr=0.0, n=0, n_p=0)
+    t0 = time.time(); seen = 0; acc = dict(img=0.0, pat=0.0, perp=0.0, pat_h=0.0, pat_perp=0.0, raw_i=0.0, row_i=0.0, raw_p=0.0, ko=0.0, gr=0.0, n=0, n_p=0)
     student.train(); student.bb.requires_grad_(False)
     micro = 0
     while step < a.steps:
@@ -273,6 +276,7 @@ def main():
                 pi = F.softmax((ti.float() - ci.c) / tt, -1).reshape(b, 2, -1)
             raw_i = F.softmax(ti.float() / tt, -1).mean(0)
             acc['raw_i'] += float(torch.exp(-(raw_i * (raw_i + 1e-12).log()).sum()))
+            acc['row_i'] += float(torch.exp(-(F.softmax(ti.float() / tt, -1) * F.log_softmax(ti.float() / tt, -1)).sum(-1)).mean())      # mean perplexity of single teacher rows = how sharp the targets are
             si_ = si.reshape(b, 2, -1); sl_ = sl.reshape(b, a.n_local, -1)
             li = (soft_ce(pi[:, 0], si_[:, 1], a.t_student).mean() + soft_ce(pi[:, 1], si_[:, 0], a.t_student).mean()) / 2
             if a.n_local:
@@ -324,10 +328,13 @@ def main():
                 n = max(acc['n'], 1); dt = time.time() - t0
                 mem = torch.cuda.max_memory_allocated() / 2**30 if amp else 0
                 say(f"step {step}/{a.steps} {'heads' if frozen else 'all'} img {acc['img'] / n:.3f} patch {acc['pat'] / n:.3f} patch_teacher_H {acc['pat_h'] / n:.3f} patch_prototypes {acc['pat_perp'] / n:.0f} prototypes {acc['perp'] / n:.0f} raw_img {acc['raw_i'] / n:.0f} raw_patch {acc['raw_p'] / max(acc['n_p'], 1):.0f} tt {tt:.3f} koleo {acc['ko'] / n:.3f} gram {acc['gr'] / n:.4f} lr_bb {opt.param_groups[1]['lr']:.2e} {seen / dt:.2f} frames/s peak {mem:.1f} GB")
+                if a.min_div > 0 and step >= a.check_from and acc['raw_i'] / n < a.min_div * min(a.prototypes, 2 * a.bs * acc['row_i'] / n):
+                    save(); say(f"PRETRAIN STOPPED collapse at step {step}: the {2 * a.bs} teacher rows of a micro-batch share prototypes: batch-mean perplexity {acc['raw_i'] / n:.0f} of at most {min(a.prototypes, 2 * a.bs * acc['row_i'] / n):.0f}")
+                    sys.exit(3)
                 if a.min_perp_frac > 0 and step >= a.check_from and (acc['raw_i'] / n < a.min_perp_frac * a.prototypes or acc['raw_p'] / max(acc['n_p'], 1) < a.min_perp_frac * kp):
                     save(); say(f"PRETRAIN STOPPED collapse at step {step}: raw teacher uses {acc['raw_i'] / n:.0f} of {a.prototypes} image and {acc['raw_p'] / max(acc['n_p'], 1):.0f} of {kp} patch prototypes")
                     sys.exit(3)
-                acc = dict(img=0.0, pat=0.0, perp=0.0, pat_h=0.0, pat_perp=0.0, raw_i=0.0, raw_p=0.0, ko=0.0, gr=0.0, n=0, n_p=0)
+                acc = dict(img=0.0, pat=0.0, perp=0.0, pat_h=0.0, pat_perp=0.0, raw_i=0.0, row_i=0.0, raw_p=0.0, ko=0.0, gr=0.0, n=0, n_p=0)
             if step % a.save_every == 0:
                 save()
             if step >= a.steps:

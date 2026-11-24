@@ -10,7 +10,7 @@
 #SBATCH --output=/mnt/lustre/home/schreiber/szb389/mlgidDETECT_DINO_HEATMAP_vit/heatmap/sbatch/%x-%j.out
 # Continued DINO-style pretraining of the public DINOv3 ViT-H+/16 (840M) on the 274k Moneta v2 corpus (both corpora, hold-out v2 excluded), one A100 40 GB.
 # Recipe = colorbox1 queue 34 (convnextL_3k_sk2, the run without collapse): 3,000 optimizer steps x 66 frames (bs 6 x accum 11), heads alone for the first 300 steps,
-# --sinkhorn 3 --t_warmup 0.04 0.07 1000 --koleo 0.1 --gram 10 --prototypes 1024 --proto_patch 1024 --patch_stats --patch_g1, collapse stop --min_perp_frac 0.1 from step 600 (exit 3).
+# --sinkhorn 3 --t_warmup 0.04 0.07 1000 --koleo 0.1 --gram 10 --prototypes 1024 --proto_patch 1024 --patch_stats --patch_g1, collapse stop --min_div 0.3 from step 600 (exit 3; the first 30k run was stopped at step 6380 by --min_perp_frac 0.1, which only measured sharpening, see idea-flagship-dino-run).
 # ViT taps: pooled image feature = last block (stride 32 resample), patch loss = stride-16 token grid after block 24 (the map the detector's stride-16 level uses).
 # patch_stats.pt = stats of the PUBLIC ViT-H+ on corpus crops, made on colorbox1 (make_patch_stats.py --bb dinov3_vith16plus), copied to $PREP.
 # Env switches (sbatch --export=ALL,...): SMOKE=1 (40 steps, 10 head steps, own output dir, prints speed and peak memory; use with --time=00:45:00), BS + ACCUM (default 6 x 11; keep BS*ACCUM = 66), STEPS (default 3000).
@@ -46,6 +46,6 @@ if [ "${SMOKE:-0}" = 1 ]; then
   echo "peak GPU memory (MiB, nvidia-smi): $(awk -F, '{gsub(/ MiB| /,"",$2); print $2}' "$OUT/gpu_mem.log" | sort -n | tail -1)  (card 40960)"
   kill $MON; exit 0
 fi
-$PY -u heatmap/pretrain_dinov3.py $ARGS --steps $STEPS --head_steps 300 --log_every 10 --save_every 250 --min_perp_frac 0.1 --check_from 600 >> "$OUT/stdout.log" 2>&1
+$PY -u heatmap/pretrain_dinov3.py $ARGS --steps $STEPS --head_steps 300 --log_every 10 --save_every 250 --min_div 0.3 --check_from 600 >> "$OUT/stdout.log" 2>&1
 RC=$?; echo "pretrain rc=$RC (0 done, 3 collapse stop)"; tail -3 "$OUT/stdout.log"
 kill $MON
