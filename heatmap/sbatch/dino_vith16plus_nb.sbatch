@@ -37,4 +37,4 @@ PYTHONPATH=$REPO srun $PY -u main.py -c config/DINO/DINO_4scale_vith16plus_nb.py
     --options lr=4e-5 lr_backbone=1e-5 box_sigma_halfwidth=1.5,1.5 epochs=380 backbone_weights=$W
 echo "train rc=$?"
 # 2) final scaled-GT scoring, run to the end only
-grep -q "^379" "$OUT_DIR/exp_ap_organic.txt" 2>/dev/null && score "$OUT_DIR" 3.0,3.0 "$OUT_DIR/evaluate_final_gtscaled.txt" || echo "training not at epoch 379, no final scoring"
+grep -q "^378" "$OUT_DIR/exp_ap_organic.txt" 2>/dev/null && score "$OUT_DIR" 3.0,3.0 "$OUT_DIR/evaluate_final_gtscaled.txt" || echo "training not at epoch 378 (the last even eval epoch of 380), no final scoring"
